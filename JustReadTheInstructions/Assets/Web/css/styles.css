@@ -50,10 +50,24 @@ h1 {
     gap: 0.4rem;
 }
 
-#cameras {
+#cameras-live,
+#cameras-offline {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     gap: 1rem;
+}
+
+#cameras-offline-section {
+    margin-top: 2rem;
+}
+
+.section-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
 }
 
 .camera-card {
@@ -378,7 +392,9 @@ h1 {
 }
 
 .rec-live-preview {
-    max-width: 100%;
-    max-height: 100%;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     display: block;
 }

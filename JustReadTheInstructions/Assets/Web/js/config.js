@@ -9,6 +9,7 @@ export const RECORDER_CHUNK_MS = 2000;
 export const RECORDER_CAPTURE_FPS = 24;
 export const RECORDER_VIDEO_BPS = 3_500_000;
 export const RECORDER_HEARTBEAT_MS = 5000;
+export const RECORDER_LOS_DELAY_MS = 5000;
 
 export const LOS_IMAGE_URL = '/images/los.png';
 export const LOS_OVERLAY_HTML =

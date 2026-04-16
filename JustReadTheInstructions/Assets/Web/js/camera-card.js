@@ -1,6 +1,7 @@
 import {
     SNAPSHOT_REFRESH_MS,
     LOS_DELAY_MS,
+    RECORDER_LOS_DELAY_MS,
     LOS_OVERLAY_HTML,
     WAITING_OVERLAY_HTML,
     API,
@@ -144,7 +145,15 @@ export class CameraCard {
             setTimeout(() => { rawCopyBtn.textContent = 'Copy Raw'; }, 1500);
         });
 
-        actions.append(watchBtn, recBtn, copyBtn, rawCopyBtn);
+        const pauseBtn = document.createElement('button');
+        pauseBtn.type = 'button';
+        pauseBtn.className = 'btn';
+        pauseBtn.textContent = '⏸ Pause';
+        pauseBtn.dataset.role = 'pause';
+        pauseBtn.hidden = true;
+        pauseBtn.addEventListener('click', () => this._togglePause());
+
+        actions.append(watchBtn, recBtn, pauseBtn, copyBtn, rawCopyBtn);
         info.append(name, actions);
 
         const footer = document.createElement('div');
@@ -161,9 +170,9 @@ export class CameraCard {
     }
 
     _startSnapshotLoop() {
+        this._refreshSnapshot();
         this._snapshotJitterTimer = setTimeout(() => {
             this._snapshotJitterTimer = null;
-            this._refreshSnapshot();
             this.snapshotTimer = setInterval(() => this._refreshSnapshot(), SNAPSHOT_REFRESH_MS);
         }, Math.random() * SNAPSHOT_REFRESH_MS);
     }
@@ -201,6 +210,7 @@ export class CameraCard {
     _markOnline() {
         this.el.classList.remove('offline');
         this.offlineSince = 0;
+        this._losSignaled = false;
         const overlay = this.el.querySelector('.offline-overlay');
         if (overlay) overlay.innerHTML = WAITING_OVERLAY_HTML;
         this.recorder?.handleSignalRestored();
@@ -213,7 +223,15 @@ export class CameraCard {
         if (overlay && Date.now() - this.offlineSince >= LOS_DELAY_MS) {
             overlay.innerHTML = LOS_OVERLAY_HTML;
         }
-        this.recorder?.handleSignalLost();
+        if (!this._losSignaled && Date.now() - this.offlineSince >= RECORDER_LOS_DELAY_MS) {
+            this._losSignaled = true;
+            this.recorder?.handleSignalLost();
+        }
+    }
+
+    _togglePause() {
+        if (this.recorder?.state === 'recording') this.recorder.pause();
+        else if (this.recorder?.state === 'paused') this.recorder.resume();
     }
 
     revive(cam) {
@@ -285,6 +303,7 @@ export class CameraCard {
     _onRecorderState({ state, bytesUploaded, startedAt }) {
         const card = this.el;
         const btn = card.querySelector('[data-role="record"]');
+        const pauseBtn = card.querySelector('[data-role="pause"]');
         const statusEl = card.querySelector('[data-role="rec-status"]');
         const sizeEl = card.querySelector('[data-role="rec-size"]');
 
@@ -294,24 +313,30 @@ export class CameraCard {
         if (state === 'recording') {
             btn.classList.add('active');
             btn.textContent = '■ Stop';
+            pauseBtn.hidden = false;
+            pauseBtn.textContent = '⏸ Pause';
             statusEl.classList.add('recording');
             statusEl.textContent = `● Recording ${formatDuration(Date.now() - startedAt)}`;
             this._ensureDurationTimer(startedAt);
         } else if (state === 'paused') {
             btn.classList.add('active');
             btn.textContent = '■ Stop';
+            pauseBtn.hidden = false;
+            pauseBtn.textContent = '▶ Resume';
             statusEl.classList.add('paused');
-            statusEl.textContent = '⏸ Paused (signal lost)';
+            statusEl.textContent = '⏸ Paused';
             this._clearDurationTimer();
         } else if (state === 'finalizing') {
             btn.disabled = true;
             btn.textContent = 'Saving...';
+            pauseBtn.hidden = true;
             statusEl.textContent = 'Saving...';
             this._clearDurationTimer();
         } else {
             btn.classList.remove('active');
             btn.disabled = false;
             btn.textContent = '● Record';
+            pauseBtn.hidden = true;
             statusEl.textContent = 'Idle';
             this._clearDurationTimer();
             this._stopLivenessPolling();
@@ -336,15 +361,18 @@ export class CameraCard {
 
     _mountRecorderCanvas(canvas) {
         canvas.className = 'rec-live-preview';
-        const img = this._getSnapshotImg();
-        img.hidden = true;
-        img.closest('.preview').insertBefore(canvas, img);
+        const preview = this._getSnapshotImg().closest('.preview');
+        preview.querySelector('.offline-overlay').style.display = 'none';
+        this._getSnapshotImg().hidden = true;
+        preview.appendChild(canvas);
     }
 
     _unmountRecorderCanvas() {
         const canvas = this.el.querySelector('.rec-live-preview');
         if (!canvas) return;
         canvas.remove();
+        const preview = this._getSnapshotImg().closest('.preview');
+        preview.querySelector('.offline-overlay').style.display = '';
         this._getSnapshotImg().hidden = false;
     }
 
