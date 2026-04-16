@@ -207,7 +207,7 @@ export class CameraCard {
         this.recorder = new CameraRecorder({
             cameraId: this.id,
             cameraName: this.name,
-            snapshotUrl: this.snapshotBaseUrl,
+            streamUrl: `/camera/${this.id}/stream`,
             onStateChange: (s) => this._onRecorderState(s),
         });
 
