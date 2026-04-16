@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.0.0-beta.3] Web UI Recording (Beta 3) - 2026-04-17
+
+### Added
+- Manual pause/resume button on recording cards
+- Loss-of-signal triggered pause now waits 5 s before acting — recording allowed to capture the LOS screen during that window
+
+### Fixed
+- Grid layout broken after live/offline section split — `#cameras` rule was orphaned; replaced with rules targeting `#cameras-live` and `#cameras-offline`
+- Recording cards no longer show a double preview, recorder canvas is now absolutely positioned and the offline overlay is explicitly hidden on mount
+- Snapshot loop fired immediately on all cards simultaneously after the jitter refactor; first fetch is now immediate, jitter only offsets the interval start
+
+### Changed
+- LOS signal to recorder decoupled from visual offline state, now the recorder has its own 5 s delay independent of the overlay delay
+- Paused status text no longer says "signal lost" since pause is now also user-triggered (when pausing footage)
+
 ## [v2.0.0-beta.2] Web UI Recording (Beta 2) - 2026-04-17
 
 ### Added
