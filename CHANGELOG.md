@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `camera-card.js` refactor for readability (no behaviour change): state-dependent UI mutations now driven by a `REC_STATES` lookup table instead of a four-branch `if/else` which was ugly practice, DOM construction split across `_buildPreview` / `_buildInfo` / `_buildFooter`, and the three near-identical copy-button blocks replaced by `makeButton` / `makeCopyButton` helpers
 - The disabled-when-unsupported record button now uses a `.btn-unsupported` CSS class instead of inline `opacity` / `pointerEvents` styles, to match the existing `.btn.watch-disabled` pattern
+- Removed WebM support due to inconsistent browser support. The list of MIME types is now just MP4 variants, which should be supported widely enough for the time being.
 
 ### Known Issues
 - Scrubbing/seeking inside recorded `.webm` / `.mp4` files is unreliable. The footage itself is intact; the `MediaRecorder` output just lacks a proper seek index. A post-finalize remux pass is planned. Playing end-to-end or re-encoding through ffmpeg works fine
