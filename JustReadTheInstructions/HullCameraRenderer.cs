@@ -25,6 +25,7 @@ namespace JustReadTheInstructions
         private bool _parallaxApplied;
         private bool _fireflyApplied;
         private bool _scattererApplied;
+        private RenderTexture _filteredTexture;
 
         public HullCameraRenderer(MuMechModuleHullCamera hullCamera)
         {
@@ -231,7 +232,7 @@ namespace JustReadTheInstructions
 
             if (_parallaxApplied) RenderParallaxScatters();
             if (_fireflyApplied) UpdateFireflyEffects();
-            JRTIStreamServer.Instance?.TryCaptureFrame(InstanceId, TargetTexture);
+            JRTIStreamServer.Instance?.TryCaptureFrame(InstanceId, GetCaptureTexture());
         }
 
         private void RenderParallaxScatters()
@@ -252,6 +253,26 @@ namespace JustReadTheInstructions
             var nearCamera = _cameras[NearCameraIndex];
             if (nearCamera != null && nearCamera.enabled)
                 FireflyIntegration.UpdateForCamera(nearCamera, GetVessel());
+        }
+
+        private RenderTexture GetCaptureTexture()
+        {
+            if (!JRTISettings.EnableHullcamFilter)
+                return TargetTexture;
+
+            var mat = HullcamFilterIntegration.GetFilterMaterial();
+            if (mat == null)
+                return TargetTexture;
+
+            if (_filteredTexture == null || !_filteredTexture.IsCreated())
+            {
+                _filteredTexture?.Release();
+                _filteredTexture = new RenderTexture(TargetTexture.descriptor);
+                _filteredTexture.Create();
+            }
+
+            Graphics.Blit(TargetTexture, _filteredTexture, mat);
+            return _filteredTexture;
         }
 
         private void SetCamerasEnabled(bool enabled)
@@ -428,11 +449,11 @@ namespace JustReadTheInstructions
                 }
             }
 
-            if (TargetTexture != null)
-            {
-                TargetTexture.Release();
-                TargetTexture = null;
-            }
+            _filteredTexture?.Release();
+            _filteredTexture = null;
+
+            TargetTexture?.Release();
+            TargetTexture = null;
 
             Debug.Log($"[JRTI]: Disposed camera '{GetDisplayName()}'");
         }
