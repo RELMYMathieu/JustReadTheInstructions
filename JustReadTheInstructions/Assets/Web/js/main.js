@@ -3,6 +3,8 @@ import { fetchCameras } from './api.js';
 import { CameraCard } from './camera-card.js';
 import { mountSettingsUI } from './settings-ui.js';
 
+const KNOWN_CAMERAS_KEY = 'jrti-known-cameras';
+
 const cards = new Map();
 
 const liveContainer = document.getElementById('cameras-live');
@@ -12,12 +14,36 @@ const offlineContainer = document.getElementById('cameras-offline');
 function setStatus(id, message) {
     const el = document.getElementById(id);
     if (!el) return;
-    if (message) {
-        el.textContent = message;
-        el.classList.add('visible');
-    } else {
-        el.classList.remove('visible');
-    }
+    if (message) { el.textContent = message; el.classList.add('visible'); }
+    else { el.classList.remove('visible'); }
+}
+
+function persistKnownCameras(liveCameras) {
+    try {
+        localStorage.setItem(KNOWN_CAMERAS_KEY, JSON.stringify(
+            liveCameras.map(({ id, name }) => ({ id, name }))
+        ));
+    } catch { }
+}
+
+function restoreKnownCameras() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(KNOWN_CAMERAS_KEY) || '[]');
+        for (const { id, name } of stored) {
+            if (cards.has(id)) continue;
+            const card = new CameraCard({
+                id,
+                name,
+                streaming: false,
+                snapshotUrl: `/camera/${id}/snapshot`,
+                streamUrl: `/viewer.html?id=${id}`,
+            });
+            card.markDestroyed();
+            cards.set(id, card);
+            offlineContainer.appendChild(card.el);
+        }
+        offlineSection.hidden = stored.length === 0;
+    } catch { }
 }
 
 async function sync() {
@@ -30,6 +56,8 @@ async function sync() {
         setStatus('empty', null);
         return;
     }
+
+    persistKnownCameras(cameras);
 
     const incomingIds = new Set(cameras.map((c) => c.id));
 
@@ -75,6 +103,7 @@ function wireLifecycle() {
 function main() {
     mountSettingsUI();
     wireLifecycle();
+    restoreKnownCameras();
     sync();
     setInterval(sync, CAMERA_SYNC_MS);
 }
