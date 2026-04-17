@@ -3,6 +3,7 @@ import {
     VIEWER_RETRY_MS,
     VIEWER_LOS_DELAY_MS,
     LOS_IMAGE_URL,
+    LOS_FALLBACK_IMAGE_URL,
     API,
 } from './config.js';
 import { checkStatus } from './api.js';
@@ -29,10 +30,22 @@ function main() {
 
     let offAt = 0;
 
+    const setLosImage = () => {
+        img.onerror = null;
+        img.src = LOS_IMAGE_URL;
+        img.onerror = () => {
+            img.onerror = null;
+            img.src = LOS_FALLBACK_IMAGE_URL;
+        };
+    };
+
+    const isLosImageShown = () =>
+        img.src.includes(LOS_IMAGE_URL) || img.src.includes(LOS_FALLBACK_IMAGE_URL);
+
     const onError = () => {
         if (!offAt) offAt = Date.now();
         if (Date.now() - offAt >= VIEWER_LOS_DELAY_MS) {
-            img.src = LOS_IMAGE_URL;
+            setLosImage();
         } else {
             setTimeout(() => { img.src = `${base}?r=${Date.now()}`; }, VIEWER_RETRY_MS);
         }
@@ -50,7 +63,7 @@ function main() {
     img.addEventListener('load', onLoad);
 
     setInterval(async () => {
-        if (img.src.includes(LOS_IMAGE_URL)) {
+        if (isLosImageShown()) {
             const s = await checkStatus(cameraId);
             if (s.ok) location.reload();
             return;
@@ -58,7 +71,7 @@ function main() {
         const s = await checkStatus(cameraId);
         if (s.status === 404) {
             if (!offAt) offAt = Date.now();
-            if (Date.now() - offAt >= VIEWER_LOS_DELAY_MS) img.src = LOS_IMAGE_URL;
+            if (Date.now() - offAt >= VIEWER_LOS_DELAY_MS) setLosImage();
         } else if (s.ok) {
             offAt = 0;
         }

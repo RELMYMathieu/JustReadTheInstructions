@@ -11,9 +11,10 @@ export const RECORDER_VIDEO_BPS = 3_500_000;
 export const RECORDER_HEARTBEAT_MS = 5000;
 export const RECORDER_LOS_DELAY_MS = 5000;
 
-export const LOS_IMAGE_URL = '/images/los.png';
+export const LOS_IMAGE_URL = '/images/customlos.png';
+export const LOS_FALLBACK_IMAGE_URL = '/images/los.png';
 export const LOS_OVERLAY_HTML =
-    `<img src="${LOS_IMAGE_URL}" alt="Loss of Signal" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+    `<img src="${LOS_IMAGE_URL}" onerror="if(this.dataset.fallbackDone)return;this.dataset.fallbackDone='1';this.src='${LOS_FALLBACK_IMAGE_URL}';" alt="Loss of Signal" style="max-width:100%;max-height:100%;object-fit:contain;">`;
 export const WAITING_OVERLAY_HTML =
     '<span style="font-size:1.8rem;line-height:1">&#x25CE;</span><span>Waiting for frames...</span>';
 

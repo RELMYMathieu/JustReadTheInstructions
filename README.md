@@ -63,15 +63,17 @@ Kerbal Space Program/
 
 ## Customization
 
-The **Loss of Signal** image shown in the web UI when a camera feed is unavailable can be replaced with any PNG of your choice (recommended: `1920×1080`).
+The **Loss of Signal** image shown in the web UI when a camera feed is unavailable can be customized with any PNG of your choice (recommended: `1920×1080`).
 
-Replace this file with your own:
+Add this file:
+```text
+GameData/JustReadTheInstructions/Web/images/customlos.png
+```
+
+If `customlos.png` is not present, JRTI automatically falls back to the built-in:
 ```text
 GameData/JustReadTheInstructions/Web/images/los.png
 ```
-
-> [!WARNING]
-> Your custom image will be overwritten on mod updates. Back it up beforehand.
 
 > [!CAUTION]
 > Editing files in the `Web` folder is not supported and may break the mod's functionality.
