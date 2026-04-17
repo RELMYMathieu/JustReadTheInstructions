@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Post-recording remux pass to add seek indices to WebM/MP4 files (both local & remote) for improved scrubbing/seeking support. This is currently in progress, the scrubbing isn't perfect yet. The footage itself is intact and plays end-to-end without issue.
+
 ### Fixed
 - Pause/Resume button on recording cards stayed visible when idle — `.btn` uses `display: inline-flex`, which overrode the HTML `hidden` attribute (whose default is `display: none`). Added a single `[hidden] { display: none !important; }` rule so the attribute works as expected everywhere it's used
 - Camera-card footer size label now reads `LAST RECORDING SIZE = X MB` instead of a bare byte count, and persists after the recording ends instead of clearing the moment the state flips to idle
