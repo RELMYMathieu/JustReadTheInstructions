@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.0.0-beta.4] Web UI Recording (Beta 4) - 2026-04-17
+
 ### Added
 - Server-side SIDX (segment index) injection on MP4 finalize, enabling frame-accurate scrubbing and seeking in all recorded files without any post-processing step
 
