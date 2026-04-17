@@ -287,7 +287,7 @@ export class CameraRecorder {
         this._pendingUploads = this._pendingUploads.then(async () => {
             if (this._aborted) return;
             try {
-                await this._uploadWithRetry(sessionId, filename, blob);
+                await this._uploadWithRetry(sessionId, filename, blob, this._mimeType);
                 this._notify();
             } catch (err) {
                 console.error('[JRTI] chunk upload failed', err);
@@ -337,11 +337,11 @@ export class CameraRecorder {
         return this._finalizePromise;
     }
 
-    async _uploadWithRetry(sessionId, filename, blob) {
+    async _uploadWithRetry(sessionId, filename, blob, mimeType) {
         let lastErr;
         for (let i = 0; i < 3; i++) {
             try {
-                await uploadRecordingChunk(sessionId, filename, blob);
+                await uploadRecordingChunk(sessionId, filename, blob, mimeType);
                 return;
             } catch (err) {
                 if (err.message?.includes('410')) throw err;

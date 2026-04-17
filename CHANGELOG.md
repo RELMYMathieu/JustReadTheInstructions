@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Pause/Resume button on recording cards stayed visible when idle — `.btn` uses `display: inline-flex`, which overrode the HTML `hidden` attribute (whose default is `display: none`). Added a single `[hidden] { display: none !important; }` rule so the attribute works as expected everywhere it's used
 - Camera-card footer size label now reads `LAST RECORDING SIZE = X MB` instead of a bare byte count, and persists after the recording ends instead of clearing the moment the state flips to idle
+- Accidentally hardcoded WebM as mimeType instead of accepting whichever other flag was available in the candidate list, which caused recording to fail on certain occasions.
 
 ### Changed
 - `camera-card.js` refactor for readability (no behaviour change): state-dependent UI mutations now driven by a `REC_STATES` lookup table instead of a four-branch `if/else` which was ugly practice, DOM construction split across `_buildPreview` / `_buildInfo` / `_buildFooter`, and the three near-identical copy-button blocks replaced by `makeButton` / `makeCopyButton` helpers

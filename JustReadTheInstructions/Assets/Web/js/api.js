@@ -15,10 +15,10 @@ export async function checkStatus(cameraId) {
     }
 }
 
-export async function uploadRecordingChunk(sessionId, filename, blob) {
+export async function uploadRecordingChunk(sessionId, filename, blob, mimeType) {
     const res = await fetch(API.recordingAppend(sessionId, filename), {
         method: 'POST',
-        headers: { 'Content-Type': 'video/webm' },
+        headers: { 'Content-Type': mimeType },
         body: blob,
     });
     if (!res.ok) throw new Error(`upload chunk failed: ${res.status}`);
