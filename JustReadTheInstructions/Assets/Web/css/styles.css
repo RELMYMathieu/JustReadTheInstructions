@@ -146,6 +146,7 @@ h1 {
     gap: 0.3rem;
     font-weight: 600;
     letter-spacing: 0.05em;
+    z-index: 1;
 }
 
 .camera-card.recording .rec-badge {

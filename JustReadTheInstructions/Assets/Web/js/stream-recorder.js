@@ -17,9 +17,6 @@ import { getSettings } from './recorder-settings.js';
 const MIME_CANDIDATES = [
     'video/mp4;codecs=avc1',
     'video/mp4',
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm',
 ];
 
 function pickMimeType() {
@@ -84,6 +81,41 @@ async function saveLocalBlob(blob, filename) {
     a.download = filename;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function remuxMp4(inputBlob) {
+    const mod = await import('../mp4box.all.js');
+    const MP4Box = mod.default ?? mod.MP4Box;
+    const ab = await inputBlob.arrayBuffer();
+    return new Promise((resolve, reject) => {
+        const file = MP4Box.createFile(true);
+        file.onError = reject;
+        file.onReady = () => { };
+
+        ab.fileStart = 0;
+        file.appendBuffer(ab);
+        file.flush();
+
+        let captured = null;
+        const prevCreateURL = URL.createObjectURL;
+        const prevAnchorClick = HTMLAnchorElement.prototype.click;
+
+        URL.createObjectURL = (obj) => {
+            captured = obj instanceof Blob ? obj : new Blob([obj], { type: 'video/mp4' });
+            return 'blob:suppressed';
+        };
+        HTMLAnchorElement.prototype.click = () => { };
+
+        try {
+            file.save('out.mp4');
+        } finally {
+            URL.createObjectURL = prevCreateURL;
+            HTMLAnchorElement.prototype.click = prevAnchorClick;
+        }
+
+        if (captured) resolve(captured);
+        else reject(new Error('[JRTI] remux produced no output'));
+    });
 }
 
 export function isRecordingSupported() {
@@ -316,7 +348,8 @@ export class CameraRecorder {
                 }
 
                 if (!this.isLocal) {
-                    const blob = new Blob(this._localChunks, { type: this._mimeType });
+                    const raw = new Blob(this._localChunks, { type: this._mimeType });
+                    const blob = await remuxMp4(raw).catch(() => raw);
                     await saveLocalBlob(blob, filename);
                     return;
                 }

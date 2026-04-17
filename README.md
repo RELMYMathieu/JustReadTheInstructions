@@ -129,6 +129,13 @@ JustReadTheInstructions\Distribution\GameData\JustReadTheInstructions\
 
 Copy the produced `JustReadTheInstructions` folder into your KSP `GameData` to install the development build.
 
+## Third-Party Libraries
+
+This mod includes [MP4Box.js](https://github.com/gpac/mp4box.js),
+copyright (c) 2012 Telecom ParisTech/TSI/MM/GPAC Cyril Concolato,
+used for MP4 remuxing in the browser. Licensed under BSD 3-Clause.
+See [this link](https://github.com/gpac/mp4box.js/blob/master/LICENSE) for the full license text.
+
 ## License
 
 This project is licensed under the MIT License.
