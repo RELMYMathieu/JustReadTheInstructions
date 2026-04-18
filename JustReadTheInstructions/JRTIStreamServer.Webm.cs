@@ -140,14 +140,15 @@ namespace JustReadTheInstructions
                 {
                     if (!WbReadId(d, ref ci, out uint iR2)) break;
                     if (!WbReadSize(d, ref ci, out long sR2)) break;
-                    int blockEnd = ci + (int)sR2;
+                    long blockEndL = (long)ci + sR2;
+                    int blockEnd = blockEndL > lastClusterAbsEnd ? lastClusterAbsEnd : (int)blockEndL;
 
                     if (iR2 == 0xA3 || iR2 == 0xA1)
                     {
                         int tempCi = ci;
                         if (WbReadVint(d, ref tempCi, out _))
                         {
-                            if (tempCi + 1 < blockEnd)
+                            if (tempCi + 1 < blockEnd && tempCi + 1 < d.Length)
                             {
                                 int relTime = (d[tempCi] << 8) | d[tempCi + 1];
                                 short signedTime = (short)relTime;

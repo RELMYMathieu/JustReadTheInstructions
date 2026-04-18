@@ -194,7 +194,19 @@ namespace JustReadTheInstructions
                             try
                             {
                                 session.Dispose();
-                                Debug.Log($"[JRTI-Stream]: Recording auto-finalized (idle): {session.DisplayPath} ({session.BytesWritten} bytes)");
+                                if (session.BytesWritten == 0)
+                                {
+                                    try { File.Delete(session.DisplayPath); } catch { }
+                                    Debug.Log($"[JRTI-Stream]: Recording auto-finalized (idle, deleted empty): {session.DisplayPath}");
+                                }
+                                else
+                                {
+                                    if (session.DisplayPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+                                        FixMp4(session.DisplayPath);
+                                    else if (session.DisplayPath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
+                                        FixWebm(session.DisplayPath);
+                                    Debug.Log($"[JRTI-Stream]: Recording auto-finalized (idle): {session.DisplayPath} ({session.BytesWritten} bytes)");
+                                }
                             }
                             catch (Exception ex)
                             {
