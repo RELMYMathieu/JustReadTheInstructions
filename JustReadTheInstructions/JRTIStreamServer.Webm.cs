@@ -25,305 +25,385 @@ namespace JustReadTheInstructions
             catch { return; }
 
             int i = 0;
-
             if (!WbReadId(d, ref i, out uint ebmlId) || ebmlId != 0x1A45DFA3) return;
-            if (!WbReadSize(d, ref i, out long ebmlBodySize)) return;
-            i += (int)Math.Min(ebmlBodySize == WbUnknownSize ? 0 : ebmlBodySize, Math.Max(0, d.Length - i));
+            if (!WbReadSize(d, ref i, out long ebmlSz)) return;
+            i += (int)Math.Min(ebmlSz == WbUnknown ? 0 : ebmlSz, Math.Max(0, d.Length - i));
 
             if (!WbReadId(d, ref i, out uint segId) || segId != 0x18538067) return;
 
             int segSizeStart = i;
-            if (!WbReadSize(d, ref i, out long segBodySize)) return;
-
+            if (!WbReadSize(d, ref i, out long segBodySz)) return;
+            int segSizeLen = i - segSizeStart;
             int segDataStart = i;
-            int segDataEnd = (segBodySize == WbUnknownSize || (long)segDataStart + segBodySize > d.Length)
-                ? d.Length
-                : segDataStart + (int)segBodySize;
 
-            int segInfoStart = -1, segInfoEnd = -1;
-            int existingDurationStart = -1, existingDurationEnd = -1;
-            int seekHeadStart = -1, seekHeadEnd = -1;
-            int cuesStart = -1, cuesEnd = -1;
-
-            bool hasValidDuration = false;
-            bool hasCues = false;
-            var clusters = new List<(int absStart, long time, int absEnd)>();
-
-            int j = segDataStart;
-            while (j < segDataEnd && j < d.Length)
+            bool isUnknownSize = false;
+            if (segSizeLen == 8)
             {
-                int elStart = j;
-                if (!WbReadId(d, ref j, out uint elId)) break;
-                if (!WbReadSize(d, ref j, out long elSize)) break;
-                int dataOff = j;
-
-                int elEnd;
-                if (elSize == WbUnknownSize || (long)dataOff + elSize > segDataEnd)
-                    elEnd = segDataEnd;
-                else
-                    elEnd = dataOff + (int)elSize;
-
-                if (elId == 0x1549A966)
-                {
-                    segInfoStart = elStart;
-                    segInfoEnd = elEnd;
-                    int k = dataOff;
-                    while (k < elEnd && k < d.Length)
-                    {
-                        int childStart = k;
-
-                        if (!WbReadId(d, ref k, out uint subId)) break;
-                        if (!WbReadSize(d, ref k, out long subSize)) break;
-                        int subEnd = (subSize == WbUnknownSize || k + subSize > elEnd) ? elEnd : k + (int)subSize;
-
-                        if (subId == 0x4489)
-                        {
-                            existingDurationStart = childStart;
-                            existingDurationEnd = subEnd;
-
-                            double val = WbReadFloat(d, k, (int)subSize);
-                            if (val > 0) hasValidDuration = true;
-                        }
-
-                        k = subEnd;
-                    }
-                }
-                else if (elId == 0x114D9B74)
-                {
-                    seekHeadStart = elStart;
-                    seekHeadEnd = elEnd;
-                }
-                else if (elId == 0x1C53BB6B)
-                {
-                    hasCues = true;
-                    cuesStart = elStart;
-                    cuesEnd = elEnd;
-                }
-                else if (elId == 0x1F43B675)
-                {
-                    long clusterTime = 0;
-                    int k = dataOff;
-                    while (k < elEnd && k < d.Length)
-                    {
-                        if (!WbReadId(d, ref k, out uint subId)) break;
-                        if (!WbReadSize(d, ref k, out long subSize)) break;
-                        int subEnd = (subSize == WbUnknownSize || k + subSize > elEnd) ? elEnd : k + (int)subSize;
-                        if (subId == 0xE7 && subSize <= 8 && subSize > 0)
-                        {
-                            long t = 0;
-                            for (int x = 0; x < (int)subSize; x++) t = t * 256 + d[k + x];
-                            clusterTime = t;
-                            break;
-                        }
-                        k = subEnd;
-                    }
-                    clusters.Add((elStart, clusterTime, elEnd));
-                }
-
-                j = elEnd;
+                bool allFF = true;
+                for (int k = 1; k < 8; k++)
+                    if (d[segSizeStart + k] != 0xFF) { allFF = false; break; }
+                isUnknownSize = allFF;
             }
 
-            if (segInfoStart < 0 || clusters.Count == 0) return;
-            if (hasValidDuration && hasCues) return;
+            int segDataEnd = (isUnknownSize || (long)segDataStart + segBodySz > d.Length)
+                ? d.Length
+                : segDataStart + (int)segBodySz;
 
-            int firstClusterAbsPos = clusters[0].absStart;
+            var scan = ScanSegment(d, segDataStart, segDataEnd);
+            if (scan.Clusters.Count == 0 || scan.SegInfoStart < 0) return;
 
-            long lastTime = clusters[clusters.Count - 1].time;
-            int lastClusterAbsStart = clusters[clusters.Count - 1].absStart;
-            int lastClusterAbsEnd = clusters[clusters.Count - 1].absEnd;
-
-            int ci = lastClusterAbsStart;
+            long lastTime = scan.Clusters[scan.Clusters.Count - 1].Time;
+            int ci = scan.Clusters[scan.Clusters.Count - 1].AbsStart;
+            int lastClusterEnd = scan.Clusters[scan.Clusters.Count - 1].AbsEnd;
 
             if (WbReadId(d, ref ci, out _) && WbReadSize(d, ref ci, out _))
             {
-                while (ci < lastClusterAbsEnd && ci < d.Length)
+                while (ci < lastClusterEnd && ci < d.Length)
                 {
-                    if (!WbReadId(d, ref ci, out uint iR2)) break;
-                    if (!WbReadSize(d, ref ci, out long sR2)) break;
-                    long blockEndL = (long)ci + sR2;
-                    int blockEnd = blockEndL > lastClusterAbsEnd ? lastClusterAbsEnd : (int)blockEndL;
+                    if (!WbReadId(d, ref ci, out uint bId)) break;
+                    if (!WbReadSize(d, ref ci, out long bSz)) break;
+                    long bEndL = (long)ci + bSz;
+                    int bEnd = bEndL > lastClusterEnd ? lastClusterEnd : (int)bEndL;
 
-                    if (iR2 == 0xA3 || iR2 == 0xA1)
+                    if (bId == 0xA3 || bId == 0xA1)
                     {
-                        int tempCi = ci;
-                        if (WbReadVint(d, ref tempCi, out _))
+                        int tmp = ci;
+                        if (WbReadVint(d, ref tmp, out _) && tmp + 1 < bEnd && tmp + 1 < d.Length)
                         {
-                            if (tempCi + 1 < blockEnd && tempCi + 1 < d.Length)
-                            {
-                                int relTime = (d[tempCi] << 8) | d[tempCi + 1];
-                                short signedTime = (short)relTime;
-                                long absTime = clusters[clusters.Count - 1].time + signedTime;
-                                if (absTime > lastTime) lastTime = absTime;
-                            }
+                            int rel = (d[tmp] << 8) | d[tmp + 1];
+                            long abs = scan.Clusters[scan.Clusters.Count - 1].Time + (short)rel;
+                            if (abs > lastTime) lastTime = abs;
                         }
                     }
-                    ci = blockEnd;
+                    ci = bEnd;
                 }
             }
 
-            long durationTicks = lastTime + 33;
+            long durationTick = lastTime + 33;
+            byte[] newInfoEl = PatchSegInfo(d, scan.SegInfoStart, scan.SegInfoEnd, durationTick);
 
-            byte[] durationEl = WbBuildFloat64(0x4489, durationTicks);
+            bool hasCues = scan.CuesStart >= 0;
+            int clusterAbsStart = scan.Clusters[0].AbsStart;
+            int seekHeadSize = scan.SeekHeadStart >= 0 ? scan.SeekHeadEnd - scan.SeekHeadStart : 0;
+            int infoSizeDiff = newInfoEl != null ? newInfoEl.Length - (scan.SegInfoEnd - scan.SegInfoStart) : 0;
+            int cuesBeforeClusterSize = hasCues && scan.CuesStart < clusterAbsStart ? scan.CuesEnd - scan.CuesStart : 0;
 
-            int infoIdLen = WbIdLen(d, segInfoStart);
-            int infoSzLen = WbSizeLen(d, segInfoStart + infoIdLen);
-            int infoDataStart = segInfoStart + infoIdLen + infoSzLen;
+            long defaultDurationNs = scan.FrameCount > 1
+                ? (long)Math.Round((double)durationTick * scan.TimecodeScale / scan.FrameCount)
+                : 0;
 
-            byte[] oldInfoPayload;
-            if (existingDurationStart != -1)
-            {
-                oldInfoPayload = Concat(
-                    Slice(d, infoDataStart, existingDurationStart),
-                    Slice(d, existingDurationEnd, segInfoEnd)
-                );
-            }
-            else
-            {
-                oldInfoPayload = Slice(d, infoDataStart, segInfoEnd);
-            }
+            byte[] newTracksEl = scan.TracksStart >= 0 && defaultDurationNs > 0
+                ? PatchTracksDefaultDuration(d, scan.TracksStart, scan.TracksEnd, defaultDurationNs)
+                : null;
 
-            byte[] newInfoEl = WbBuildContainerRaw(0x1549A966, Concat(oldInfoPayload, durationEl));
+            int tracksSizeDiff = newTracksEl != null ? newTracksEl.Length - (scan.TracksEnd - scan.TracksStart) : 0;
+            long clusterShift = infoSizeDiff + tracksSizeDiff - seekHeadSize - cuesBeforeClusterSize;
 
-            int seekHeadSize = seekHeadStart != -1 ? (seekHeadEnd - seekHeadStart) : 0;
-            int infoSizeDelta = newInfoEl.Length - (segInfoEnd - segInfoStart);
-            int cuesBeforeClustersSize = (hasCues && cuesStart < firstClusterAbsPos) ? (cuesEnd - cuesStart) : 0;
-
-            long clusterShift = infoSizeDelta - seekHeadSize - cuesBeforeClustersSize;
-            byte[] cuesEl = WbBuildCues(clusters, segDataStart, clusterShift);
+            byte[] cuesEl = BuildCues(scan.Clusters, segDataStart, clusterShift);
 
             var parts = new List<byte[]>();
 
-            if (seekHeadStart != -1)
+            if (scan.SeekHeadStart >= 0)
             {
-                parts.Add(Slice(d, segDataStart, seekHeadStart));
-                parts.Add(Slice(d, seekHeadEnd, segInfoStart));
+                parts.Add(Slice(d, segDataStart, scan.SeekHeadStart));
+                parts.Add(Slice(d, scan.SeekHeadEnd, scan.SegInfoStart));
             }
             else
             {
-                parts.Add(Slice(d, segDataStart, segInfoStart));
+                parts.Add(Slice(d, segDataStart, scan.SegInfoStart));
             }
 
-            parts.Add(newInfoEl);
+            parts.Add(newInfoEl ?? Slice(d, scan.SegInfoStart, scan.SegInfoEnd));
 
-            if (hasCues && cuesStart < firstClusterAbsPos)
+            if (hasCues && scan.CuesStart < clusterAbsStart)
             {
-                parts.Add(Slice(d, segInfoEnd, cuesStart));
-                parts.Add(Slice(d, cuesEnd, firstClusterAbsPos));
+                parts.Add(Slice(d, scan.SegInfoEnd, scan.CuesStart));
+                parts.Add(Slice(d, scan.CuesEnd, clusterAbsStart));
+            }
+            else if (newTracksEl != null && scan.TracksStart >= 0)
+            {
+                parts.Add(Slice(d, scan.SegInfoEnd, scan.TracksStart));
+                parts.Add(newTracksEl);
+                parts.Add(Slice(d, scan.TracksEnd, clusterAbsStart));
             }
             else
             {
-                parts.Add(Slice(d, segInfoEnd, firstClusterAbsPos));
+                parts.Add(Slice(d, scan.SegInfoEnd, clusterAbsStart));
             }
 
-            if (hasCues && cuesStart >= firstClusterAbsPos)
+            if (hasCues && scan.CuesStart >= clusterAbsStart)
             {
-                parts.Add(Slice(d, firstClusterAbsPos, cuesStart));
-                parts.Add(Slice(d, cuesEnd, d.Length));
+                parts.Add(Slice(d, clusterAbsStart, scan.CuesStart));
+                parts.Add(Slice(d, scan.CuesEnd, d.Length));
             }
             else
             {
-                parts.Add(Slice(d, firstClusterAbsPos, d.Length));
+                parts.Add(Slice(d, clusterAbsStart, d.Length));
             }
 
             parts.Add(cuesEl);
 
-            long totalBodySize = 0;
-            foreach (var p in parts) totalBodySize += p.Length;
+            long totalPayload = 0;
+            foreach (var p in parts) totalPayload += p.Length;
 
-            byte[] newSegSizeBytes = WbEncodeVint(totalBodySize, 8);
+            byte[] newSegSize = EncodeVintFixed(totalPayload, 8);
 
-            parts.Insert(0, newSegSizeBytes);
-            parts.Insert(0, Slice(d, 0, segSizeStart));
+            var final = new List<byte[]> { Slice(d, 0, segSizeStart), newSegSize };
+            final.AddRange(parts);
 
-            byte[] final = Concat(parts.ToArray());
-
-            try { File.WriteAllBytes(path, final); }
+            try { File.WriteAllBytes(path, Concat(final.ToArray())); }
             catch { }
         }
 
-        private static readonly long WbUnknownSize = unchecked((long)0x00FFFFFFFFFFFFFFL);
+        private class WbScan
+        {
+            public List<WbCluster> Clusters = new List<WbCluster>();
+            public int SegInfoStart = -1, SegInfoEnd = -1;
+            public int TracksStart = -1, TracksEnd = -1;
+            public int CuesStart = -1, CuesEnd = -1;
+            public int SeekHeadStart = -1, SeekHeadEnd = -1;
+            public int FrameCount;
+            public long TimecodeScale = 1_000_000;
+        }
 
-        private static byte[] WbBuildCues(List<(int absStart, long time, int absEnd)> clusters, int segDataStart, long shift = 0)
+        private class WbCluster
+        {
+            public int AbsStart, AbsEnd;
+            public long Time, Pos;
+        }
+
+        private static WbScan ScanSegment(byte[] d, int segDataStart, int segDataEnd)
+        {
+            var r = new WbScan();
+            int i = segDataStart;
+
+            while (i < segDataEnd && i < d.Length)
+            {
+                int eStart = i;
+                if (!WbReadId(d, ref i, out uint elId)) break;
+                if (!WbReadSize(d, ref i, out long elSz)) break;
+                int dataStart = i;
+                int eEnd = elSz == WbUnknown || (long)dataStart + elSz > segDataEnd
+                    ? segDataEnd
+                    : dataStart + (int)elSz;
+
+                if (elId == 0x1549A966)
+                {
+                    r.SegInfoStart = eStart;
+                    r.SegInfoEnd = Math.Min(eEnd, d.Length);
+                    int j = dataStart;
+                    while (j < r.SegInfoEnd)
+                    {
+                        if (!WbReadId(d, ref j, out uint cId)) break;
+                        if (!WbReadSize(d, ref j, out long cSz)) break;
+                        if (cId == 0x2AD7B1)
+                        {
+                            long tv = 0;
+                            for (int k = 0; k < (int)cSz; k++) tv = tv * 256 + d[j + k];
+                            r.TimecodeScale = tv > 0 ? tv : 1_000_000;
+                        }
+                        j += (int)cSz;
+                    }
+                }
+                else if (elId == 0x1654AE6B)
+                {
+                    r.TracksStart = eStart;
+                    r.TracksEnd = Math.Min(eEnd, d.Length);
+                }
+                else if (elId == 0x1F43B675)
+                {
+                    long clusterTime = 0;
+                    int k = dataStart;
+                    while (k < Math.Min(eEnd, d.Length))
+                    {
+                        if (!WbReadId(d, ref k, out uint bId)) break;
+                        if (!WbReadSize(d, ref k, out long bSz)) break;
+                        if (bId == 0xA3 || bId == 0xA1) r.FrameCount++;
+                        if (bId == 0xE7)
+                        {
+                            long tv = 0;
+                            for (int m = 0; m < (int)bSz; m++) tv = tv * 256 + d[k + m];
+                            clusterTime = tv;
+                        }
+                        k += (int)bSz;
+                    }
+                    r.Clusters.Add(new WbCluster
+                    {
+                        AbsStart = eStart,
+                        AbsEnd = Math.Min(eEnd, d.Length),
+                        Time = clusterTime,
+                        Pos = eStart - segDataStart
+                    });
+                }
+                else if (elId == 0x1C53BB6B)
+                {
+                    r.CuesStart = eStart;
+                    r.CuesEnd = Math.Min(eEnd, d.Length);
+                }
+                else if (elId == 0x114D9B74)
+                {
+                    r.SeekHeadStart = eStart;
+                    r.SeekHeadEnd = Math.Min(eEnd, d.Length);
+                }
+
+                i = eEnd;
+            }
+
+            return r;
+        }
+
+        private static byte[] PatchSegInfo(byte[] d, int segInfoStart, int segInfoEnd, double duration)
+        {
+            byte[] durationEl = BuildElement(0x4489, EncodeFloat64(duration));
+
+            int j = segInfoStart;
+            if (!WbReadId(d, ref j, out _) || !WbReadSize(d, ref j, out _)) return null;
+            int dataStart = j;
+
+            int existingDurStart = -1, existingDurEnd = -1;
+            int k = dataStart;
+            while (k < segInfoEnd)
+            {
+                int childStart = k;
+                if (!WbReadId(d, ref k, out uint cId)) break;
+                if (!WbReadSize(d, ref k, out long cSz)) break;
+                if (cId == 0x4489)
+                {
+                    existingDurStart = childStart;
+                    existingDurEnd = k + (int)cSz;
+                    break;
+                }
+                k += (int)cSz;
+            }
+
+            byte[] oldPayload = existingDurStart >= 0
+                ? Concat(Slice(d, dataStart, existingDurStart), Slice(d, existingDurEnd, segInfoEnd))
+                : Slice(d, dataStart, segInfoEnd);
+
+            return BuildElement(0x1549A966, Concat(oldPayload, durationEl));
+        }
+
+        private static byte[] PatchTracksDefaultDuration(byte[] d, int tracksStart, int tracksEnd, long defaultDurationNs)
+        {
+            int j = tracksStart;
+            if (!WbReadId(d, ref j, out _) || !WbReadSize(d, ref j, out _)) return null;
+            int dataStart = j;
+
+            byte[] durEl = BuildElement(0x23E383, WriteUint(defaultDurationNs));
+            var parts = new List<byte[]>();
+            int i = dataStart;
+
+            while (i < tracksEnd)
+            {
+                int eStart = i;
+                if (!WbReadId(d, ref i, out uint eId)) break;
+                if (!WbReadSize(d, ref i, out long eSz)) break;
+                int eDataStart = i;
+                int eEnd = (long)eDataStart + eSz > tracksEnd ? tracksEnd : eDataStart + (int)eSz;
+                int eEndClamped = Math.Min(eEnd, tracksEnd);
+
+                if (eId == 0xAE)
+                {
+                    bool isVideo = false, hasDur = false;
+                    int k = eDataStart;
+                    while (k < eEndClamped)
+                    {
+                        if (!WbReadId(d, ref k, out uint cId)) break;
+                        if (!WbReadSize(d, ref k, out long cSz)) break;
+                        if (cId == 0x83 && k < d.Length && d[k] == 1) isVideo = true;
+                        if (cId == 0x23E383) hasDur = true;
+                        k += (int)cSz;
+                    }
+
+                    if (isVideo && !hasDur)
+                    {
+                        parts.Add(BuildElement(0xAE, Concat(Slice(d, eDataStart, eEndClamped), durEl)));
+                        i = eEndClamped;
+                        continue;
+                    }
+                }
+
+                parts.Add(Slice(d, eStart, eEndClamped));
+                i = eEndClamped;
+            }
+
+            return BuildElement(0x1654AE6B, Concat(parts.ToArray()));
+        }
+
+        private static byte[] BuildCues(List<WbCluster> clusters, int segDataStart, long shift)
         {
             var points = new List<byte[]>();
-
-            foreach (var (absStart, time, _) in clusters)
+            foreach (var c in clusters)
             {
-                long clusterPos = Math.Max(0, absStart - segDataStart + shift);
-                byte[] trackPos = WbBuildContainerRaw(0xB7, Concat(
-                    WbBuildUintFixed(0xF7, 1, 1),
-                    WbBuildUintFixed(0xF1, clusterPos, 8)
+                long pos = Math.Max(0, c.Pos + shift);
+                byte[] trackPos = BuildElement(0xB7, Concat(
+                    BuildElement(0xF7, WriteUint(1)),
+                    BuildElement(0xF1, WriteUint(pos))
                 ));
-                byte[] cuePoint = WbBuildContainerRaw(0xBB, Concat(
-                    WbBuildUint(0xB3, time),
+                points.Add(BuildElement(0xBB, Concat(
+                    BuildElement(0xB3, WriteUint(c.Time)),
                     trackPos
-                ));
-                points.Add(cuePoint);
+                )));
             }
-            return WbBuildContainerRaw(0x1C53BB6B, Concat(points.ToArray()));
+            return BuildElement(0x1C53BB6B, Concat(points.ToArray()));
         }
 
-        private static byte[] WbBuildFloat64(uint id, double val)
+        private static byte[] BuildElement(uint id, byte[] payload)
         {
-            byte[] idBytes = WbEncodeId(id);
-            byte[] payload = new byte[8];
-            long bits = BitConverter.DoubleToInt64Bits(val);
-            for (int i = 7; i >= 0; i--) { payload[i] = (byte)(bits & 0xFF); bits >>= 8; }
-            byte[] sizeBytes = WbEncodeVint(8, 1);
-            return Concat(idBytes, sizeBytes, payload);
+            byte[] idBytes = EncodeId(id);
+            byte[] sizeBytes = EncodeVintFixed(payload.Length, VintWidth(payload.Length));
+            var result = new byte[idBytes.Length + sizeBytes.Length + payload.Length];
+            Buffer.BlockCopy(idBytes, 0, result, 0, idBytes.Length);
+            Buffer.BlockCopy(sizeBytes, 0, result, idBytes.Length, sizeBytes.Length);
+            Buffer.BlockCopy(payload, 0, result, idBytes.Length + sizeBytes.Length, payload.Length);
+            return result;
         }
 
-        private static byte[] WbBuildUint(uint id, long val)
+        private static byte[] WriteUint(long val)
         {
-            if (val < 0) val = 0;
-            int byteLen = 1;
+            if (val <= 0) return new byte[] { 0 };
+            int len = 1;
             long tmp = val;
-            while (tmp > 0xFF) { byteLen++; tmp >>= 8; }
-            byte[] payload = new byte[byteLen];
+            while (tmp > 255) { len++; tmp >>= 8; }
+            var b = new byte[len];
             long v = val;
-            for (int i = byteLen - 1; i >= 0; i--) { payload[i] = (byte)(v & 0xFF); v >>= 8; }
-            return Concat(WbEncodeId(id), WbEncodeVint(byteLen, 1), payload);
-        }
-
-        private static byte[] WbBuildUintFixed(uint id, long val, int byteLen)
-        {
-            if (val < 0) val = 0;
-            byte[] payload = new byte[byteLen];
-            long v = val;
-            for (int i = byteLen - 1; i >= 0; i--) { payload[i] = (byte)(v & 0xFF); v >>= 8; }
-            return Concat(WbEncodeId(id), WbEncodeVint(byteLen, 1), payload);
-        }
-
-        private static byte[] WbBuildContainerRaw(uint id, byte[] payload)
-        {
-            return Concat(WbEncodeId(id), WbEncodeVint(payload.Length, WbVintWidth(payload.Length)), payload);
-        }
-
-        private static byte[] WbEncodeId(uint id)
-        {
-            if (id <= 0xFF) return new byte[] { (byte)id };
-            if (id <= 0xFFFF) return new byte[] { (byte)(id >> 8), (byte)id };
-            if (id <= 0xFFFFFF) return new byte[] { (byte)(id >> 16), (byte)(id >> 8), (byte)id };
-            return new byte[] { (byte)(id >> 24), (byte)(id >> 16), (byte)(id >> 8), (byte)id };
-        }
-
-        private static byte[] WbEncodeVint(long val, int width)
-        {
-            var b = new byte[width];
-            int marker = 0x80 >> (width - 1);
-            long v = val;
-            for (int i = width - 1; i > 0; i--) { b[i] = (byte)(v & 0xFF); v >>= 8; }
-            b[0] = (byte)(((byte)(v & 0x7F) & (byte)(marker - 1)) | (byte)marker);
+            for (int i = len - 1; i >= 0; i--) { b[i] = (byte)(v & 0xFF); v >>= 8; }
             return b;
         }
 
-        private static int WbVintWidth(long val)
+        private static byte[] EncodeFloat64(double val)
+        {
+            long bits = BitConverter.DoubleToInt64Bits(val);
+            var b = new byte[8];
+            for (int i = 7; i >= 0; i--) { b[i] = (byte)(bits & 0xFF); bits >>= 8; }
+            return b;
+        }
+
+        private static byte[] EncodeVintFixed(long val, int width)
+        {
+            int marker = 0x80 >> (width - 1);
+            var b = new byte[width];
+            long v = val;
+            for (int i = width - 1; i > 0; i--) { b[i] = (byte)(v & 0xFF); v >>= 8; }
+            b[0] = (byte)((v & (marker - 1)) | marker);
+            return b;
+        }
+
+        private static int VintWidth(long val)
         {
             if (val < 0x7F) return 1;
             if (val < 0x3FFF) return 2;
             if (val < 0x1FFFFF) return 3;
             if (val < 0x0FFFFFFF) return 4;
             return 8;
+        }
+
+        private static byte[] EncodeId(uint id)
+        {
+            if (id <= 0xFF) return new byte[] { (byte)id };
+            if (id <= 0xFFFF) return new byte[] { (byte)(id >> 8), (byte)id };
+            if (id <= 0xFFFFFF) return new byte[] { (byte)(id >> 16), (byte)(id >> 8), (byte)id };
+            return new byte[] { (byte)(id >> 24), (byte)(id >> 16), (byte)(id >> 8), (byte)id };
         }
 
         private static bool WbReadId(byte[] d, ref int i, out uint id)
@@ -360,26 +440,6 @@ namespace JustReadTheInstructions
             return true;
         }
 
-        private static int WbIdLen(byte[] d, int offset)
-        {
-            if (offset >= d.Length) return 1;
-            byte b = d[offset];
-            int width = 1;
-            byte mask = 0x80;
-            while ((b & mask) == 0 && width <= 4) { width++; mask >>= 1; }
-            return width;
-        }
-
-        private static int WbSizeLen(byte[] d, int offset)
-        {
-            if (offset >= d.Length) return 1;
-            byte b = d[offset];
-            int width = 1;
-            byte mask = 0x80;
-            while ((b & mask) == 0 && width <= 8) { width++; mask >>= 1; }
-            return width;
-        }
-
         private static bool WbReadVint(byte[] d, ref int i, out long val)
         {
             val = 0;
@@ -389,24 +449,14 @@ namespace JustReadTheInstructions
             int width = 1;
             byte mask = 0x80;
             while ((b & mask) == 0 && width <= 8) { width++; mask >>= 1; }
-            if (width > 8 || i + width > d.Length) return false;
+            if (i + width > d.Length) return false;
             val = b & (mask - 1);
             for (int x = 1; x < width; x++) val = (val << 8) | d[i + x];
             i += width;
             return true;
         }
 
-        private static double WbReadFloat(byte[] d, int i, int size)
-        {
-            if (size != 4 && size != 8) return 0;
-            byte[] temp = new byte[size];
-            Buffer.BlockCopy(d, i, temp, 0, size);
-
-            if (BitConverter.IsLittleEndian) Array.Reverse(temp);
-
-            if (size == 4) return BitConverter.ToSingle(temp, 0);
-            return BitConverter.ToDouble(temp, 0);
-        }
+        private static readonly long WbUnknown = unchecked((long)0x00FFFFFFFFFFFFFFL);
 
         private static byte[] Slice(byte[] d, int start, int end)
         {
