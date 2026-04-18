@@ -104,7 +104,13 @@ namespace JustReadTheInstructions
                 try
                 {
                     session.Dispose();
-                    if (session.DisplayPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+                    // Hacky fix to make sure we don't end up with empty files or broken mp4/webm files that can't be played
+                    // Otherwise we as usual execute our respective fixers to make sure the output's playable
+                    if (session.BytesWritten == 0)
+                    {
+                        try { File.Delete(session.DisplayPath); } catch { }
+                    }
+                    else if (session.DisplayPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
                         FixMp4(session.DisplayPath);
                     else if (session.DisplayPath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
                         FixWebm(session.DisplayPath);

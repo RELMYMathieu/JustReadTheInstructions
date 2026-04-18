@@ -74,6 +74,8 @@ namespace JustReadTheInstructions
             var camObj = new GameObject("JRTI_Near_" + InstanceId);
             var camera = camObj.AddComponent<Camera>();
 
+            camera.clearFlags = CameraClearFlags.Depth;
+
             var mainCam = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
             if (mainCam != null)
             {
@@ -135,6 +137,8 @@ namespace JustReadTheInstructions
             var camObj = new GameObject("JRTI_Scaled_" + InstanceId);
             var camera = camObj.AddComponent<Camera>();
 
+            camera.clearFlags = CameraClearFlags.Depth;
+
             var mainScaledCam = FindCameraByName("Camera ScaledSpace");
             if (mainScaledCam != null)
             {
@@ -179,6 +183,10 @@ namespace JustReadTheInstructions
         {
             var camObj = new GameObject("JRTI_Galaxy_" + InstanceId);
             var camera = camObj.AddComponent<Camera>();
+
+            // attempt to clear camera background / flags to avoid rendering issues (!! experimental !!)
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
 
             var mainGalaxyCam = FindCameraByName("GalaxyCamera");
             if (mainGalaxyCam != null)
@@ -268,8 +276,14 @@ namespace JustReadTheInstructions
         {
             foreach (var camera in _cameras)
             {
-                if (camera != null)
-                    camera.enabled = enabled;
+                if (camera == null) continue;
+                // hacking the GPU context to avoid Unity's weird renderer behaviour
+                if (enabled)
+                {
+                    if (!TargetTexture.IsCreated()) TargetTexture.Create();
+                    camera.targetTexture = TargetTexture;
+                }
+                camera.enabled = enabled;
             }
         }
 
