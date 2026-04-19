@@ -2,6 +2,8 @@ using HullcamVDS;
 using System;
 using System.Linq;
 using UnityEngine;
+using System.Collections.Generic;
+using UnityEngine.Rendering;
 
 namespace JustReadTheInstructions
 {
@@ -9,8 +11,10 @@ namespace JustReadTheInstructions
     {
         private readonly MuMechModuleHullCamera _hullCamera;
         private readonly Camera[] _cameras = new Camera[3];
+        private readonly Dictionary<Light, CommandBuffer> _strippedRaymarchedBuffers = new Dictionary<Light, CommandBuffer>();
         private int _frameCount;
 
+        private static Light _cachedScaledSunLight;
         public RenderTexture TargetTexture { get; private set; }
         public bool IsActive { get; private set; }
         public int InstanceId { get; }
@@ -63,7 +67,6 @@ namespace JustReadTheInstructions
             SetupScaledCamera();
             SetupGalaxyCamera();
 
-            SetCamerasEnabled(false);
             JRTIStreamServer.Instance?.RegisterCamera(InstanceId);
 
             Debug.Log($"[JRTI]: Cameras created for '{GetDisplayName()}'");
@@ -76,12 +79,9 @@ namespace JustReadTheInstructions
 
             var mainCam = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
             if (mainCam != null)
-            {
                 camera.CopyFrom(mainCam);
-            }
 
             camera.useOcclusionCulling = false;
-
             camera.name = "JRTI_Near";
 
             camera.transform.parent = !string.IsNullOrEmpty(_hullCamera.cameraTransformName)
@@ -130,6 +130,7 @@ namespace JustReadTheInstructions
                 camObj.AddComponent<ScattererCameraSwap>();
 
             _cameras[NearCameraIndex] = camera;
+            camera.enabled = false;
         }
 
         private void SetupScaledCamera()
@@ -146,7 +147,6 @@ namespace JustReadTheInstructions
             }
 
             camera.useOcclusionCulling = false;
-
             camera.name = "JRTI_Scaled";
 
             camera.transform.localRotation = Quaternion.identity;
@@ -167,9 +167,8 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableEVE)
                 EVEIntegration.ApplyToCamera(camera, mainScaledCam, includeLocalEffects: false);
 
-            //if (JRTISettings.EnableScatterer)
-            //    ScattererIntegration.ApplyToScaledCamera(camera);
-            // Genuinely I don't know what is happening here
+            if (JRTISettings.EnableScatterer)
+                ScattererIntegration.ApplyToScaledCamera(camera);
 
             var synchronizer = camObj.AddComponent<CameraSynchronizer>();
             synchronizer.SourceCamera = _cameras[NearCameraIndex];
@@ -180,6 +179,7 @@ namespace JustReadTheInstructions
                 camObj.AddComponent<ScattererScaledCameraSwap>();
 
             _cameras[ScaledCameraIndex] = camera;
+            camera.enabled = false;
         }
 
         private void SetupGalaxyCamera()
@@ -198,7 +198,6 @@ namespace JustReadTheInstructions
             }
 
             camera.useOcclusionCulling = false;
-
             camera.name = "JRTI_Galaxy";
 
             camera.transform.localPosition = Vector3.zero;
@@ -222,6 +221,7 @@ namespace JustReadTheInstructions
             camObj.AddComponent<CanvasFix>();
 
             _cameras[GalaxyCameraIndex] = camera;
+            camera.enabled = false;
         }
 
         private Camera FindCameraByName(string cameraName)
@@ -244,9 +244,23 @@ namespace JustReadTheInstructions
 
             bool hasViewers = hasInGameViewer || (JRTIStreamServer.Instance?.HasActiveClients(InstanceId) ?? false);
             bool shouldRender = hasViewers && (_frameCount % (JRTISettings.RenderEveryOtherFrame ? 2 : 1)) == 0;
-            SetCamerasEnabled(shouldRender);
 
             if (!shouldRender) return;
+
+            if (!TargetTexture.IsCreated()) TargetTexture.Create();
+
+            StripRaymarchedLightBuffers();
+
+            for (int i = _cameras.Length - 1; i >= 0; i--)
+            {
+                var camera = _cameras[i];
+                if (camera == null) continue;
+                camera.targetTexture = TargetTexture;
+                camera.GetComponent<CameraSynchronizer>()?.ManualSync();
+                camera.Render();
+            }
+
+            RestoreRaymarchedLightBuffers();
 
             if (_parallaxApplied) RenderParallaxScatters();
             if (_fireflyApplied) UpdateFireflyEffects();
@@ -259,36 +273,47 @@ namespace JustReadTheInstructions
 
         private void RenderParallaxScatters()
         {
-            if (!ParallaxIntegration.IsAvailable)
-                return;
-
+            if (!ParallaxIntegration.IsAvailable) return;
             var nearCamera = _cameras[NearCameraIndex];
-            if (nearCamera != null && nearCamera.enabled)
+            if (nearCamera != null)
                 ParallaxIntegration.RenderToCamera(nearCamera);
         }
 
         private void UpdateFireflyEffects()
         {
-            if (!FireflyIntegration.IsAvailable)
-                return;
-
+            if (!FireflyIntegration.IsAvailable) return;
             var nearCamera = _cameras[NearCameraIndex];
-            if (nearCamera != null && nearCamera.enabled)
+            if (nearCamera != null)
                 FireflyIntegration.UpdateForCamera(nearCamera, GetVessel());
         }
 
-        private void SetCamerasEnabled(bool enabled)
+        private static Light GetScaledSunLight()
         {
-            foreach (var camera in _cameras)
+            if (_cachedScaledSunLight != null) return _cachedScaledSunLight;
+            var field = typeof(Sun).GetField("scaledSunLight",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            _cachedScaledSunLight = field?.GetValue(Sun.Instance) as Light;
+            return _cachedScaledSunLight;
+        }
+
+        private void StripRaymarchedLightBuffers()
+        {
+            _strippedRaymarchedBuffers.Clear();
+            var sunLight = GetScaledSunLight();
+            if (sunLight == null) return;
+            foreach (var buf in sunLight.GetCommandBuffers(LightEvent.AfterScreenspaceMask))
             {
-                if (camera == null) continue;
-                if (enabled)
-                {
-                    if (!TargetTexture.IsCreated()) TargetTexture.Create();
-                    camera.targetTexture = TargetTexture;
-                }
-                camera.enabled = enabled;
+                if (buf.name != "Composite Shadows") continue;
+                _strippedRaymarchedBuffers[sunLight] = buf;
+                sunLight.RemoveCommandBuffer(LightEvent.AfterScreenspaceMask, buf);
             }
+        }
+
+        private void RestoreRaymarchedLightBuffers()
+        {
+            foreach (var kvp in _strippedRaymarchedBuffers)
+                kvp.Key.AddCommandBuffer(LightEvent.AfterScreenspaceMask, kvp.Value);
+            _strippedRaymarchedBuffers.Clear();
         }
 
         public string GetDisplayName()
@@ -439,7 +464,6 @@ namespace JustReadTheInstructions
         {
             IsActive = false;
 
-            SetCamerasEnabled(false);
             JRTIStreamServer.Instance?.UnregisterCamera(InstanceId);
 
             foreach (var camera in _cameras)

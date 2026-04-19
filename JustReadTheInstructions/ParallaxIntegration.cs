@@ -86,81 +86,85 @@ namespace JustReadTheInstructions
             }
         }
 
-        public static void ApplyToCamera(Camera camera)
-        {
-            if (!IsAvailable || camera == null)
-                return;
+        //public static void ApplyToCamera(Camera camera)
+        //{
+        //    if (!IsAvailable || camera == null)
+        //        return;
 
-            try
-            {
-                int originalMask = camera.cullingMask;
+        //    try
+        //    {
+        //        int originalMask = camera.cullingMask;
 
-                camera.cullingMask |= (1 << ParallaxLayer);
+        //        camera.cullingMask |= (1 << ParallaxLayer);
 
-                if (originalMask != camera.cullingMask)
-                {
-                    Debug.Log($"[JRTI-Parallax]: Updated {camera.name} culling mask (added layer {ParallaxLayer})");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[JRTI-Parallax]: Failed to apply to {camera.name}: {ex.Message}");
-            }
-        }
+        //        if (originalMask != camera.cullingMask)
+        //        {
+        //            Debug.Log($"[JRTI-Parallax]: Updated {camera.name} culling mask (added layer {ParallaxLayer})");
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Debug.LogError($"[JRTI-Parallax]: Failed to apply to {camera.name}: {ex.Message}");
+        //    }
+        //}
 
-        public static void RenderToCamera(params Camera[] cameras)
-        {
-            if (!IsAvailable || cameras == null || cameras.Length == 0)
-                return;
+        public static void ApplyToCamera(Camera camera) { }
 
-            try
-            {
-                var instance = _instanceField.GetValue(null);
-                if (instance == null)
-                    return;
+        //public static void RenderToCamera(params Camera[] cameras)
+        //{
+        //    if (!IsAvailable || cameras == null || cameras.Length == 0)
+        //        return;
 
-                var activeRenderers = _activeScatterRenderersField.GetValue(instance) as System.Collections.IList;
-                if (activeRenderers == null || activeRenderers.Count == 0)
-                    return;
+        //    try
+        //    {
+        //        var instance = _instanceField.GetValue(null);
+        //        if (instance == null)
+        //            return;
 
-                if (Time.frameCount - _lastLogFrame > 10000 || _lastLogFrame == -999)
-                {
-                    Debug.Log($"[JRTI-Parallax]: Rendering {activeRenderers.Count} scatters to {cameras.Length} cameras");
-                    _lastLogFrame = Time.frameCount;
-                }
+        //        var activeRenderers = _activeScatterRenderersField.GetValue(instance) as System.Collections.IList;
+        //        if (activeRenderers == null || activeRenderers.Count == 0)
+        //            return;
 
-                foreach (var renderer in activeRenderers)
-                {
-                    if (renderer != null)
-                    {
-                        _renderInCamerasMethod.Invoke(renderer, new object[] { cameras });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (Time.frameCount - _lastLogFrame > 1000)
-                {
-                    Debug.LogError($"[JRTI-Parallax]: Failed to render scatter: {ex.Message}");
-                    _lastLogFrame = Time.frameCount;
-                }
-            }
-        }
+        //        if (Time.frameCount - _lastLogFrame > 10000 || _lastLogFrame == -999)
+        //        {
+        //            Debug.Log($"[JRTI-Parallax]: Rendering {activeRenderers.Count} scatters to {cameras.Length} cameras");
+        //            _lastLogFrame = Time.frameCount;
+        //        }
 
-        public static void RemoveFromCamera(Camera camera)
-        {
-            if (camera == null)
-                return;
+        //        foreach (var renderer in activeRenderers)
+        //        {
+        //            if (renderer != null)
+        //            {
+        //                _renderInCamerasMethod.Invoke(renderer, new object[] { cameras });
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        if (Time.frameCount - _lastLogFrame > 1000)
+        //        {
+        //            Debug.LogError($"[JRTI-Parallax]: Failed to render scatter: {ex.Message}");
+        //            _lastLogFrame = Time.frameCount;
+        //        }
+        //    }
+        //}
+        public static void RenderToCamera(params Camera[] cameras) { }
 
-            try
-            {
-                Debug.Log($"[JRTI-Parallax]: Disabled scatter rendering for {camera.name}");
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[JRTI-Parallax]: Error removing from {camera.name}: {ex.Message}");
-            }
-        }
+        //public static void RemoveFromCamera(Camera camera)
+        //{
+        //    if (camera == null)
+        //        return;
+
+        //    try
+        //    {
+        //        Debug.Log($"[JRTI-Parallax]: Disabled scatter rendering for {camera.name}");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Debug.LogError($"[JRTI-Parallax]: Error removing from {camera.name}: {ex.Message}");
+        //    }
+        //}
+        public static void RemoveFromCamera(Camera camera) { }
 
         public static string GetDiagnosticInfo(Camera camera)
         {
