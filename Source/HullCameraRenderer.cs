@@ -99,6 +99,7 @@ namespace JustReadTheInstructions
             );
             camera.transform.localPosition = _hullCamera.cameraPosition;
 
+            camera.nearClipPlane = 0.07f;
             camera.fieldOfView = _hullCamera.cameraFoV;
             camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;

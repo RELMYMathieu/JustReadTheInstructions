@@ -18,6 +18,7 @@ namespace JustReadTheInstructions
         public static float MaxWindowScale { get; internal set; } = 3f;
         public static float MinWindowScale { get; internal set; } = 0.5f;
 
+        public static bool FixedPreviewAspectRatio { get; internal set; } = true;
         public static int MaxPreviewSize { get; internal set; } = 360;
         public static uint MaxOpenCameras { get; internal set; } = 8u;
 
@@ -93,6 +94,7 @@ namespace JustReadTheInstructions
                 MaxOpenCameras = ParseUInt(settings, "MaxOpenCameras", MaxOpenCameras, 1, 64);
                 MaxWindowScale = ParseFloat(settings, "MaxWindowScale", MaxWindowScale);
                 MinWindowScale = ParseFloat(settings, "MinWindowScale", MinWindowScale);
+                FixedPreviewAspectRatio = ParseBool(settings, "FixedPreviewAspectRatio", FixedPreviewAspectRatio);
                 MaxPreviewSize = ParseInt(settings, "MaxPreviewSize", MaxPreviewSize);
                 StreamPort = ParseInt(settings, "StreamPort", StreamPort);
                 StreamJpegQuality = ParseInt(settings, "StreamJpegQuality", StreamJpegQuality);
@@ -133,6 +135,7 @@ namespace JustReadTheInstructions
                 settings.AddValue("RenderEveryOtherFrame", RenderEveryOtherFrame);
                 settings.AddValue("MaxWindowScale", MaxWindowScale.ToString(CultureInfo.InvariantCulture));
                 settings.AddValue("MinWindowScale", MinWindowScale.ToString(CultureInfo.InvariantCulture));
+                settings.AddValue("FixedPreviewAspectRatio", FixedPreviewAspectRatio);
                 settings.AddValue("MaxPreviewSize", MaxPreviewSize);
                 settings.AddValue("MaxOpenCameras", MaxOpenCameras);
                 settings.AddValue("StreamPort", StreamPort);

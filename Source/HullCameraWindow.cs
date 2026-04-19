@@ -15,7 +15,7 @@ namespace JustReadTheInstructions
         private float _previewHeight;
         private float _scale = 1f;
         private bool _isResizing;
-        private bool _minimalUI;
+        private bool _minimalUI = true;
         private float _currentFOV;
         private float _minFOV;
         private float _maxFOV;
@@ -91,18 +91,25 @@ namespace JustReadTheInstructions
 
         private void CalculateInitialSize()
         {
-            float aspectRatio = (float)JRTISettings.RenderWidth / JRTISettings.RenderHeight;
             float maxSize = JRTISettings.MaxPreviewSize;
 
-            if (aspectRatio >= 1f)
+            if (JRTISettings.FixedPreviewAspectRatio)
             {
-                _previewWidth = maxSize;
-                _previewHeight = maxSize / aspectRatio;
+                _previewWidth = _previewHeight = maxSize;
             }
             else
             {
-                _previewHeight = maxSize;
-                _previewWidth = maxSize * aspectRatio;
+                float aspectRatio = (float)JRTISettings.RenderWidth / JRTISettings.RenderHeight;
+                if (aspectRatio >= 1f)
+                {
+                    _previewWidth = maxSize;
+                    _previewHeight = maxSize / aspectRatio;
+                }
+                else
+                {
+                    _previewHeight = maxSize;
+                    _previewWidth = maxSize * aspectRatio;
+                }
             }
 
             RecalculateWindowSize();
@@ -182,7 +189,7 @@ namespace JustReadTheInstructions
             GUI.DrawTexture(
                 previewRect,
                 _renderer.TargetTexture,
-                ScaleMode.StretchToFill,
+                ScaleMode.ScaleAndCrop,
                 false
             );
 
