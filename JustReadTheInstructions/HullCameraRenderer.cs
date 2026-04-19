@@ -142,6 +142,7 @@ namespace JustReadTheInstructions
             {
                 camera.CopyFrom(mainScaledCam);
                 camera.transform.parent = mainScaledCam.transform;
+                camera.depth = mainScaledCam.depth - 0.5f;
             }
 
             camera.useOcclusionCulling = false;
@@ -166,8 +167,9 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableEVE)
                 EVEIntegration.ApplyToCamera(camera, mainScaledCam, includeLocalEffects: false);
 
-            if (JRTISettings.EnableScatterer)
-                ScattererIntegration.ApplyToScaledCamera(camera);
+            //if (JRTISettings.EnableScatterer)
+            //    ScattererIntegration.ApplyToScaledCamera(camera);
+            // Genuinely I don't know what is happening here
 
             var synchronizer = camObj.AddComponent<CameraSynchronizer>();
             synchronizer.SourceCamera = _cameras[NearCameraIndex];
