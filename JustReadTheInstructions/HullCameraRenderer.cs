@@ -239,7 +239,6 @@ namespace JustReadTheInstructions
         public void Update(bool hasInGameViewer = false)
         {
             if (!IsActive || _hullCamera == null) return;
-            if (MapView.MapIsEnabled) return;
 
             _frameCount++;
 
