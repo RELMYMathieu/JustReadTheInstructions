@@ -20,10 +20,10 @@
 
 ---
 
-> [!WARNING]
-> **JRTI is currently an experimental public release.**
+> [!NOTE]
+> **JRTI is a tech demo as much as it is a mod - an experiment to see how far KSP can be pushed.**
 >
-> Expect rough edges, compatibility quirks, and breaking changes over time.
+> The mod is stable and usable, but expect a few unpolished edges. You may still encounter bugs, performance issues, or missing features. If you do, please report them in the Issues tab with your log file attached. Prefixing the title with `Bug:` helps with triage.
 
 ## Overview
 
@@ -80,13 +80,15 @@ GameData/JustReadTheInstructions/Web/images/los.png
 
 ## Known Issues
 
-The `2.0.0` line is still in beta. A few rough edges are tracked but not yet fixed:
+A few known issues are tracked but not yet fixed:
 
-* **Scrubbing recorded files is unreliable.** The footage itself is intact, but seeking inside the resulting `.webm` / `.mp4` can jump around, show heavy artifacting, show the wrong duration, or freeze briefly. This is a limitation of how the browser's `MediaRecorder` writes chunks straight to disk, as the final file has no seek index. A post-finalize remux pass is planned. In the meantime, playing the file end-to-end works fine; for clean scrubbing, re-encode once through ffmpeg or VLC.
-* **Odd reflection/shadow artifact on planets.** With Scatterer and/or EVE installed, looking at Kerbin or the Mun through a JRTI camera can render a noticable secondary reflection or shadow that isn't present on the main game camera. The scene lighting and actual shadows render correctly - this appears to be a probe or hook tied to the main camera's frustum bleeding into the mod camera. Under investigation.
+* **Firefox recording output is unreliable.** The recorded file may be corrupt or unplayable. Use Chrome or Edge for recording until this is resolved.
+* **Stale zero-byte buffer files** are sometimes left in the recordings folder after a session ends. They are safe to delete manually.
+* **macOS is not properly supported.** A GPU async API used internally by this Unity version is unavailable on macOS, a legacy quirk inherited from KSP's Unity build. A fix is being investigated.
+* **Performance degradation with Parallax.** Parallax integration is disabled by default. Enabling it in the Settings menu may cause significant frame-rate drops.
+* **Odd reflection/shadow artifact on planets.** With Scatterer and/or EVE installed, looking at Kerbin or the Mun through a JRTI camera can show a secondary reflection or shadow not present on the main camera. Appears to be a probe or hook tied to the main camera's frustum bleeding into the mod camera. Under investigation.
 
-If you hit something not listed here, please open an issue with your log file attached.
-Additionally, being issue with "Bug:" in the title, it will help me it triage faster.
+If you hit something not listed here, please open an issue with your log file attached. Prefixing the title with `Bug:` helps with triage.
 
 ## For Developers
 

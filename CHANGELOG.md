@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [v2.0.0] Web UI Recording, Polishing, QoL and more! - 2026-04-20
+
 ### Added
+- Recording is now available in this new version
 - Unified **Settings & Integrations** menu merging the former Settings and Debug menus into a single scrollable window with four collapsible sections: Stream/Capture, Visual Mod Integrations, Diagnostics, and Troubleshooting
-- Visual mod integrations (Deferred, TUFX, Scatterer, EVE, Parallax, Firefly) are now toggleable directly from the unified menu with live ✓/✗ availability indicators
+- Visual mod integrations (Deferred, TUFX, Scatterer, EVE, Parallax, Firefly) are now toggleable directly from the unified menu with live availability indicators
 - **HullcamVDS Camera Filter** integration — discovers the active Hullcam filter/overlay material at runtime via reflection and blits it over the stream frame; falls back silently to raw frame when unavailable or unset
 - Integration enable/disable state now persists to `settings.cfg` and is restored on launch (previously runtime-only)
 - Stream All button on in-game Flight UI — streams all available cameras in one click (shown only when more than one camera is available)
@@ -20,13 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Persisted offline/destroyed camera cards from a previous game launch are now cleared on page load when a new game session is detected — the web client compares the stored session UUID against the server's and wipes `localStorage` on mismatch
-- Firefox integration now properly allows recording
+- Firefox integration now properly allows recording (however, not constantly reliable, see known issues)
 
 ### Changed
 - Integration enable flags moved from `JRTIDebugMenu` (runtime-only statics) to `JRTISettings` (persisted properties) — **Parallax still defaults to `false`**
 - `JRTIDebugMenu` removed; all functionality absorbed into the unified `JRTISettingsGUI`
 - Ctrl+Alt+F8 (former debug menu) and Ctrl+Alt+F9 (former settings) now both open the same unified menu
 
+### Known Issues
+- Firefox recording output is unreliable — the recorded file may be corrupt or unplayable
+- Stale zero-byte buffer files are sometimes left in the recordings folder after a recording session ends
+- macOS is not properly supported — a GPU async API used by this Unity version is unavailable on macOS (legacy KSP/Unity quirk); a fix is being investigated
+- Performance degradation with Parallax enabled — Parallax integration is disabled by default for this reason
 
 ## [v2.0.0-beta.4] Web UI Recording (Beta 4) - 2026-04-17
 
