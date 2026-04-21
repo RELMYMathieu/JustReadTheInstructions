@@ -1,14 +1,15 @@
-## 2.0.1 - 2026-04-21
+# Changelog
 
----
+All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v2.0.1 - 2026-04-21
+## Unreleased
 
 ### Fixed
 
 - "Stop" button now properly turns green if a client is requesting the camera feed
-
 
 ## v2.0.0 Web UI Recording, Polishing, QoL and more! - 2026-04-20
 
@@ -43,7 +44,6 @@
 - macOS is not properly supported — a GPU async API used by this Unity version is unavailable on macOS (legacy KSP/Unity quirk); a fix is being investigated
 - Performance degradation with Parallax enabled — Parallax integration is disabled by default for this reason
 
-
 ## v2.0.0-beta.4 Web UI Recording (Beta 4) - 2026-04-17
 
 ### Added
@@ -71,7 +71,6 @@
 - Faint reflection/shadow artifact visible on Kerbin and the Mun through JRTI cameras when Scatterer and/or EVE are installed. Actual shadows render correctly, so this looks like a hook or reflection probe tied to the main camera's frustum bleeding into the mod camera. Under investigation
 - Sometimes, there will be MP4 files with a size of 0 bytes that do not get cleaned up in the recordings folder. This problem is being investigated.
 
-
 ## v2.0.0-beta.3 Web UI Recording (Beta 3) - 2026-04-17
 
 ### Added
@@ -90,7 +89,6 @@
 - LOS signal to the recorder is decoupled from the visual offline state — the recorder has its own 5 s delay independent of the overlay delay
 - Paused status text no longer reads "signal lost", since pause is now also user-triggered
 
-
 ## v2.0.0-beta.2 Web UI Recording (Beta 2) - 2026-04-17
 
 ### Added
@@ -105,7 +103,6 @@
 - Snapshot polling interval raised to 10 s (was 2 s) and snapshot interest window reduced to 3 s, so cameras sleep between polls rather than staying hot continuously
 - Heartbeat and server-side session management are now skipped entirely for remote (local-save) recordings
 
-
 ## v2.0.0-beta.1 Web UI Recording (Beta 1) - 2026-04-16
 
 ### Added
@@ -113,16 +110,8 @@
 - Basic recording support in the web UI (experimental)
 - Recording support in the C# API
 
-
 ## v1.0.0 - 2026-04-15
 
 ### Added
 
 - Initial public release
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
