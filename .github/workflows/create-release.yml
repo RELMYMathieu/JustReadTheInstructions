@@ -17,4 +17,5 @@ jobs:
       version-string: ${{ inputs.version }}
       use-ckan: true
       artifacts: GameData/JustReadTheInstructions
+      version-template-extension: ''
     secrets: inherit
