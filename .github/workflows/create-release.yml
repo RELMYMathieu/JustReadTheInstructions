@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. v2.0.1)'
+        description: 'Version (e.g. 2.0.2)'
         required: true
         type: string
 
@@ -12,7 +12,7 @@ jobs:
   create-release:
     permissions:
       contents: write
-    uses: KSPModdingLibs/KSPBuildTools/.github/workflows/create-release.yml@9e7a13d8c5582d5ba54837629adb0e5d4254a45d
+    uses: KSPModdingLibs/KSPBuildTools/.github/workflows/create-release.yml@9e7a13d8c5582d5ba54837629adb0e5d4254a45d # 1.1.1
     with:
       version-string: ${{ inputs.version }}
       use-ckan: true
