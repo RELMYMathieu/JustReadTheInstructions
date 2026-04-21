@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A new parameter `FixedPreviewAspectRatio` (boolean) to `settings.cfg`, allowing the in-game camera preview to be forced to a 1:1 aspect ratio
 - Mod version label in settings menu
 
+### Fixed
+
+- More space for the streaming label
+
 ## v2.1.0 - 2026-04-22
 
 ### Added

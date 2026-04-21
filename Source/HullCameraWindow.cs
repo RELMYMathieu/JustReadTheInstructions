@@ -179,7 +179,7 @@ namespace JustReadTheInstructions
 
             bool streaming = JRTIStreamServer.Instance?.IsStreaming(_renderer.InstanceId) ?? false;
             GUI.color = streaming ? Color.green : Color.gray;
-            GUI.Label(new Rect(_windowWidth - ButtonSize * 3, 2, ButtonSize * 2, ButtonSize), streaming ? "● LIVE" : "○ OFFLINE", _titleStyle);
+            GUI.Label(new Rect(_windowWidth - ButtonSize * 4, 2, ButtonSize * 3, ButtonSize), streaming ? "● LIVE" : "○ OFFLINE", _titleStyle);
             GUI.color = Color.white;
 
             float scaledWidth = _previewWidth * _scale;
