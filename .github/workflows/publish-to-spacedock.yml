@@ -4,7 +4,7 @@ on:
     types: [released]
 jobs:
   publish-to-spacedock:
-    uses: KSPModdingLibs/KSPBuildTools/.github/workflows/publish-to-spacedock.yml@9e7a13d8c5582d5ba54837629adb0e5d4254a45d #  1.1.1
+    uses: KSPModdingLibs/KSPBuildTools/.github/workflows/publish-to-spacedock.yml@1.1.1
     with:
       spacedock-username: ${{ vars.SPACEDOCK_USERNAME }}
       mod-id: ${{ vars.SPACEDOCK_MOD_ID }}
