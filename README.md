@@ -128,6 +128,12 @@ Open `JustReadTheInstructions.sln` in Visual Studio and build normally, or run:
 msbuild JustReadTheInstructions.sln /p:Configuration=Release
 ```
 
+**On Linux**, install `mono-msbuild` and use:
+
+```bash
+msbuild JustReadTheInstructions.sln /p:Configuration=Release
+```
+
 The built mod will be output to:
 
 ```text
