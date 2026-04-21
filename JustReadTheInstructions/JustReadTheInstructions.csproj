@@ -11,8 +11,8 @@
 		<AppDesignerFolder>Properties</AppDesignerFolder>
 		<RootNamespace>JustReadTheInstructions</RootNamespace>
 		<AssemblyName>JustReadTheInstructions</AssemblyName>
-		<AssemblyVersion>2.0.0.0</AssemblyVersion>
-		<FileVersion>2.0.0.0</FileVersion>
+		<AssemblyVersion>2.0.1.0</AssemblyVersion>
+		<FileVersion>2.0.1.0</FileVersion>
 		<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
 		<FileAlignment>512</FileAlignment>
 		<Deterministic>true</Deterministic>
