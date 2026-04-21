@@ -49,7 +49,7 @@
 	<ItemGroup>
 		<ModReference Include="HullcamVDSContinued">
 			<DLLPath>GameData/HullCameraVDS/Plugins/HullcamVDSContinued.dll</DLLPath>
-			<CKANIdentifier>HullCameraVDS</CKANIdentifier>
+			<CKANIdentifier>HullcamVDSContinued</CKANIdentifier>
 		</ModReference>
 	</ItemGroup>
 
