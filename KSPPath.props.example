@@ -3,6 +3,6 @@
 	<PropertyGroup>
 		<KSPPath Condition="'$(KSPPath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program</KSPPath>
 		<KSPManagedPath>$(KSPPath)\KSP_x64_Data\Managed</KSPManagedPath>
-		<HullcamVDSPath>$(KSPPath)\GameData\HullcamVDS\Plugins\HullcamVDSContinued.dll</HullcamVDSPath>
+		<HullcamVDSPath>$(KSPPath)\GameData\HullCameraVDS\Plugins\HullcamVDSContinued.dll</HullcamVDSPath>
 	</PropertyGroup>
 </Project>

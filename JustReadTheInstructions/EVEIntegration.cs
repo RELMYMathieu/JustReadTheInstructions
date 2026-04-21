@@ -225,7 +225,10 @@ namespace JustReadTheInstructions
             {
                 try
                 {
-                    if (property.CanWrite && property.CanRead)
+                    if (property.CanWrite && property.CanRead
+                        && property.Name != "name"
+                        && property.Name != "tag"
+                        && property.Name != "hideFlags")
                         property.SetValue(target, property.GetValue(source));
                 }
                 catch { }

@@ -15,7 +15,8 @@ namespace JustReadTheInstructions
         private static PropertyInfo _instanceProperty;
         private static FieldInfo _cameraBuffersField;
 
-        private static HashSet<Camera> _camerasWithBuffers = new HashSet<Camera>();
+        private static readonly Dictionary<Camera, List<(CameraEvent evt, CommandBuffer buf)>> _appliedBuffers
+            = new Dictionary<Camera, List<(CameraEvent, CommandBuffer)>>();
 
         public static bool IsAvailable
         {
@@ -119,10 +120,7 @@ namespace JustReadTheInstructions
             if (!IsAvailable || camera == null)
                 return;
 
-            if (_camerasWithBuffers.Contains(camera))
-            {
-                return;
-            }
+            RemoveFromCamera(camera);
 
             try
             {
@@ -135,7 +133,7 @@ namespace JustReadTheInstructions
                 var buffersList = cameraBuffers as System.Collections.IList;
                 if (buffersList == null || buffersList.Count == 0) return;
 
-                int buffersAdded = 0;
+                var added = new List<(CameraEvent, CommandBuffer)>();
 
                 foreach (var item in buffersList)
                 {
@@ -151,17 +149,16 @@ namespace JustReadTheInstructions
                     if (commandBuffer == null) continue;
 
                     var existingBuffers = camera.GetCommandBuffers(cameraEvent);
-                    if (existingBuffers.Contains(commandBuffer))
-                        continue;
+                    if (existingBuffers.Contains(commandBuffer)) continue;
 
                     camera.AddCommandBuffer(cameraEvent, commandBuffer);
-                    buffersAdded++;
+                    added.Add((cameraEvent, commandBuffer));
                 }
 
-                if (buffersAdded > 0)
+                if (added.Count > 0)
                 {
-                    _camerasWithBuffers.Add(camera);
-                    Debug.Log($"[JRTI-Firefly]: Added {buffersAdded} command buffers to {camera.name}");
+                    _appliedBuffers[camera] = added;
+                    Debug.Log($"[JRTI-Firefly]: Added {added.Count} command buffers to {camera.name}");
                 }
             }
             catch (Exception ex)
@@ -172,57 +169,39 @@ namespace JustReadTheInstructions
 
         public static void RemoveFromCamera(Camera camera)
         {
-            if (!IsAvailable || camera == null)
+            if (camera == null)
                 return;
 
-            if (!_camerasWithBuffers.Contains(camera))
+            if (!_appliedBuffers.TryGetValue(camera, out var buffers))
                 return;
+
+            int removed = 0;
 
             try
             {
-                var instance = _instanceProperty.GetValue(null);
-                if (instance == null) return;
-
-                var cameraBuffers = _cameraBuffersField.GetValue(instance);
-                if (cameraBuffers == null) return;
-
-                var buffersList = cameraBuffers as System.Collections.IList;
-                if (buffersList == null) return;
-
-                int buffersRemoved = 0;
-
-                foreach (var item in buffersList)
+                foreach (var (evt, buf) in buffers)
                 {
-                    var itemType = item.GetType();
-                    var keyProperty = itemType.GetProperty("Key");
-                    var valueProperty = itemType.GetProperty("Value");
+                    if (buf == null) continue;
 
-                    if (keyProperty == null || valueProperty == null) continue;
-
-                    var cameraEvent = (CameraEvent)keyProperty.GetValue(item);
-                    var commandBuffer = (CommandBuffer)valueProperty.GetValue(item);
-
-                    if (commandBuffer == null) continue;
-
-                    var existingBuffers = camera.GetCommandBuffers(cameraEvent);
-                    if (existingBuffers.Contains(commandBuffer))
+                    var existing = camera.GetCommandBuffers(evt);
+                    if (existing.Contains(buf))
                     {
-                        camera.RemoveCommandBuffer(cameraEvent, commandBuffer);
-                        buffersRemoved++;
+                        camera.RemoveCommandBuffer(evt, buf);
+                        removed++;
                     }
-                }
-
-                _camerasWithBuffers.Remove(camera);
-
-                if (buffersRemoved > 0)
-                {
-                    Debug.Log($"[JRTI-Firefly]: Removed {buffersRemoved} command buffers from {camera.name}");
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[JRTI-Firefly]: Error removing effects from {camera.name}: {ex.Message}");
             }
+            finally
+            {
+                _appliedBuffers.Remove(camera);
+            }
+
+            if (removed > 0)
+                Debug.Log($"[JRTI-Firefly]: Removed {removed} command buffers from {camera.name}");
         }
 
         public static void UpdateForCamera(Camera camera, Vessel vessel)
@@ -231,24 +210,18 @@ namespace JustReadTheInstructions
                 return;
 
             bool shouldHaveEffects = ShouldHaveEffects(vessel) && HasActiveEffects();
-            bool hasBuffers = _camerasWithBuffers.Contains(camera);
+            bool hasBuffers = _appliedBuffers.ContainsKey(camera);
 
             if (shouldHaveEffects && !hasBuffers)
-            {
                 ApplyToCamera(camera);
-            }
             else if (!shouldHaveEffects && hasBuffers)
-            {
                 RemoveFromCamera(camera);
-            }
         }
 
         public static void CleanupCamera(Camera camera)
         {
             if (camera != null)
-            {
-                _camerasWithBuffers.Remove(camera);
-            }
+                _appliedBuffers.Remove(camera);
         }
 
         public static string GetDiagnosticInfo(Camera camera)
@@ -260,7 +233,11 @@ namespace JustReadTheInstructions
                 return "Camera is null";
 
             var info = $"Firefly Integration for {camera.name}:\n";
-            info += $"- Tracked as having buffers: {_camerasWithBuffers.Contains(camera)}\n";
+            bool tracked = _appliedBuffers.TryGetValue(camera, out var buffers);
+            info += $"- Tracked as having buffers: {tracked}\n";
+
+            if (tracked)
+                info += $"- Tracked buffer count: {buffers.Count}\n";
 
             try
             {
@@ -310,13 +287,9 @@ namespace JustReadTheInstructions
                 }
 
                 if (buffersOnCamera == 0)
-                {
                     info += "- No Firefly command buffers found on this camera\n";
-                }
                 else
-                {
                     info += $"- Total buffers on camera: {buffersOnCamera}\n";
-                }
             }
             catch (Exception ex)
             {

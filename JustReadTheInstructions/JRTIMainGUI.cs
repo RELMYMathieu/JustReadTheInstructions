@@ -8,15 +8,10 @@ namespace JustReadTheInstructions
     [KSPAddon(KSPAddon.Startup.Flight, false)]
     public class JRTIMainGUI : MonoBehaviour
     {
-        private const string WindowTitle = "Just Read The Instructions";
         private const int WindowId = 1900;
-        private const float WindowWidth = 300;
-        private const float DraggableHeight = 30;
-        private const float LeftIndent = 12;
-        private const float ContentTop = 35;
-        private const float EntryHeight = 22;
-        private const float Margin = 5;
-        private const float ContentWidth = WindowWidth - 2 * LeftIndent;
+        private const float WindowWidth = 500;
+        private const float MaxCameraListHeight = 280f;
+        private const float EntryHeight = 28f;
         private const float CameraListRefreshInterval = 1f;
 
         private static Texture2D _appIcon;
@@ -25,12 +20,17 @@ namespace JustReadTheInstructions
 
         private bool _isVisible;
         private bool _uiHidden;
+        private bool _stylesInitialized;
         private Rect _windowRect;
-        private float _windowHeight = 100;
+        private Vector2 _cameraListScroll;
 
-        private GUIStyle _buttonStyle;
-        private GUIStyle _labelStyle;
         private GUIStyle _titleStyle;
+        private GUIStyle _buttonStyle;
+        private GUIStyle _streamBtnStyle;
+        private GUIStyle _stopBtnStyle;
+        private GUIStyle _labelStyle;
+        private GUIStyle _dimLabelStyle;
+        private GUIStyle _separatorStyle;
 
         private List<MuMechModuleHullCamera> _cachedAllCameras = new List<MuMechModuleHullCamera>();
         private List<MuMechModuleHullCamera> _cachedAvailableCameras = new List<MuMechModuleHullCamera>();
@@ -38,8 +38,7 @@ namespace JustReadTheInstructions
 
         void Start()
         {
-            InitializeStyles();
-            _windowRect = new Rect(Screen.width - WindowWidth - 50, 100, WindowWidth, _windowHeight);
+            _windowRect = new Rect(Screen.width - WindowWidth - 50, 100, WindowWidth, 100);
 
             GameEvents.onHideUI.Add(OnHideUI);
             GameEvents.onShowUI.Add(OnShowUI);
@@ -71,6 +70,182 @@ namespace JustReadTheInstructions
             }
         }
 
+        void OnGUI()
+        {
+            if (!_isVisible || _uiHidden) return;
+
+            if (!_stylesInitialized)
+                InitStyles();
+
+            _windowRect = GUILayout.Window(WindowId, _windowRect, DrawWindow, "Just Read The Instructions  (Ctrl+Alt+F7)", GUILayout.Width(WindowWidth));
+            ClampToScreen();
+        }
+
+        private void InitStyles()
+        {
+            var skin = HighLogic.Skin ?? GUI.skin;
+
+            _titleStyle = new GUIStyle(skin.label)
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
+            };
+
+            _buttonStyle = new GUIStyle(skin.button)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleLeft,
+                padding = new RectOffset(8, 8, 4, 4)
+            };
+
+            _streamBtnStyle = new GUIStyle(skin.button)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(4, 4, 4, 4),
+                normal = { textColor = new Color(0.4f, 1f, 0.4f) },
+                hover = { textColor = new Color(0.4f, 1f, 0.4f) }
+            };
+
+            _stopBtnStyle = new GUIStyle(skin.button)
+            {
+                fontSize = 11,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(4, 4, 4, 4),
+                normal = { textColor = new Color(1f, 0.4f, 0.4f) },
+                hover = { textColor = new Color(1f, 0.4f, 0.4f) }
+            };
+
+            _labelStyle = new GUIStyle(skin.label)
+            {
+                fontSize = 11,
+                normal = { textColor = Color.white }
+            };
+
+            _dimLabelStyle = new GUIStyle(skin.label)
+            {
+                fontSize = 10,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.gray }
+            };
+
+            _separatorStyle = new GUIStyle(skin.label)
+            {
+                fontSize = 1,
+                margin = new RectOffset(0, 0, 4, 4),
+                normal = { textColor = Color.gray }
+            };
+
+            _stylesInitialized = true;
+        }
+
+        private void DrawWindow(int windowId)
+        {
+            int openCount = HullCameraManager.Instance?.GetOpenCameraCount() ?? 0;
+            int totalCount = _cachedAllCameras.Count;
+
+            GUILayout.Space(2);
+            GUILayout.Label($"Cameras: {openCount} open / {totalCount} total", _dimLabelStyle);
+            GUILayout.Space(4);
+
+            DrawCameraList();
+
+            GUILayout.Space(6);
+
+            DrawActionButtons(openCount);
+
+            GUILayout.Space(4);
+            GUILayout.Label($"localhost:{JRTISettings.StreamPort}", _dimLabelStyle);
+            GUILayout.Space(4);
+
+            GUI.DragWindow(new Rect(0, 0, WindowWidth, 24));
+        }
+
+        private void DrawCameraList()
+        {
+            if (_cachedAvailableCameras.Count == 0)
+            {
+                GUILayout.Label("No cameras available.", _dimLabelStyle);
+                return;
+            }
+
+            float contentHeight = _cachedAvailableCameras.Count * EntryHeight;
+            float viewHeight = Mathf.Min(contentHeight, MaxCameraListHeight);
+
+            _cameraListScroll = GUILayout.BeginScrollView(
+                _cameraListScroll,
+                false,
+                contentHeight > MaxCameraListHeight,
+                GUILayout.Height(viewHeight)
+            );
+
+            foreach (var camera in _cachedAvailableCameras)
+                DrawCameraRow(camera);
+
+            GUILayout.EndScrollView();
+        }
+
+        private void DrawCameraRow(MuMechModuleHullCamera camera)
+        {
+            if (camera == null || camera.vessel == null) return;
+
+            int stableId = HullCameraRenderer.GetStableId(camera);
+            string vesselName = camera.vessel.GetDisplayName();
+            string displayName = $"{vesselName}.{camera.cameraName}";
+            bool streamOnly = HullCameraManager.Instance?.IsStreamOnly(camera) ?? false;
+            bool streaming = JRTIStreamServer.Instance?.IsStreaming(stableId) ?? false;
+
+            GUILayout.BeginHorizontal(GUILayout.Height(EntryHeight));
+
+            if (GUILayout.Button(displayName, _buttonStyle))
+                HullCameraManager.Instance?.OpenCamera(camera);
+
+            if (streamOnly)
+            {
+                if (GUILayout.Button("■ Stop", _stopBtnStyle, GUILayout.Width(72)))
+                    HullCameraManager.Instance?.StopStream(stableId);
+            }
+            else
+            {
+                string streamLabel = streaming ? "● Stream" : "○ Stream";
+                GUIStyle style = streaming ? _streamBtnStyle : _buttonStyle;
+                if (GUILayout.Button(streamLabel, style, GUILayout.Width(72)))
+                {
+                    HullCameraManager.Instance?.StreamCamera(camera);
+                    GUIUtility.systemCopyBuffer = $"http://localhost:{JRTISettings.StreamPort}/camera/{stableId}/stream";
+                }
+            }
+
+            GUILayout.EndHorizontal();
+        }
+
+        private void DrawActionButtons(int openCount)
+        {
+            if (_cachedAvailableCameras.Count > 1)
+            {
+                if (GUILayout.Button("Stream All", _buttonStyle))
+                    StreamAllCameras();
+            }
+
+            GUILayout.BeginHorizontal();
+
+            if (GUILayout.Button("Copy Index URL", _buttonStyle))
+                GUIUtility.systemCopyBuffer = $"http://localhost:{JRTISettings.StreamPort}/";
+
+            if (openCount > 0)
+            {
+                if (GUILayout.Button("Close All", _stopBtnStyle))
+                    HullCameraManager.Instance?.CloseAllCameras();
+            }
+
+            GUILayout.EndHorizontal();
+
+            if (GUILayout.Button("Settings", _buttonStyle))
+                JRTISettingsGUI.Instance?.Toggle();
+        }
+
         private void RefreshCameraList()
         {
             _cachedAllCameras = HullCameraManager.GetAllAvailableCameras();
@@ -86,140 +261,17 @@ namespace JustReadTheInstructions
                 if (!isOpen || isStreamOnly)
                     _cachedAvailableCameras.Add(camera);
             }
+
+            _lastCameraRefresh = Time.unscaledTime;
         }
 
-        void OnGUI()
+        private void StreamAllCameras()
         {
-            if (_isVisible && !_uiHidden)
+            foreach (var camera in _cachedAvailableCameras)
             {
-                _windowRect = GUI.Window(WindowId, _windowRect, DrawWindow, "");
-                ClampToScreen();
+                if (camera == null || camera.vessel == null) continue;
+                HullCameraManager.Instance?.StreamCamera(camera);
             }
-        }
-
-        private void InitializeStyles()
-        {
-            _titleStyle = new GUIStyle(HighLogic.Skin.label)
-            {
-                fontSize = 11,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white },
-                fontStyle = FontStyle.Bold
-            };
-
-            _buttonStyle = new GUIStyle(HighLogic.Skin.button)
-            {
-                fontSize = 11,
-                alignment = TextAnchor.MiddleLeft,
-                padding = new RectOffset(10, 10, 5, 5)
-            };
-
-            _labelStyle = new GUIStyle(HighLogic.Skin.label)
-            {
-                fontSize = 10,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.gray }
-            };
-        }
-
-        private void DrawWindow(int windowId)
-        {
-            GUI.DragWindow(new Rect(0, 0, WindowWidth, DraggableHeight));
-
-            int line = 0;
-
-            GUI.Label(new Rect(0, 0, WindowWidth, 20), WindowTitle, _titleStyle);
-
-            int openCount = HullCameraManager.Instance?.GetOpenCameraCount() ?? 0;
-            GUI.Label(
-                new Rect(LeftIndent, ContentTop - 15, ContentWidth, 15),
-                $"Cameras: {openCount} open / {_cachedAllCameras.Count} total",
-                _labelStyle
-            );
-
-            if (_cachedAvailableCameras.Count == 0)
-            {
-                line++;
-                GUI.Label(
-                    new Rect(LeftIndent, ContentTop + line * EntryHeight, ContentWidth, EntryHeight),
-                    "No cameras available",
-                    _labelStyle
-                );
-                line++;
-            }
-            else
-            {
-                foreach (var camera in _cachedAvailableCameras)
-                {
-                    line++;
-                    DrawCameraRow(camera, line);
-                }
-            }
-
-            line++;
-            if (GUI.Button(
-                new Rect(LeftIndent, ContentTop + line * EntryHeight, ContentWidth, EntryHeight),
-                "Copy Index URL", _buttonStyle))
-            {
-                GUIUtility.systemCopyBuffer = $"http://localhost:{JRTISettings.StreamPort}/";
-            }
-
-            line++;
-            GUI.Label(
-                new Rect(LeftIndent, ContentTop + line * EntryHeight, ContentWidth, EntryHeight),
-                $"localhost:{JRTISettings.StreamPort}",
-                _labelStyle
-            );
-
-            if (openCount > 0)
-            {
-                line++;
-                if (GUI.Button(
-                    new Rect(LeftIndent, ContentTop + line * EntryHeight, ContentWidth, EntryHeight),
-                    "Close All Cameras", _buttonStyle))
-                {
-                    HullCameraManager.Instance?.CloseAllCameras();
-                }
-            }
-
-            line++;
-            _windowHeight = ContentTop + (line + 1) * EntryHeight + Margin;
-            _windowRect.height = _windowHeight;
-        }
-
-        private void DrawCameraRow(MuMechModuleHullCamera camera, int line)
-        {
-            if (camera == null || camera.vessel == null) return;
-
-            int stableId = HullCameraRenderer.GetStableId(camera);
-            string displayName = $"{camera.vessel.GetDisplayName()}.{camera.cameraName}";
-            bool streamOnly = HullCameraManager.Instance?.IsStreamOnly(camera) ?? false;
-            bool streaming = JRTIStreamServer.Instance?.IsStreaming(stableId) ?? false;
-
-            float halfWidth = (ContentWidth - Margin) / 2f;
-            Rect openRect = new Rect(LeftIndent, ContentTop + line * EntryHeight, halfWidth, EntryHeight);
-            Rect streamRect = new Rect(LeftIndent + halfWidth + Margin, ContentTop + line * EntryHeight, halfWidth, EntryHeight);
-
-            if (GUI.Button(openRect, displayName, _buttonStyle))
-                HullCameraManager.Instance?.OpenCamera(camera);
-
-            GUI.color = streaming ? Color.green : Color.white;
-
-            if (streamOnly)
-            {
-                if (GUI.Button(streamRect, "■ Stop", _buttonStyle))
-                    HullCameraManager.Instance?.StopStream(stableId);
-            }
-            else
-            {
-                if (GUI.Button(streamRect, streaming ? "● Stream" : "○ Stream", _buttonStyle))
-                {
-                    HullCameraManager.Instance?.StreamCamera(camera);
-                    GUIUtility.systemCopyBuffer = $"http://localhost:{JRTISettings.StreamPort}/camera/{stableId}/stream";
-                }
-            }
-
-            GUI.color = Color.white;
         }
 
         private void ClampToScreen()

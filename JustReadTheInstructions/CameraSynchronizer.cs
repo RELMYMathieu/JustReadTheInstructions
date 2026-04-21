@@ -6,7 +6,11 @@ namespace JustReadTheInstructions
     {
         public Camera SourceCamera { get; set; }
 
-        void OnPreRender()
+        void OnPreRender() => Sync();
+
+        public void ManualSync() => Sync();
+
+        private void Sync()
         {
             if (SourceCamera == null || SourceCamera.transform == null || transform == null)
                 return;

@@ -1,4 +1,4 @@
-﻿using KSP.UI.Screens;
+using KSP.UI.Screens;
 using System.Globalization;
 using UnityEngine;
 
@@ -10,8 +10,10 @@ namespace JustReadTheInstructions
         public static JRTISettingsGUI Instance { get; private set; }
 
         private bool _isVisible;
-        private bool _lastHotkeyState;
-        private Rect _windowRect = new Rect(200, 100, 340, 300);
+        private bool _lastHotkey8State;
+        private bool _lastHotkey9State;
+        private Rect _windowRect = new Rect(200, 80, 420, 540);
+        private Vector2 _scrollPosition;
         private const int WindowId = 1902;
 
         private ApplicationLauncherButton _toolbarButton;
@@ -26,11 +28,19 @@ namespace JustReadTheInstructions
         private string _defaultFov;
         private string _maxOpenCameras;
 
+        private bool _secStream = true;
+        private bool _secIntegrations = true;
+        private bool _secDiagnostics = true;
+        private bool _secTroubleshooting = false;
+
         private GUIStyle _labelStyle;
         private GUIStyle _fieldStyle;
         private GUIStyle _buttonStyle;
-        private GUIStyle _headerStyle;
+        private GUIStyle _sectionHeaderStyle;
+        private GUIStyle _toggleStyle;
+        private GUIStyle _descriptionStyle;
         private GUIStyle _noteStyle;
+        private GUIStyle _warningStyle;
         private bool _stylesInitialized;
 
         void Awake()
@@ -103,15 +113,21 @@ namespace JustReadTheInstructions
 
         void Update()
         {
-            bool hotkeyPressed =
+            bool hotkey8 =
+                (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
+                (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) &&
+                Input.GetKey(KeyCode.F8);
+
+            if (hotkey8 && !_lastHotkey8State) Toggle();
+            _lastHotkey8State = hotkey8;
+
+            bool hotkey9 =
                 (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
                 (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) &&
                 Input.GetKey(KeyCode.F9);
 
-            if (hotkeyPressed && !_lastHotkeyState)
-                Toggle();
-
-            _lastHotkeyState = hotkeyPressed;
+            if (hotkey9 && !_lastHotkey9State) Toggle();
+            _lastHotkey9State = hotkey9;
         }
 
         void OnGUI()
@@ -121,7 +137,7 @@ namespace JustReadTheInstructions
             if (!_stylesInitialized)
                 InitStyles();
 
-            _windowRect = GUILayout.Window(WindowId, _windowRect, DrawWindow, "JRTI Settings  (Ctrl+Alt+F9)");
+            _windowRect = GUILayout.Window(WindowId, _windowRect, DrawWindow, "JRTI — Settings & Integrations  (Ctrl+Alt+F8/F9)");
             ClampToScreen();
         }
 
@@ -131,11 +147,19 @@ namespace JustReadTheInstructions
             _labelStyle = new GUIStyle(skin.label) { fontSize = 11, normal = { textColor = Color.white } };
             _fieldStyle = new GUIStyle(skin.textField) { fontSize = 11 };
             _buttonStyle = new GUIStyle(skin.button) { fontSize = 11 };
-            _headerStyle = new GUIStyle(skin.label)
+            _sectionHeaderStyle = new GUIStyle(skin.button)
             {
-                fontSize = 12,
+                fontSize = 13,
                 fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
                 normal = { textColor = new Color(0.8f, 0.9f, 1f) }
+            };
+            _toggleStyle = new GUIStyle(skin.toggle) { fontSize = 11, margin = new RectOffset(4, 4, 4, 4) };
+            _descriptionStyle = new GUIStyle(skin.label)
+            {
+                fontSize = 10,
+                wordWrap = true,
+                normal = { textColor = Color.gray }
             };
             _noteStyle = new GUIStyle(skin.label)
             {
@@ -143,45 +167,207 @@ namespace JustReadTheInstructions
                 wordWrap = true,
                 normal = { textColor = new Color(1f, 1f, 0.65f) }
             };
+            _warningStyle = new GUIStyle(skin.label)
+            {
+                fontSize = 10,
+                wordWrap = true,
+                normal = { textColor = new Color(1f, 0.7f, 0.4f) }
+            };
             _stylesInitialized = true;
         }
 
         private void DrawWindow(int id)
         {
-            GUILayout.BeginVertical(GUILayout.Width(320));
+            _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, false, true);
+            GUILayout.BeginVertical();
 
-            GUILayout.Label("Rendering", _headerStyle);
-            DrawField("Width", ref _renderWidth);
-            DrawField("Height", ref _renderHeight);
-            DrawField("Anti-Aliasing  (1/2/4/8)", ref _antiAliasing);
-            DrawField("Default FOV", ref _defaultFov);
-            DrawField("Max Open Cameras", ref _maxOpenCameras);
+            DrawSection("▶ Stream / Capture", ref _secStream, DrawStreamSection);
+            GUILayout.Space(4);
+            DrawSection("▶ Visual Mod Integrations", ref _secIntegrations, DrawIntegrationsSection);
+            GUILayout.Space(4);
+            DrawSection("▶ Diagnostics", ref _secDiagnostics, DrawDiagnosticsSection);
+            GUILayout.Space(4);
+            DrawSection("▶ Troubleshooting", ref _secTroubleshooting, DrawTroubleshootingSection);
 
-            GUILayout.Space(8);
-            GUILayout.Label("Streaming", _headerStyle);
-            DrawField("Port", ref _streamPort);
-            DrawField("JPEG Quality  (1-100)", ref _jpegQuality);
-            DrawField("Max FPS", ref _maxFps);
-
-            GUILayout.Space(8);
-            GUILayout.Label("Rendering resolution and AA apply on next launch.", _noteStyle);
-            GUILayout.Label("Stream port change requires game restart.", _noteStyle);
-
-            GUILayout.Space(8);
+            GUILayout.Space(10);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Save", _buttonStyle)) ApplyAndSave();
             if (GUILayout.Button("Close", _buttonStyle)) Toggle();
             GUILayout.EndHorizontal();
 
             GUILayout.EndVertical();
+            GUILayout.EndScrollView();
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
+        }
+
+        private void DrawSection(string title, ref bool open, System.Action drawContents)
+        {
+            if (GUILayout.Button(title, _sectionHeaderStyle))
+                open = !open;
+
+            if (open)
+            {
+                GUILayout.BeginVertical("box");
+                drawContents();
+                GUILayout.EndVertical();
+            }
+        }
+
+        private void DrawStreamSection()
+        {
+            DrawField("Port", ref _streamPort);
+            DrawField("JPEG Quality  (1–100)", ref _jpegQuality);
+            DrawField("Max FPS", ref _maxFps);
+            GUILayout.Space(4);
+            DrawField("Render Width", ref _renderWidth);
+            DrawField("Render Height", ref _renderHeight);
+            DrawField("Anti-Aliasing  (1/2/4/8)", ref _antiAliasing);
+            DrawField("Default FOV", ref _defaultFov);
+            DrawField("Max Open Cameras", ref _maxOpenCameras);
+            GUILayout.Space(4);
+            GUILayout.Label("Render resolution and AA apply on next camera open.", _noteStyle);
+            GUILayout.Label("Stream port change requires game restart.", _noteStyle);
+        }
+
+        private void DrawIntegrationsSection()
+        {
+            DrawIntegrationToggle(
+                "Deferred Rendering",
+                JRTISettings.EnableDeferred,
+                v => JRTISettings.EnableDeferred = v,
+                DeferredIntegration.IsAvailable,
+                "Deferred shading pipeline for JRTI cameras"
+            );
+            GUILayout.Space(3);
+            DrawIntegrationToggle(
+                "TUFX Post-Processing",
+                JRTISettings.EnableTUFX,
+                v => JRTISettings.EnableTUFX = v,
+                TUFXIntegration.IsAvailable,
+                "TUFX post-processing effects (bloom, tone-mapping, etc.)"
+            );
+            GUILayout.Space(3);
+            DrawIntegrationToggle(
+                "Scatterer (Ocean & Atmosphere)",
+                JRTISettings.EnableScatterer,
+                v => JRTISettings.EnableScatterer = v,
+                ScattererIntegration.IsAvailable,
+                "Scatterer atmospheric scattering — disables MSAA on JRTI cameras"
+            );
+            GUILayout.Space(6);
+            DrawIntegrationToggle(
+                "EVE (Clouds & Water)",
+                JRTISettings.EnableEVE,
+                v => JRTISettings.EnableEVE = v,
+                EVEIntegration.IsAvailable,
+                "Environmental Visual Enhancements — clouds, water, atmospheric effects"
+            );
+            GUILayout.Space(3);
+            DrawIntegrationToggle(
+                "Parallax (Terrain Scatter)",
+                JRTISettings.EnableParallax,
+                v => JRTISettings.EnableParallax = v,
+                ParallaxIntegration.IsAvailable,
+                "Parallax-Continued — grass, rocks, trees near camera (can be heavy)"
+            );
+            GUILayout.Space(3);
+            DrawIntegrationToggle(
+                "Firefly (Re-entry Effects)",
+                JRTISettings.EnableFirefly,
+                v => JRTISettings.EnableFirefly = v,
+                FireflyIntegration.IsAvailable,
+                "Firefly — atmospheric re-entry plasma effects near camera"
+            );
+            GUILayout.Space(6);
+            DrawIntegrationToggle(
+                "HullcamVDS Camera Filter",
+                JRTISettings.EnableHullcamFilter,
+                v => JRTISettings.EnableHullcamFilter = v,
+                HullcamFilterIntegration.IsAvailable,
+                "Applies the active Hullcam filter/overlay (night-vision, CRT, etc.) to the stream frame"
+            );
+            GUILayout.Space(4);
+            GUILayout.Label("Changes apply immediately to all open cameras. Re-open a camera to fully reinitialize its integration stack.", _noteStyle);
+        }
+
+        private void DrawDiagnosticsSection()
+        {
+            int openCameras = HullCameraManager.Instance?.GetOpenCameraCount() ?? 0;
+            GUILayout.Label($"Open cameras: {openCameras}", _labelStyle);
+
+            if (ParallaxIntegration.IsAvailable)
+                GUILayout.Label($"Parallax scatters active: {ParallaxIntegration.HasActiveScatters()}", _labelStyle);
+
+            GUILayout.Label($"HullcamFilter discovered: {HullcamFilterIntegration.IsAvailable}", _labelStyle);
+
+            GUILayout.Space(6);
+            if (GUILayout.Button("Print Diagnostics to Log", _buttonStyle))
+                PrintDiagnostics();
+
+            GUILayout.Space(4);
+            GUILayout.Label("Output goes to KSP.log.", _noteStyle);
+        }
+
+        private void DrawTroubleshootingSection()
+        {
+            GUILayout.Label(
+                "If a visual integration doesn't appear correctly in the stream, try:",
+                _warningStyle
+            );
+            GUILayout.Label("  • Returning to the launchpad and re-launching", _descriptionStyle);
+            GUILayout.Label("  • Disabling and re-enabling the stream feed", _descriptionStyle);
+            GUILayout.Label("  • Closing and re-opening the camera window", _descriptionStyle);
+            GUILayout.Space(6);
+            GUILayout.Label(
+                "Some integrations (Scatterer, EVE) hook directly into Unity camera setup and cannot be hot-swapped without reopening the camera.",
+                _noteStyle
+            );
+            GUILayout.Space(6);
+            if (GUILayout.Button("Reload Integrations (all cameras)", _buttonStyle))
+            {
+                HullCameraManager.Instance?.UpdateAllCameraVisualEffects();
+                Debug.Log("[JRTI]: Integration reload requested from settings menu");
+            }
+        }
+
+        private void DrawIntegrationToggle(string name, bool enabled, System.Action<bool> setEnabled, bool available, string description)
+        {
+            GUILayout.BeginVertical("box");
+            GUILayout.BeginHorizontal();
+
+            bool newValue = GUILayout.Toggle(enabled, name, _toggleStyle);
+            if (newValue != enabled)
+            {
+                setEnabled(newValue);
+                Debug.Log($"[JRTI]: {name} {(newValue ? "enabled" : "disabled")}");
+                HullCameraManager.Instance?.UpdateAllCameraVisualEffects();
+            }
+
+            GUILayout.FlexibleSpace();
+
+            if (available)
+            {
+                GUI.color = Color.green;
+                GUILayout.Label("✓", _labelStyle, GUILayout.Width(20));
+                GUI.color = Color.white;
+            }
+            else
+            {
+                GUI.color = new Color(0.6f, 0.6f, 0.6f);
+                GUILayout.Label("✗", _labelStyle, GUILayout.Width(20));
+                GUI.color = Color.white;
+            }
+
+            GUILayout.EndHorizontal();
+            GUILayout.Label(description, _descriptionStyle);
+            GUILayout.EndVertical();
         }
 
         private void DrawField(string label, ref string value)
         {
             GUILayout.BeginHorizontal();
-            GUILayout.Label(label, _labelStyle, GUILayout.Width(200));
-            value = GUILayout.TextField(value, _fieldStyle, GUILayout.Width(100));
+            GUILayout.Label(label, _labelStyle);
+            value = GUILayout.TextField(value, _fieldStyle, GUILayout.Width(90));
             GUILayout.EndHorizontal();
         }
 
@@ -195,12 +381,8 @@ namespace JustReadTheInstructions
             if (int.TryParse(_maxFps, out int fps)) JRTISettings.StreamMaxFps = fps;
             if (float.TryParse(_defaultFov, NumberStyles.Float, CultureInfo.InvariantCulture, out float f))
                 JRTISettings.DefaultFOV = f;
-            if (uint.TryParse(_maxOpenCameras, out uint maxOpenCameras))
-            {
-                if (maxOpenCameras < 1u) maxOpenCameras = 1u;
-                else if (maxOpenCameras > 64u) maxOpenCameras = 64u;
-                JRTISettings.MaxOpenCameras = maxOpenCameras;
-            }
+            if (uint.TryParse(_maxOpenCameras, out uint maxCams))
+                JRTISettings.MaxOpenCameras = (uint)Mathf.Clamp((int)maxCams, 1, 64);
 
             JRTISettings.Save();
             SyncFromSettings();
@@ -216,6 +398,22 @@ namespace JustReadTheInstructions
             _maxFps = JRTISettings.StreamMaxFps.ToString();
             _defaultFov = JRTISettings.DefaultFOV.ToString("F0");
             _maxOpenCameras = JRTISettings.MaxOpenCameras.ToString();
+        }
+
+        private void PrintDiagnostics()
+        {
+            Debug.Log("[JRTI-Diag]: ===== Diagnostics =====");
+            Debug.Log($"[JRTI-Diag]: Deferred: Available={DeferredIntegration.IsAvailable}, Enabled={JRTISettings.EnableDeferred}");
+            Debug.Log($"[JRTI-Diag]: TUFX:     Available={TUFXIntegration.IsAvailable}, Enabled={JRTISettings.EnableTUFX}");
+            Debug.Log($"[JRTI-Diag]: EVE:      Available={EVEIntegration.IsAvailable}, Enabled={JRTISettings.EnableEVE}");
+            Debug.Log($"[JRTI-Diag]: Parallax: Available={ParallaxIntegration.IsAvailable}, Enabled={JRTISettings.EnableParallax}");
+            Debug.Log($"[JRTI-Diag]: Firefly:  Available={FireflyIntegration.IsAvailable}, Enabled={JRTISettings.EnableFirefly}");
+            Debug.Log($"[JRTI-Diag]: Scatterer:Available={ScattererIntegration.IsAvailable}, Enabled={JRTISettings.EnableScatterer}");
+            Debug.Log($"[JRTI-Diag]: HullcamFilter: Available={HullcamFilterIntegration.IsAvailable}, Enabled={JRTISettings.EnableHullcamFilter}");
+            if (ParallaxIntegration.IsAvailable)
+                Debug.Log($"[JRTI-Diag]: Parallax scatters active: {ParallaxIntegration.HasActiveScatters()}");
+            Debug.Log($"[JRTI-Diag]: Open cameras: {HullCameraManager.Instance?.GetOpenCameraCount() ?? 0}");
+            Debug.Log("[JRTI-Diag]: =======================");
         }
 
         private void ClampToScreen()

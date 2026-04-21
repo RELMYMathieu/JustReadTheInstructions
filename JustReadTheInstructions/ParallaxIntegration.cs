@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -9,12 +11,20 @@ namespace JustReadTheInstructions
     {
         private static bool? _isAvailable;
         private static Assembly _parallaxAssembly;
-        private static Type _scatterManagerType;
-        private static Type _scatterRendererType;
-        private static FieldInfo _instanceField;
-        private static FieldInfo _activeScatterRenderersField;
-        private static MethodInfo _renderInCamerasMethod;
-        private static int _lastLogFrame = -999;
+
+        private static FieldInfo _smInstanceField;
+        private static FieldInfo _smActiveRenderersField;
+        private static MethodInfo _srPreRenderMethod;
+        private static MethodInfo _srRenderInCamerasMethod;
+
+        private static FieldInfo _roVectorCameraPosField;
+        private static FieldInfo _roFloatFrustumPlanesField;
+
+        private static FieldInfo _scScatterQuadDataField;
+        private static FieldInfo _sqdQuadField;
+        private static FieldInfo _sqdIgnoreRendererVisibilityField;
+        private static FieldInfo _sqdCameraDistanceField;
+        private static MethodInfo _sqdEvaluateQuadMethod;
 
         private const int ParallaxLayer = 15;
 
@@ -22,51 +32,54 @@ namespace JustReadTheInstructions
         {
             get
             {
-                if (_isAvailable.HasValue)
-                    return _isAvailable.Value;
+                if (_isAvailable.HasValue) return _isAvailable.Value;
 
                 try
                 {
-                    Debug.Log("[JRTI-Parallax]: Searching for Parallax assembly...");
-
                     _parallaxAssembly = AssemblyLoader.loadedAssemblies
-                        .FirstOrDefault(a => a.name == "Parallax")?.assembly;
-
-                    if (_parallaxAssembly == null)
-                    {
-                        _parallaxAssembly = AppDomain.CurrentDomain.GetAssemblies()
+                        .FirstOrDefault(a => a.name == "Parallax")?.assembly
+                        ?? AppDomain.CurrentDomain.GetAssemblies()
                             .FirstOrDefault(a => !a.IsDynamic && a.GetName().Name.Contains("Parallax"));
-                    }
 
                     if (_parallaxAssembly == null)
                     {
-                        Debug.Log("[JRTI-Parallax]: Parallax-Continued not found - terrain scatter disabled");
+                        Debug.Log("[JRTI-Parallax]: Parallax-Continued not found");
                         _isAvailable = false;
                         return false;
                     }
 
-                    Debug.Log($"[JRTI-Parallax]: Found assembly: {_parallaxAssembly.GetName().Name}");
+                    var smType = _parallaxAssembly.GetType("Parallax.ScatterManager");
+                    var srType = _parallaxAssembly.GetType("Parallax.ScatterRenderer");
+                    var roType = _parallaxAssembly.GetType("Parallax.RuntimeOperations");
+                    var scType = _parallaxAssembly.GetType("Parallax.ScatterComponent");
+                    var sqdType = _parallaxAssembly.GetType("Parallax.ScatterSystemQuadData");
 
-                    _scatterManagerType = _parallaxAssembly.GetType("Parallax.ScatterManager");
-                    _scatterRendererType = _parallaxAssembly.GetType("Parallax.ScatterRenderer");
-
-                    if (_scatterManagerType == null || _scatterRendererType == null)
+                    if (smType == null || srType == null || roType == null || scType == null || sqdType == null)
                     {
-                        Debug.LogWarning("[JRTI-Parallax]: Required types not found - incompatible version?");
+                        Debug.LogWarning("[JRTI-Parallax]: Required types not found");
                         _isAvailable = false;
                         return false;
                     }
 
-                    _instanceField = _scatterManagerType.GetField("Instance",
-                        BindingFlags.Public | BindingFlags.Static);
+                    _smInstanceField = smType.GetField("Instance", BindingFlags.Public | BindingFlags.Static);
+                    _smActiveRenderersField = smType.GetField("activeScatterRenderers", BindingFlags.Public | BindingFlags.Instance);
+                    _srPreRenderMethod = srType.GetMethod("PreRender", BindingFlags.Public | BindingFlags.Instance);
+                    _srRenderInCamerasMethod = srType.GetMethod("RenderInCameras", BindingFlags.Public | BindingFlags.Instance);
 
-                    _activeScatterRenderersField = _scatterManagerType.GetField("activeScatterRenderers",
-                        BindingFlags.Public | BindingFlags.Instance);
+                    _roVectorCameraPosField = roType.GetField("vectorCameraPos", BindingFlags.Public | BindingFlags.Static);
+                    _roFloatFrustumPlanesField = roType.GetField("floatCameraFrustumPlanes", BindingFlags.Public | BindingFlags.Static);
 
-                    _renderInCamerasMethod = _scatterRendererType.GetMethod("RenderInCameras",
-                        BindingFlags.Public | BindingFlags.Instance);
+                    _scScatterQuadDataField = scType.GetField("scatterQuadData", BindingFlags.Public | BindingFlags.Static);
+                    _sqdQuadField = sqdType.GetField("quad", BindingFlags.Public | BindingFlags.Instance);
+                    _sqdIgnoreRendererVisibilityField = sqdType.GetField("ignoreRendererVisibility", BindingFlags.Public | BindingFlags.Instance);
+                    _sqdCameraDistanceField = sqdType.GetField("cameraDistance", BindingFlags.Public | BindingFlags.Instance);
+                    _sqdEvaluateQuadMethod = sqdType.GetMethod("EvaluateQuad", BindingFlags.Public | BindingFlags.Instance);
 
-                    if (_instanceField == null || _activeScatterRenderersField == null || _renderInCamerasMethod == null)
+                    if (_smInstanceField == null || _smActiveRenderersField == null ||
+                        _srPreRenderMethod == null || _srRenderInCamerasMethod == null ||
+                        _roVectorCameraPosField == null || _roFloatFrustumPlanesField == null ||
+                        _scScatterQuadDataField == null || _sqdQuadField == null ||
+                        _sqdCameraDistanceField == null || _sqdEvaluateQuadMethod == null)
                     {
                         Debug.LogWarning("[JRTI-Parallax]: Required members not found - incompatible version?");
                         _isAvailable = false;
@@ -88,119 +101,96 @@ namespace JustReadTheInstructions
 
         public static void ApplyToCamera(Camera camera)
         {
-            if (!IsAvailable || camera == null)
-                return;
-
-            try
-            {
-                int originalMask = camera.cullingMask;
-
-                camera.cullingMask |= (1 << ParallaxLayer);
-
-                if (originalMask != camera.cullingMask)
-                {
-                    Debug.Log($"[JRTI-Parallax]: Updated {camera.name} culling mask (added layer {ParallaxLayer})");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[JRTI-Parallax]: Failed to apply to {camera.name}: {ex.Message}");
-            }
+            if (!IsAvailable || camera == null) return;
+            camera.cullingMask |= (1 << ParallaxLayer);
         }
 
-        public static void RenderToCamera(params Camera[] cameras)
+        public static void RemoveFromCamera(Camera camera) { }
+
+        public static void RenderToCamera(Camera camera)
         {
-            if (!IsAvailable || cameras == null || cameras.Length == 0)
-                return;
+            if (!IsAvailable || camera == null) return;
 
             try
             {
-                var instance = _instanceField.GetValue(null);
-                if (instance == null)
-                    return;
+                var smInstance = _smInstanceField.GetValue(null);
+                if (smInstance == null) return;
 
-                var activeRenderers = _activeScatterRenderersField.GetValue(instance) as System.Collections.IList;
-                if (activeRenderers == null || activeRenderers.Count == 0)
-                    return;
+                var activeRenderers = _smActiveRenderersField.GetValue(smInstance) as IList;
+                if (activeRenderers == null || activeRenderers.Count == 0) return;
 
-                if (Time.frameCount - _lastLogFrame > 10000 || _lastLogFrame == -999)
-                {
-                    Debug.Log($"[JRTI-Parallax]: Rendering {activeRenderers.Count} scatters to {cameras.Length} cameras");
-                    _lastLogFrame = Time.frameCount;
-                }
+                var scatterQuadData = _scScatterQuadDataField.GetValue(null) as IDictionary;
+                if (scatterQuadData == null) return;
+
+                var savedPos = (Vector3)_roVectorCameraPosField.GetValue(null);
+                var savedFrustum = (float[])_roFloatFrustumPlanesField.GetValue(null);
+
+                var cameraPos = camera.transform.position;
+                _roVectorCameraPosField.SetValue(null, cameraPos);
+                _roFloatFrustumPlanesField.SetValue(null, ComputeFrustumPlanes(camera));
 
                 foreach (var renderer in activeRenderers)
+                    _srPreRenderMethod.Invoke(renderer, null);
+
+                foreach (DictionaryEntry entry in scatterQuadData)
                 {
-                    if (renderer != null)
-                    {
-                        _renderInCamerasMethod.Invoke(renderer, new object[] { cameras });
-                    }
+                    var quadData = entry.Value;
+                    var quad = _sqdQuadField.GetValue(quadData) as PQ;
+                    if (quad == null || !quad.isVisible) continue;
+
+                    bool ignoreVisibility = _sqdIgnoreRendererVisibilityField != null && (bool)_sqdIgnoreRendererVisibilityField.GetValue(quadData);
+                    if (!ignoreVisibility && !quad.meshRenderer.isVisible) continue;
+
+                    float sqrDist = ((Vector3)quad.meshRenderer.localToWorldMatrix.GetColumn(3) - cameraPos).sqrMagnitude;
+                    _sqdCameraDistanceField.SetValue(quadData, sqrDist);
+
+                    _sqdEvaluateQuadMethod.Invoke(quadData, null);
                 }
+
+                var cameraArray = new Camera[] { camera };
+                foreach (var renderer in activeRenderers)
+                    _srRenderInCamerasMethod.Invoke(renderer, new object[] { cameraArray });
+
+                _roVectorCameraPosField.SetValue(null, savedPos);
+                _roFloatFrustumPlanesField.SetValue(null, savedFrustum);
             }
             catch (Exception ex)
             {
-                if (Time.frameCount - _lastLogFrame > 1000)
-                {
-                    Debug.LogError($"[JRTI-Parallax]: Failed to render scatter: {ex.Message}");
-                    _lastLogFrame = Time.frameCount;
-                }
+                Debug.LogError($"[JRTI-Parallax]: RenderToCamera failed: {ex.Message}");
             }
         }
 
-        public static void RemoveFromCamera(Camera camera)
+        private static float[] ComputeFrustumPlanes(Camera camera)
         {
-            if (camera == null)
-                return;
-
-            try
+            var planes = GeometryUtility.CalculateFrustumPlanes(camera);
+            var result = new float[planes.Length * 4];
+            for (int i = 0; i < planes.Length; i++)
             {
-                Debug.Log($"[JRTI-Parallax]: Disabled scatter rendering for {camera.name}");
+                result[i * 4] = planes[i].normal.x;
+                result[i * 4 + 1] = planes[i].normal.y;
+                result[i * 4 + 2] = planes[i].normal.z;
+                result[i * 4 + 3] = planes[i].distance;
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[JRTI-Parallax]: Error removing from {camera.name}: {ex.Message}");
-            }
+            return result;
         }
 
         public static string GetDiagnosticInfo(Camera camera)
         {
-            if (!IsAvailable)
-                return "Parallax not available";
-
-            if (camera == null)
-                return "Camera is null";
+            if (!IsAvailable) return "Parallax not available\n";
+            if (camera == null) return "Camera is null\n";
 
             var info = $"Parallax Integration for {camera.name}:\n";
-
-            bool hasLayer = (camera.cullingMask & (1 << ParallaxLayer)) != 0;
-            info += $"- Culling mask includes layer {ParallaxLayer}: {hasLayer}\n";
+            info += $"- Culling mask includes layer {ParallaxLayer}: {(camera.cullingMask & (1 << ParallaxLayer)) != 0}\n";
 
             try
             {
-                var instance = _instanceField.GetValue(null);
-                if (instance == null)
-                {
-                    info += "- ScatterManager instance: Not found\n";
-                    return info;
-                }
-
-                var activeRenderers = _activeScatterRenderersField.GetValue(instance) as System.Collections.IList;
-                if (activeRenderers == null)
-                {
-                    info += "- Active renderers list: Not found\n";
-                    return info;
-                }
-
-                info += $"- Active scatter renderers: {activeRenderers.Count}\n";
-
-                if (activeRenderers.Count == 0)
-                {
-                    info += "- Note: No scatters are currently active (may be normal depending on location)\n";
-                }
+                var instance = _smInstanceField.GetValue(null);
+                var activeRenderers = instance != null ? _smActiveRenderersField.GetValue(instance) as IList : null;
+                info += $"- Active scatter renderers: {activeRenderers?.Count ?? 0}\n";
             }
             catch (Exception ex)
             {
-                info += $"- Error getting diagnostic info: {ex.Message}\n";
+                info += $"- Error: {ex.Message}\n";
             }
 
             return info;
@@ -208,16 +198,13 @@ namespace JustReadTheInstructions
 
         public static bool HasActiveScatters()
         {
-            if (!IsAvailable)
-                return false;
+            if (!IsAvailable) return false;
 
             try
             {
-                var instance = _instanceField.GetValue(null);
-                if (instance == null)
-                    return false;
-
-                var activeRenderers = _activeScatterRenderersField.GetValue(instance) as System.Collections.IList;
+                var instance = _smInstanceField.GetValue(null);
+                if (instance == null) return false;
+                var activeRenderers = _smActiveRenderersField.GetValue(instance) as IList;
                 return activeRenderers != null && activeRenderers.Count > 0;
             }
             catch

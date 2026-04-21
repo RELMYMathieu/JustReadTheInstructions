@@ -11,8 +11,8 @@
 		<AppDesignerFolder>Properties</AppDesignerFolder>
 		<RootNamespace>JustReadTheInstructions</RootNamespace>
 		<AssemblyName>JustReadTheInstructions</AssemblyName>
-		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<FileVersion>1.0.0.0</FileVersion>
+		<AssemblyVersion>2.0.0.0</AssemblyVersion>
+		<FileVersion>2.0.0.0</FileVersion>
 		<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
 		<FileAlignment>512</FileAlignment>
 		<Deterministic>true</Deterministic>
@@ -39,11 +39,11 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<Reference Include="Assembly-CSharp">
-			<HintPath>$(KSPManagedPath)\Assembly-CSharp.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/Assembly-CSharp.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="Assembly-CSharp-firstpass">
-			<HintPath>$(KSPManagedPath)\Assembly-CSharp-firstpass.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/Assembly-CSharp-firstpass.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="HullcamVDSContinued">
@@ -51,7 +51,7 @@
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="KSPAssets">
-			<HintPath>$(KSPManagedPath)\KSPAssets.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/KSPAssets.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="System" />
@@ -63,39 +63,39 @@
 		<Reference Include="System.Net.Http" />
 		<Reference Include="System.Xml" />
 		<Reference Include="UnityEngine">
-			<HintPath>$(KSPManagedPath)\UnityEngine.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.AnimationModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.AnimationModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.AnimationModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.CoreModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.CoreModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.CoreModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.ImageConversionModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.ImageConversionModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.ImageConversionModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.IMGUIModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.IMGUIModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.IMGUIModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.InputLegacyModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.InputLegacyModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.InputLegacyModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.TextRenderingModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.TextRenderingModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.TextRenderingModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.UI">
-			<HintPath>$(KSPManagedPath)\UnityEngine.UI.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.UI.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 		<Reference Include="UnityEngine.UIModule">
-			<HintPath>$(KSPManagedPath)\UnityEngine.UIModule.dll</HintPath>
+			<HintPath>$(KSPManagedPath)/UnityEngine.UIModule.dll</HintPath>
 			<Private>False</Private>
 		</Reference>
 	</ItemGroup>
@@ -109,88 +109,78 @@
 		<Compile Include="JRTISettingsGUI.cs" />
 		<Compile Include="ParallaxIntegration.cs" />
 		<Compile Include="ScattererIntegration.cs" />
+		<Compile Include="HullcamFilterIntegration.cs" />
 		<Compile Include="ScattererCameraSwap.cs" />
+		<Compile Include="ScattererScaledCameraSwap.cs" />
 		<Compile Include="TUFXIntegration.cs" />
-		<Compile Include="JRTIDebugMenu.cs" />
 		<Compile Include="FireflyIntegration.cs" />
 		<Compile Include="EVEIntegration.cs" />
 		<Compile Include="DeferredIntegration.cs" />
 		<Compile Include="JRTIMainGUI.cs" />
 		<Compile Include="JRTISettings.cs" />
 		<Compile Include="JRTIStreamServer.cs" />
+		<Compile Include="JRTIStreamServer.Http.cs" />
+		<Compile Include="JRTIStreamServer.Recording.cs" />
+		<Compile Include="JRTIStreamServer.Mp4.cs" />
+		<Compile Include="JRTIStreamServer.Webm.cs" />
+		<Compile Include="JRTIStreamServer.Types.cs" />
 		<Compile Include="JustReadTheInstructions.cs" />
-		<Compile Include="Properties\AssemblyInfo.cs" />
+		<Compile Include="Properties/AssemblyInfo.cs" />
 	</ItemGroup>
 	<ItemGroup />
 	<Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-	<PropertyGroup>
-		<PreBuildEvent>
-			@echo ========================================
-			@echo Cleaning Distribution folder...
-			@echo ========================================
+	<Target Name="CleanDistribution" BeforeTargets="Build">
+		<RemoveDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Plugins/" />
+		<RemoveDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Textures/" />
+		<RemoveDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Web/" />
+		<MakeDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Plugins/" />
+		<MakeDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Textures/" />
+		<MakeDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Web/" />
+	</Target>
+	<Target Name="CopyToDistribution" AfterTargets="Build">
+		<Copy SourceFiles="$(TargetDir)$(TargetFileName)" DestinationFolder="$(ProjectDir)Distribution/GameData/$(TargetName)/Plugins/" />
+		<Copy SourceFiles="$(TargetDir)$(TargetName).pdb"
+		  DestinationFolder="$(ProjectDir)Distribution/GameData/$(TargetName)/Plugins/"
+		  Condition="'$(Configuration)' == 'Debug'" />
 
-			if exist "$(ProjectDir)Distribution\GameData\$(TargetName)\Plugins\" (
-			RD /S /Q "$(ProjectDir)Distribution\GameData\$(TargetName)\Plugins\"
-			)
-			MD "$(ProjectDir)Distribution\GameData\$(TargetName)\Plugins\"
+		<Copy SourceFiles="$(ProjectDir)Assets/Textures/icon.png"
+			  DestinationFolder="$(ProjectDir)Distribution/GameData/$(TargetName)/Textures/"
+			  Condition="Exists('$(ProjectDir)Assets/Textures/icon.png')" />
 
-			if exist "$(ProjectDir)Distribution\GameData\$(TargetName)\Textures\" (
-			RD /S /Q "$(ProjectDir)Distribution\GameData\$(TargetName)\Textures\"
-			)
-			MD "$(ProjectDir)Distribution\GameData\$(TargetName)\Textures\"
+		<Warning Text="Missing icon file: $(ProjectDir)Assets/Textures/icon.png"
+				 Condition="!Exists('$(ProjectDir)Assets/Textures/icon.png')" />
 
-			if exist "$(ProjectDir)Distribution\GameData\$(TargetName)\Web\" (
-			RD /S /Q "$(ProjectDir)Distribution\GameData\$(TargetName)\Web\"
-			)
-			MD "$(ProjectDir)Distribution\GameData\$(TargetName)\Web\"
+		<ItemGroup>
+			<WebFiles Include="$(ProjectDir)Assets/Web/**/*" />
+		</ItemGroup>
 
-			@echo Distribution folder prepared.
-		</PreBuildEvent>
-	</PropertyGroup>
-	<PropertyGroup>
-		<PostBuildEvent>
-			@echo ========================================
-			@echo Copying mod to Distribution folder...
-			@echo ========================================
+		<Error Text="Missing web folder: $(ProjectDir)Assets/Web/"
+			   Condition="!Exists('$(ProjectDir)Assets/Web/')" />
 
-			@echo Copying DLL and PDB...
-			xcopy /Y "$(TargetDir)$(TargetFileName)" "$(ProjectDir)Distribution\GameData\$(TargetName)\Plugins\"
-			xcopy /Y "$(TargetDir)$(TargetName).pdb" "$(ProjectDir)Distribution\GameData\$(TargetName)\Plugins\"
+		<Copy SourceFiles="@(WebFiles)"
+			  DestinationFiles="@(WebFiles->'$(ProjectDir)Distribution/GameData/$(TargetName)/Web/%(RecursiveDir)%(Filename)%(Extension)')" />
 
-			@echo Copying toolbar icon...
-			if exist "$(ProjectDir)Assets\Textures\icon.png" (
-			xcopy /Y "$(ProjectDir)Assets\Textures\icon.png" "$(ProjectDir)Distribution\GameData\$(TargetName)\Textures\"
-			) else (
-			@echo WARNING: Missing icon file: $(ProjectDir)Assets\Textures\icon.png
-			)
+		<Error Text="index.html missing after copy"
+			   Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/index.html')" />
+		<Error Text="viewer.html missing after copy"
+			   Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/viewer.html')" />
+		<Error Text="css/styles.css missing after copy"
+			   Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/css/styles.css')" />
+		<Error Text="js/main.js missing after copy"
+			   Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/js/main.js')" />
+		<Error Text="js/viewer.js missing after copy"
+			   Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/js/viewer.js')" />
+		<Error Text="images/los.png missing after copy"
+			   Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/images/los.png')" />
 
-			@echo Copying web app...
-			if exist "$(ProjectDir)Assets\Web\" (
-			xcopy /E /Y "$(ProjectDir)Assets\Web\*" "$(ProjectDir)Distribution\GameData\$(TargetName)\Web\"
-			) else (
-			@echo ERROR: Missing web folder: $(ProjectDir)Assets\Web\
-			exit /b 1
-			)
+		<MakeDir Directories="$(ProjectDir)Distribution/GameData/$(TargetName)/Web/recordings/"
+				 Condition="!Exists('$(ProjectDir)Distribution/GameData/$(TargetName)/Web/recordings/')" />
 
-			if not exist "$(ProjectDir)Distribution\GameData\$(TargetName)\Web\index.html" (
-			@echo ERROR: index.html missing after copy
-			exit /b 1
-			)
+		<Copy SourceFiles="$(ProjectDir)Assets/settings.cfg"
+			  DestinationFolder="$(ProjectDir)Distribution/GameData/$(TargetName)/"
+			  Condition="Exists('$(ProjectDir)Assets/settings.cfg')" />
 
-			if not exist "$(ProjectDir)Distribution\GameData\$(TargetName)\Web\images\los.png" (
-			@echo ERROR: images\los.png missing after copy
-			exit /b 1
-			)
-
-			@echo Copying default settings...
-			if exist "$(ProjectDir)Assets\settings.cfg" (
-			xcopy /Y "$(ProjectDir)Assets\settings.cfg" "$(ProjectDir)Distribution\GameData\$(TargetName)\"
-			) else (
-			@echo WARNING: Missing settings file: $(ProjectDir)Assets\settings.cfg
-			)
-
-			@echo Build complete! Mod is in Distribution folder.
-			@echo ========================================
-		</PostBuildEvent>
-	</PropertyGroup>
+		<Warning Text="Missing settings file: $(ProjectDir)Assets/settings.cfg"
+				 Condition="!Exists('$(ProjectDir)Assets/settings.cfg')" />
+	</Target>
 </Project>

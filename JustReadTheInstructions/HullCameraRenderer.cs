@@ -2,6 +2,9 @@ using HullcamVDS;
 using System;
 using System.Linq;
 using UnityEngine;
+using System.Collections.Generic;
+using UnityEngine.Rendering;
+using System.Reflection;
 
 namespace JustReadTheInstructions
 {
@@ -9,7 +12,10 @@ namespace JustReadTheInstructions
     {
         private readonly MuMechModuleHullCamera _hullCamera;
         private readonly Camera[] _cameras = new Camera[3];
+        private readonly Dictionary<Light, CommandBuffer> _strippedRaymarchedBuffers = new Dictionary<Light, CommandBuffer>();
         private int _frameCount;
+
+        private static Light _cachedScaledSunLight;
 
         public RenderTexture TargetTexture { get; private set; }
         public bool IsActive { get; private set; }
@@ -63,7 +69,6 @@ namespace JustReadTheInstructions
             SetupScaledCamera();
             SetupGalaxyCamera();
 
-            SetCamerasEnabled(false);
             JRTIStreamServer.Instance?.RegisterCamera(InstanceId);
 
             Debug.Log($"[JRTI]: Cameras created for '{GetDisplayName()}'");
@@ -76,10 +81,9 @@ namespace JustReadTheInstructions
 
             var mainCam = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
             if (mainCam != null)
-            {
                 camera.CopyFrom(mainCam);
-                camera.depth = mainCam.depth - 0.5f;
-            }
+
+            camera.useOcclusionCulling = false;
             camera.name = "JRTI_Near";
 
             camera.transform.parent = !string.IsNullOrEmpty(_hullCamera.cameraTransformName)
@@ -97,30 +101,30 @@ namespace JustReadTheInstructions
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
-            if (JRTIDebugMenu.EnableDeferred)
+            if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 15);
 
-            if (JRTIDebugMenu.EnableTUFX)
+            if (JRTISettings.EnableTUFX)
                 TUFXIntegration.ApplyToCamera(camera);
 
-            if (JRTIDebugMenu.EnableEVE)
+            if (JRTISettings.EnableEVE)
                 EVEIntegration.ApplyToCamera(camera, mainCam, includeLocalEffects: true);
 
-            if (JRTIDebugMenu.EnableParallax)
+            if (JRTISettings.EnableParallax)
                 ParallaxIntegration.ApplyToCamera(camera);
 
-            if (JRTIDebugMenu.EnableFirefly)
+            if (JRTISettings.EnableFirefly)
                 FireflyIntegration.ApplyToCamera(camera);
 
-            if (JRTIDebugMenu.EnableScatterer)
+            if (JRTISettings.EnableScatterer)
                 ScattererIntegration.ApplyToCamera(camera);
 
-            _deferredApplied = JRTIDebugMenu.EnableDeferred;
-            _tufxApplied = JRTIDebugMenu.EnableTUFX;
-            _eveApplied = JRTIDebugMenu.EnableEVE;
-            _parallaxApplied = JRTIDebugMenu.EnableParallax;
-            _fireflyApplied = JRTIDebugMenu.EnableFirefly;
-            _scattererApplied = JRTIDebugMenu.EnableScatterer;
+            _deferredApplied = JRTISettings.EnableDeferred;
+            _tufxApplied = JRTISettings.EnableTUFX;
+            _eveApplied = JRTISettings.EnableEVE;
+            _parallaxApplied = JRTISettings.EnableParallax;
+            _fireflyApplied = JRTISettings.EnableFirefly;
+            _scattererApplied = JRTISettings.EnableScatterer;
 
             camObj.AddComponent<CanvasFix>();
 
@@ -128,6 +132,7 @@ namespace JustReadTheInstructions
                 camObj.AddComponent<ScattererCameraSwap>();
 
             _cameras[NearCameraIndex] = camera;
+            camera.enabled = false;
         }
 
         private void SetupScaledCamera()
@@ -140,7 +145,10 @@ namespace JustReadTheInstructions
             {
                 camera.CopyFrom(mainScaledCam);
                 camera.transform.parent = mainScaledCam.transform;
+                camera.depth = mainScaledCam.depth - 0.5f;
             }
+
+            camera.useOcclusionCulling = false;
             camera.name = "JRTI_Scaled";
 
             camera.transform.localRotation = Quaternion.identity;
@@ -152,21 +160,28 @@ namespace JustReadTheInstructions
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
-            if (JRTIDebugMenu.EnableDeferred)
+            if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
 
-            if (JRTIDebugMenu.EnableTUFX)
+            if (JRTISettings.EnableTUFX)
                 TUFXIntegration.ApplyToCamera(camera);
 
-            if (JRTIDebugMenu.EnableEVE)
+            if (JRTISettings.EnableEVE)
                 EVEIntegration.ApplyToCamera(camera, mainScaledCam, includeLocalEffects: false);
+
+            if (JRTISettings.EnableScatterer)
+                ScattererIntegration.ApplyToScaledCamera(camera);
 
             var synchronizer = camObj.AddComponent<CameraSynchronizer>();
             synchronizer.SourceCamera = _cameras[NearCameraIndex];
 
             camObj.AddComponent<CanvasFix>();
 
+            if (ScattererIntegration.IsAvailable)
+                camObj.AddComponent<ScattererScaledCameraSwap>();
+
             _cameras[ScaledCameraIndex] = camera;
+            camera.enabled = false;
         }
 
         private void SetupGalaxyCamera()
@@ -174,12 +189,17 @@ namespace JustReadTheInstructions
             var camObj = new GameObject("JRTI_Galaxy_" + InstanceId);
             var camera = camObj.AddComponent<Camera>();
 
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+
             var mainGalaxyCam = FindCameraByName("GalaxyCamera");
             if (mainGalaxyCam != null)
             {
                 camera.CopyFrom(mainGalaxyCam);
                 camera.transform.parent = mainGalaxyCam.transform;
             }
+
+            camera.useOcclusionCulling = false;
             camera.name = "JRTI_Galaxy";
 
             camera.transform.localPosition = Vector3.zero;
@@ -191,10 +211,10 @@ namespace JustReadTheInstructions
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
-            if (JRTIDebugMenu.EnableDeferred)
+            if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
 
-            if (JRTIDebugMenu.EnableTUFX)
+            if (JRTISettings.EnableTUFX)
                 TUFXIntegration.ApplyToCamera(camera);
 
             var synchronizer = camObj.AddComponent<CameraSynchronizer>();
@@ -203,6 +223,7 @@ namespace JustReadTheInstructions
             camObj.AddComponent<CanvasFix>();
 
             _cameras[GalaxyCameraIndex] = camera;
+            camera.enabled = false;
         }
 
         private Camera FindCameraByName(string cameraName)
@@ -217,49 +238,85 @@ namespace JustReadTheInstructions
             return null;
         }
 
-        public void Update()
+        public void Update(bool hasInGameViewer = false)
         {
             if (!IsActive || _hullCamera == null) return;
 
             _frameCount++;
 
-            bool shouldRender = (_frameCount % (JRTISettings.RenderEveryOtherFrame ? 2 : 1)) == 0;
-            SetCamerasEnabled(shouldRender);
+            bool hasViewers = hasInGameViewer || (JRTIStreamServer.Instance?.HasActiveClients(InstanceId) ?? false);
+            bool shouldRender = hasViewers && (_frameCount % (JRTISettings.RenderEveryOtherFrame ? 2 : 1)) == 0;
 
             if (!shouldRender) return;
 
+            if (!TargetTexture.IsCreated()) TargetTexture.Create();
+
             if (_parallaxApplied) RenderParallaxScatters();
+
+            StripRaymarchedLightBuffers();
+
+            for (int i = _cameras.Length - 1; i >= 0; i--)
+            {
+                var camera = _cameras[i];
+                if (camera == null) continue;
+                camera.targetTexture = TargetTexture;
+                camera.GetComponent<CameraSynchronizer>()?.ManualSync();
+                camera.Render();
+            }
+
+            RestoreRaymarchedLightBuffers();
+
             if (_fireflyApplied) UpdateFireflyEffects();
+
+            if (JRTISettings.EnableHullcamFilter && HullcamFilterIntegration.IsAvailable)
+                HullcamFilterIntegration.SyncToCamera(_cameras[NearCameraIndex], _hullCamera);
+
             JRTIStreamServer.Instance?.TryCaptureFrame(InstanceId, TargetTexture);
         }
 
         private void RenderParallaxScatters()
         {
-            if (!ParallaxIntegration.IsAvailable)
-                return;
-
+            if (!JRTISettings.EnableParallax || !ParallaxIntegration.IsAvailable) return;
             var nearCamera = _cameras[NearCameraIndex];
-            if (nearCamera != null && nearCamera.enabled)
+            if (nearCamera != null)
                 ParallaxIntegration.RenderToCamera(nearCamera);
         }
 
         private void UpdateFireflyEffects()
         {
-            if (!FireflyIntegration.IsAvailable)
-                return;
-
+            if (!FireflyIntegration.IsAvailable) return;
             var nearCamera = _cameras[NearCameraIndex];
-            if (nearCamera != null && nearCamera.enabled)
+            if (nearCamera != null)
                 FireflyIntegration.UpdateForCamera(nearCamera, GetVessel());
         }
 
-        private void SetCamerasEnabled(bool enabled)
+        private static Light GetScaledSunLight()
         {
-            foreach (var camera in _cameras)
+            if (_cachedScaledSunLight != null) return _cachedScaledSunLight;
+            var field = typeof(Sun).GetField("scaledSunLight",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            _cachedScaledSunLight = field?.GetValue(Sun.Instance) as Light;
+            return _cachedScaledSunLight;
+        }
+
+        private void StripRaymarchedLightBuffers()
+        {
+            _strippedRaymarchedBuffers.Clear();
+            var sunLight = GetScaledSunLight();
+            if (sunLight == null) return;
+            foreach (var buf in sunLight.GetCommandBuffers(LightEvent.AfterScreenspaceMask))
             {
-                if (camera != null)
-                    camera.enabled = enabled;
+                if (buf.name != "Composite Shadows") continue;
+                _strippedRaymarchedBuffers[sunLight] = buf;
+                sunLight.RemoveCommandBuffer(LightEvent.AfterScreenspaceMask, buf);
             }
+        }
+
+        private void RestoreRaymarchedLightBuffers()
+        {
+            foreach (var kvp in _strippedRaymarchedBuffers)
+                kvp.Key.AddCommandBuffer(LightEvent.AfterScreenspaceMask, kvp.Value);
+            _strippedRaymarchedBuffers.Clear();
         }
 
         public string GetDisplayName()
@@ -292,20 +349,20 @@ namespace JustReadTheInstructions
         public void UpdateVisualEffects()
         {
             UpdateIntegration(
-                JRTIDebugMenu.EnableDeferred, ref _deferredApplied,
+                JRTISettings.EnableDeferred, ref _deferredApplied,
                 cam => DeferredIntegration.ApplyToCamera(cam, cam.name.Contains("Near") ? 15 : 10),
                 cam => DeferredIntegration.RemoveFromCamera(cam),
                 "Deferred"
             );
 
             UpdateIntegration(
-                JRTIDebugMenu.EnableTUFX, ref _tufxApplied,
+                JRTISettings.EnableTUFX, ref _tufxApplied,
                 cam => TUFXIntegration.ApplyToCamera(cam),
                 cam => TUFXIntegration.RemoveFromCamera(cam),
                 "TUFX"
             );
 
-            if (JRTIDebugMenu.EnableEVE && !_eveApplied)
+            if (JRTISettings.EnableEVE && !_eveApplied)
             {
                 var mainCam = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
                 var scaledCam = FindCameraByName("Camera ScaledSpace");
@@ -318,7 +375,7 @@ namespace JustReadTheInstructions
                 _eveApplied = true;
                 Debug.Log($"[JRTI]: Applied EVE to {GetDisplayName()}");
             }
-            else if (!JRTIDebugMenu.EnableEVE && _eveApplied)
+            else if (!JRTISettings.EnableEVE && _eveApplied)
             {
                 foreach (var camera in _cameras)
                 {
@@ -330,13 +387,13 @@ namespace JustReadTheInstructions
             }
 
             UpdateIntegration(
-                JRTIDebugMenu.EnableParallax, ref _parallaxApplied,
+                JRTISettings.EnableParallax, ref _parallaxApplied,
                 cam => ParallaxIntegration.ApplyToCamera(cam),
                 cam => ParallaxIntegration.RemoveFromCamera(cam),
                 "Parallax"
             );
 
-            if (JRTIDebugMenu.EnableFirefly && !_fireflyApplied)
+            if (JRTISettings.EnableFirefly && !_fireflyApplied)
             {
                 var nearCamera = _cameras[NearCameraIndex];
                 if (nearCamera != null)
@@ -344,7 +401,7 @@ namespace JustReadTheInstructions
                 _fireflyApplied = true;
                 Debug.Log($"[JRTI]: Applied Firefly to {GetDisplayName()}");
             }
-            else if (!JRTIDebugMenu.EnableFirefly && _fireflyApplied)
+            else if (!JRTISettings.EnableFirefly && _fireflyApplied)
             {
                 var nearCamera = _cameras[NearCameraIndex];
                 if (nearCamera != null)
@@ -356,19 +413,22 @@ namespace JustReadTheInstructions
                 Debug.Log($"[JRTI]: Removed Firefly from {GetDisplayName()}");
             }
 
-            if (JRTIDebugMenu.EnableScatterer && !_scattererApplied)
+            if (JRTISettings.EnableScatterer && !_scattererApplied)
             {
-                var nearCamera = _cameras[NearCameraIndex];
-                if (nearCamera != null)
-                    ScattererIntegration.ApplyToCamera(nearCamera);
+                if (_cameras[NearCameraIndex] != null)
+                    ScattererIntegration.ApplyToCamera(_cameras[NearCameraIndex]);
+                if (_cameras[ScaledCameraIndex] != null)
+                    ScattererIntegration.ApplyToScaledCamera(_cameras[ScaledCameraIndex]);
                 _scattererApplied = true;
                 Debug.Log($"[JRTI]: Applied Scatterer to {GetDisplayName()}");
             }
-            else if (!JRTIDebugMenu.EnableScatterer && _scattererApplied)
+            else if (!JRTISettings.EnableScatterer && _scattererApplied)
             {
-                var nearCamera = _cameras[NearCameraIndex];
-                if (nearCamera != null)
-                    ScattererIntegration.RemoveFromCamera(nearCamera);
+                foreach (var camera in _cameras)
+                {
+                    if (camera != null)
+                        ScattererIntegration.RemoveFromCamera(camera);
+                }
                 _scattererApplied = false;
                 Debug.Log($"[JRTI]: Removed Scatterer from {GetDisplayName()}");
             }
@@ -407,7 +467,6 @@ namespace JustReadTheInstructions
         {
             IsActive = false;
 
-            SetCamerasEnabled(false);
             JRTIStreamServer.Instance?.UnregisterCamera(InstanceId);
 
             foreach (var camera in _cameras)
@@ -421,17 +480,15 @@ namespace JustReadTheInstructions
                     FireflyIntegration.RemoveFromCamera(camera);
                     FireflyIntegration.CleanupCamera(camera);
                     ScattererIntegration.RemoveFromCamera(camera);
+                    HullcamFilterIntegration.RemoveFromCamera(camera);
 
                     if (camera.gameObject != null)
                         UnityEngine.Object.Destroy(camera.gameObject);
                 }
             }
 
-            if (TargetTexture != null)
-            {
-                TargetTexture.Release();
-                TargetTexture = null;
-            }
+            TargetTexture?.Release();
+            TargetTexture = null;
 
             Debug.Log($"[JRTI]: Disposed camera '{GetDisplayName()}'");
         }
@@ -461,6 +518,7 @@ namespace JustReadTheInstructions
                 }
             }
 
+            info += HullcamFilterIntegration.GetDiagnosticInfo();
             return info;
         }
     }

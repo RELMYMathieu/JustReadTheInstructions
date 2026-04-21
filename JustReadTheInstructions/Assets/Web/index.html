@@ -1,449 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <title>Just Read The Instructions</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background: #0d1117;
-            color: #cdd9e5;
-            font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
-            padding: 2rem;
-        }
-
-        h1 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: #58a6ff;
-            letter-spacing: 0.05em;
-            margin-bottom: 1.5rem;
-            text-transform: uppercase;
-        }
-
-        #cameras {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-            gap: 1rem;
-        }
-
-        .camera-card {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            overflow: hidden;
-        }
-
-        .camera-card.offline {
-            border-color: #6e3030;
-        }
-
-        .preview {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            background: #0d1117;
-            overflow: hidden;
-        }
-
-        .preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
-
-        .preview .offline-overlay {
-            display: none;
-            position: absolute;
-            inset: 0;
-            background: #0d1117;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            gap: 0.4rem;
-            color: #6e7681;
-            font-size: 0.75rem;
-        }
-
-        .camera-card.offline .preview .offline-overlay {
-            display: flex;
-        }
-
-        .camera-card.offline .preview img {
-            opacity: 0.15;
-        }
-
-        .camera-info {
-            padding: 0.6rem 0.75rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-        }
-
-        .camera-name {
-            font-size: 0.8rem;
-            color: #cdd9e5;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .camera-card.offline .camera-name {
-            color: #6e7681;
-        }
-
-        .camera-actions {
-            display: flex;
-            gap: 0.4rem;
-            flex-shrink: 0;
-        }
-
-        a.btn {
-            font-family: inherit;
-            font-size: 0.7rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            text-decoration: none;
-            cursor: pointer;
-            border: 1px solid #30363d;
-            background: #21262d;
-            color: #cdd9e5;
-        }
-
-        a.btn:hover {
-            background: #30363d;
-        }
-
-        a.btn.watch {
-            border-color: #3fb950;
-            color: #3fb950;
-        }
-
-        a.btn.watch:hover {
-            background: #1a3a1f;
-        }
-
-        a.btn.watch-disabled {
-            opacity: 0.4;
-            pointer-events: none;
-        }
-
-        #empty {
-            color: #8b949e;
-            font-size: 0.85rem;
-            display: none;
-        }
-
-        #error {
-            color: #f85149;
-            font-size: 0.85rem;
-            display: none;
-        }
-
-        #copy-fallback {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.72);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 1rem;
-            z-index: 9999;
-        }
-
-        .copy-box {
-            width: min(680px, 100%);
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 0.85rem;
-        }
-
-        .copy-title {
-            font-size: 0.8rem;
-            color: #cdd9e5;
-            margin-bottom: 0.5rem;
-        }
-
-        #copy-input {
-            width: 100%;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            color: #cdd9e5;
-            border-radius: 4px;
-            padding: 0.45rem;
-            font-family: inherit;
-            font-size: 0.75rem;
-        }
-
-        .copy-actions {
-            margin-top: 0.6rem;
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.45rem;
-        }
-    </style>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
-
 <body>
-    <h1>Just Read The Instructions</h1>
-    <p id="error">Could not connect to KSP. Is the game running?</p>
-    <p id="empty">No cameras open. Open or stream a hull camera in KSP first.</p>
-    <div id="cameras"></div>
+    <header>
+        <h1>Just Read The Instructions</h1>
+        <div class="global-actions">
+            <button type="button" class="btn" id="settings-btn">Settings</button>
+        </div>
+    </header>
 
-    <div id="copy-fallback" role="dialog" aria-modal="true" aria-labelledby="copy-fallback-title">
-        <div class="copy-box">
-            <div id="copy-fallback-title" class="copy-title">Clipboard blocked. Press Ctrl+C / Cmd+C, then Enter or
-                close.</div>
+    <p class="status-line error" id="error"></p>
+    <p class="status-line empty" id="empty"></p>
+
+    <div id="cameras-live"></div>
+
+    <section id="cameras-offline-section" hidden>
+        <h2 class="section-label">Offline</h2>
+        <div id="cameras-offline"></div>
+    </section>
+
+    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true">
+        <div class="modal">
+            <div class="modal-title">Clipboard blocked. Press Ctrl+C / Cmd+C, then Enter or close.</div>
             <input id="copy-input" type="text" readonly>
-            <div class="copy-actions">
+            <div class="modal-actions">
                 <a id="copy-select-btn" class="btn" href="#">Select</a>
                 <a id="copy-close-btn" class="btn" href="#">Close</a>
             </div>
         </div>
     </div>
 
-    <script>
-        const SNAPSHOT_REFRESH_MS = 2000;
-        const CAMERA_SYNC_MS = 5000;
-        const LOS_DELAY_MS = 3000;
-        const LOS_OVERLAY_HTML = '<img src="/images/los.png" alt="Loss of Signal" style="max-width:100%;max-height:100%;object-fit:contain;">';
-        const WAITING_OVERLAY_HTML = '<span style="font-size:1.8rem;line-height:1">&#x25CE;</span><span>Waiting for frames...</span>';
+    <div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true">
+        <div class="modal">
+            <div class="modal-title">Recorder Settings</div>
 
-        const loading = {};
-        const timers = {};
-        const offlineSince = {};
+            <div class="settings-row">
+                <label for="settings-los">On signal loss while recording</label>
+                <select id="settings-los"></select>
+            </div>
 
-        let copyFallbackEl;
-        let copyInputEl;
+            <div class="settings-hint">
+                Recordings are saved on the KSP host inside
+                <code>GameData/JustReadTheInstructions/Web/recordings/</code>.
+                Uploads are chunked, so everything up to the last received chunk is preserved
+                even if the browser is closed unexpectedly.
+            </div>
 
-        function ensureCopyFallback() {
-            if (copyFallbackEl && copyInputEl) return;
+            <div class="modal-actions">
+                <button type="button" id="settings-close" class="btn">Close</button>
+            </div>
+        </div>
+    </div>
 
-            copyFallbackEl = document.getElementById('copy-fallback');
-            copyInputEl = document.getElementById('copy-input');
-
-            const closeBtn = document.getElementById('copy-close-btn');
-            const selectBtn = document.getElementById('copy-select-btn');
-
-            closeBtn?.addEventListener('click', e => {
-                e.preventDefault();
-                hideCopyFallback();
-            });
-
-            selectBtn?.addEventListener('click', e => {
-                e.preventDefault();
-                copyInputEl.focus();
-                copyInputEl.select();
-            });
-
-            copyFallbackEl?.addEventListener('click', e => {
-                if (e.target === copyFallbackEl) hideCopyFallback();
-            });
-
-            document.addEventListener('keydown', e => {
-                if (!copyFallbackEl || copyFallbackEl.style.display !== 'flex') return;
-                if (e.key === 'Escape' || e.key === 'Enter') hideCopyFallback();
-            });
-        }
-
-        function showCopyFallback(text) {
-            ensureCopyFallback();
-            if (!copyFallbackEl || !copyInputEl) return;
-
-            copyInputEl.value = text;
-            copyFallbackEl.style.display = 'flex';
-            copyInputEl.focus();
-            copyInputEl.select();
-        }
-
-        function hideCopyFallback() {
-            if (copyFallbackEl) copyFallbackEl.style.display = 'none';
-        }
-
-        async function fetchCameras() {
-            const res = await fetch('/cameras');
-            return res.json();
-        }
-
-        function snapshotUrl(id) {
-            return `/camera/${id}/snapshot?t=${Date.now()}`;
-        }
-
-        async function copyToClipboard(text) {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                try {
-                    await navigator.clipboard.writeText(text);
-                    return true;
-                } catch {
-                }
-            }
-
-            try {
-                const el = document.createElement('textarea');
-                el.value = text;
-                el.setAttribute('readonly', '');
-                el.style.position = 'absolute';
-                el.style.left = '-9999px';
-                document.body.appendChild(el);
-                el.select();
-                const copied = document.execCommand('copy');
-                document.body.removeChild(el);
-                if (copied) return true;
-            } catch {
-            }
-
-            showCopyFallback(text);
-            return false;
-        }
-
-        function refreshSnapshot(card, id) {
-            if (loading[id]) return;
-
-            const img = card.querySelector('img');
-            if (!img) return;
-
-            loading[id] = true;
-
-            const next = new Image();
-            next.onload = () => {
-                img.src = next.src;
-                card.classList.remove('offline');
-                delete offlineSince[id];
-                const overlay = card.querySelector('.offline-overlay');
-                if (overlay) overlay.innerHTML = WAITING_OVERLAY_HTML;
-                loading[id] = false;
-            };
-            next.onerror = () => {
-                if (!offlineSince[id]) offlineSince[id] = Date.now();
-                card.classList.add('offline');
-                loading[id] = false;
-                const overlay = card.querySelector('.offline-overlay');
-                if (overlay && Date.now() - offlineSince[id] >= LOS_DELAY_MS)
-                    overlay.innerHTML = LOS_OVERLAY_HTML;
-            };
-            next.src = snapshotUrl(id);
-        }
-
-        function startRefresh(card, id) {
-            if (timers[id]) return;
-            refreshSnapshot(card, id);
-            timers[id] = setInterval(() => refreshSnapshot(card, id), SNAPSHOT_REFRESH_MS);
-        }
-
-        function stopRefresh(id) {
-            clearInterval(timers[id]);
-            delete timers[id];
-            delete loading[id];
-            delete offlineSince[id];
-        }
-
-        function buildCard(cam) {
-            const card = document.createElement('div');
-            card.className = 'camera-card offline';
-            card.dataset.id = cam.id;
-
-            const preview = document.createElement('div');
-            preview.className = 'preview';
-
-            const img = document.createElement('img');
-            img.alt = cam.name;
-
-            const offlineOverlay = document.createElement('div');
-            offlineOverlay.className = 'offline-overlay';
-            offlineOverlay.innerHTML = WAITING_OVERLAY_HTML;
-
-            preview.append(img, offlineOverlay);
-
-            const info = document.createElement('div');
-            info.className = 'camera-info';
-
-            const name = document.createElement('span');
-            name.className = 'camera-name';
-            name.textContent = cam.name;
-
-            const actions = document.createElement('div');
-            actions.className = 'camera-actions';
-
-            const watchBtn = document.createElement('a');
-            watchBtn.className = cam.streaming ? 'btn watch' : 'btn watch-disabled';
-            watchBtn.href = cam.streamUrl;
-            watchBtn.target = '_blank';
-            watchBtn.textContent = 'Watch';
-            watchBtn.dataset.role = 'watch';
-
-            const copyBtn = document.createElement('a');
-            copyBtn.className = 'btn';
-            copyBtn.textContent = 'Copy URL';
-            copyBtn.href = '#';
-            copyBtn.addEventListener('click', async e => {
-                e.preventDefault();
-                const ok = await copyToClipboard(location.origin + cam.streamUrl);
-                copyBtn.textContent = ok ? 'Copied!' : 'Manual Copy';
-                setTimeout(() => copyBtn.textContent = 'Copy URL', 1500);
-            });
-
-            actions.append(watchBtn, copyBtn);
-            info.append(name, actions);
-            card.append(preview, info);
-
-            startRefresh(card, cam.id);
-
-            return card;
-        }
-
-        function updateCard(card, cam) {
-            const watchBtn = card.querySelector('[data-role="watch"]');
-            if (watchBtn) {
-                watchBtn.className = cam.streaming ? 'btn watch' : 'btn watch-disabled';
-            }
-        }
-
-        async function sync() {
-            let cameras;
-            try {
-                cameras = await fetchCameras();
-                document.getElementById('error').style.display = 'none';
-            } catch {
-                document.getElementById('error').style.display = 'block';
-                document.getElementById('empty').style.display = 'none';
-                return;
-            }
-
-            const container = document.getElementById('cameras');
-            document.getElementById('empty').style.display = cameras.length === 0 ? 'block' : 'none';
-
-            const currentIds = new Set([...container.querySelectorAll('.camera-card')].map(c => Number(c.dataset.id)));
-            const newIds = new Set(cameras.map(c => c.id));
-
-            for (const id of currentIds) {
-                if (!newIds.has(id)) {
-                    container.querySelector(`.camera-card[data-id="${id}"]`)?.remove();
-                    stopRefresh(id);
-                }
-            }
-
-            for (const cam of cameras) {
-                const existing = container.querySelector(`.camera-card[data-id="${cam.id}"]`);
-                if (existing) {
-                    updateCard(existing, cam);
-                } else {
-                    container.appendChild(buildCard(cam));
-                }
-            }
-        }
-
-        sync();
-        setInterval(sync, CAMERA_SYNC_MS);
-    </script>
+    <script type="module" src="js/main.js"></script>
 </body>
-
 </html>

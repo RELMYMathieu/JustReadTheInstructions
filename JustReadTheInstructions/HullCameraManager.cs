@@ -49,8 +49,11 @@ namespace JustReadTheInstructions
 
         private void UpdateAllRenderers()
         {
-            foreach (var renderer in _renderers.Values)
-                renderer.Update();
+            foreach (var kvp in _renderers)
+            {
+                bool hasWindow = _windows.ContainsKey(kvp.Key);
+                kvp.Value.Update(hasWindow);
+            }
         }
 
         private void UpdateAllWindows()
@@ -85,6 +88,8 @@ namespace JustReadTheInstructions
 
         private void CleanupInvalidCameras()
         {
+            // Ensure timewarping oddness doesn't cause us to dispose renderers that are just paused
+            if (TimeWarp.CurrentRate > 1.0f) return;
             var invalidIds = new List<int>();
             foreach (var kvp in _renderers)
             {

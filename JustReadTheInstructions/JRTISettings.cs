@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Globalization;
 using UnityEngine;
 
@@ -27,6 +27,14 @@ namespace JustReadTheInstructions
         public static int StreamPort { get; internal set; } = 8080;
         public static int StreamJpegQuality { get; internal set; } = 75;
         public static int StreamMaxFps { get; internal set; } = 24;
+
+        public static bool EnableDeferred { get; internal set; } = true;
+        public static bool EnableTUFX { get; internal set; } = true;
+        public static bool EnableEVE { get; internal set; } = true;
+        public static bool EnableParallax { get; internal set; } = false;
+        public static bool EnableFirefly { get; internal set; } = true;
+        public static bool EnableScatterer { get; internal set; } = true;
+        public static bool EnableHullcamFilter { get; internal set; } = true;
 
         private static readonly int[] ValidAntiAliasingValues = { 1, 2, 4, 8 };
 
@@ -93,6 +101,14 @@ namespace JustReadTheInstructions
                 StreamJpegQuality = ParseInt(settings, "StreamJpegQuality", StreamJpegQuality);
                 StreamMaxFps = ParseInt(settings, "StreamMaxFps", StreamMaxFps);
 
+                EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
+                EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
+                EnableEVE = ParseBool(settings, "EnableEVE", EnableEVE);
+                EnableParallax = ParseBool(settings, "EnableParallax", EnableParallax);
+                EnableFirefly = ParseBool(settings, "EnableFirefly", EnableFirefly);
+                EnableScatterer = ParseBool(settings, "EnableScatterer", EnableScatterer);
+                EnableHullcamFilter = ParseBool(settings, "EnableHullcamFilter", EnableHullcamFilter);
+
                 Sanitize();
 
                 Debug.Log($"[JRTI]: Config loaded - {RenderWidth}x{RenderHeight}, FOV: {DefaultFOV}");
@@ -126,6 +142,14 @@ namespace JustReadTheInstructions
                 settings.AddValue("StreamPort", StreamPort);
                 settings.AddValue("StreamJpegQuality", StreamJpegQuality);
                 settings.AddValue("StreamMaxFps", StreamMaxFps);
+
+                settings.AddValue("EnableDeferred", EnableDeferred);
+                settings.AddValue("EnableTUFX", EnableTUFX);
+                settings.AddValue("EnableEVE", EnableEVE);
+                settings.AddValue("EnableParallax", EnableParallax);
+                settings.AddValue("EnableFirefly", EnableFirefly);
+                settings.AddValue("EnableScatterer", EnableScatterer);
+                settings.AddValue("EnableHullcamFilter", EnableHullcamFilter);
 
                 root.Save(KSPUtil.ApplicationRootPath + ConfigUrl);
                 Debug.Log("[JRTI]: Settings saved");
