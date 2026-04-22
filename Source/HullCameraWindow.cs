@@ -24,6 +24,8 @@ namespace JustReadTheInstructions
         private const float ButtonSize = 18;
         private const float Margin = 2;
         private const float ControlsWidth = 60;
+        private const float SliderMinFOV = 5f;
+        private const float SliderMaxFOV = 120f;
 
         private static GUIStyle _titleStyle;
         private static GUIStyle _telemetryStyle;
@@ -240,8 +242,8 @@ namespace JustReadTheInstructions
             float newFOV = GUI.VerticalSlider(
                 new Rect(controlX + 20, controlY, 20, 100),
                 _currentFOV,
-                _maxFOV,
-                _minFOV
+                SliderMaxFOV,
+                SliderMinFOV
             );
 
             if (Math.Abs(newFOV - _currentFOV) > 0.1f)
@@ -250,11 +252,15 @@ namespace JustReadTheInstructions
                 _renderer.SetFieldOfView(_currentFOV);
             }
 
+            bool outsideIntended = _minFOV > 0f && _maxFOV > 0f &&
+                (_currentFOV < _minFOV || _currentFOV > _maxFOV);
+            if (outsideIntended) GUI.color = new Color(1f, 0.65f, 0f);
             GUI.Label(
                 new Rect(controlX, controlY + 105, ControlsWidth, 20),
-                $"{_currentFOV:F0}°",
+                outsideIntended ? $"{_currentFOV:F0}° !" : $"{_currentFOV:F0}°",
                 _titleStyle
             );
+            if (outsideIntended) GUI.color = Color.white;
 
             float urlButtonY = controlY + 130;
 
