@@ -46,10 +46,13 @@ namespace JustReadTheInstructions
             public readonly ConcurrentDictionary<Guid, LatestFrameSlot> MjpegClients
                 = new ConcurrentDictionary<Guid, LatestFrameSlot>();
 
+            public readonly ConcurrentDictionary<Guid, LatestFrameSlot> PreviewClients
+                = new ConcurrentDictionary<Guid, LatestFrameSlot>();
+
             public int MjpegClientCount => MjpegClients.Count;
 
             public bool HasActiveClients
-                => MjpegClients.Count > 0 || _snapshotPending;
+                => MjpegClients.Count > 0 || PreviewClients.Count > 0 || _snapshotPending;
 
             public void MarkSnapshotInterest() => _snapshotPending = true;
 
@@ -60,11 +63,15 @@ namespace JustReadTheInstructions
                     LatestJpeg = jpeg;
                 foreach (var kv in MjpegClients)
                     kv.Value.Push(jpeg);
+                foreach (var kv in PreviewClients)
+                    kv.Value.Push(jpeg);
             }
 
             public void Dispose()
             {
                 foreach (var kv in MjpegClients)
+                    kv.Value.Dispose();
+                foreach (var kv in PreviewClients)
                     kv.Value.Dispose();
             }
         }

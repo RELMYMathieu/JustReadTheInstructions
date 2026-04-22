@@ -90,9 +90,17 @@ export class CameraCard {
         this.destroyed = false;
         this._snapshotJitterTimer = null;
         this._lastRecordingBytes = 0;
+        this._viewerCount = 0;
+        this._livePreviewEl = null;
 
         this.el = this._buildDom();
         this._startSnapshotLoop();
+
+        const initialViewerCount = cam.viewerCount ?? 0;
+        if (initialViewerCount > 0) {
+            this._viewerCount = initialViewerCount;
+            this._onViewerCountChange();
+        }
     }
 
     update(cam) {
@@ -104,10 +112,17 @@ export class CameraCard {
 
         const nameEl = this.el.querySelector('.camera-name');
         if (nameEl) nameEl.textContent = this.name;
+
+        const newViewerCount = cam.viewerCount ?? 0;
+        if (newViewerCount !== this._viewerCount) {
+            this._viewerCount = newViewerCount;
+            this._onViewerCountChange();
+        }
     }
 
     dispose() {
         this._stopSnapshotLoop();
+        this._stopLivePreview();
         clearInterval(this.durationTimer);
         clearInterval(this.livenessTimer);
         this.durationTimer = null;
@@ -131,6 +146,7 @@ export class CameraCard {
 
     markDestroyed() {
         this.destroyed = true;
+        this._stopLivePreview();
         this._stopSnapshotLoop();
         this.el.classList.add('offline', 'destroyed');
         const overlay = this.el.querySelector('.offline-overlay');
@@ -250,6 +266,7 @@ export class CameraCard {
     async _refreshSnapshot() {
         if (this.loadingSnapshot) return;
         if (this.recorder && this.recorder.state !== 'idle') return;
+        if (this._livePreviewEl) return;
 
         const img = this._getSnapshotImg();
         if (!img) return;
@@ -311,6 +328,7 @@ export class CameraCard {
             this.recorder = null;
             old.abandon();
         }
+        this._stopLivePreview();
 
         const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
@@ -343,6 +361,43 @@ export class CameraCard {
         this.livenessTimer = null;
     }
 
+    _onViewerCountChange() {
+        const recActive = this.recorder?.isActive;
+        if (this._viewerCount > 0 && !recActive) {
+            this._startLivePreview();
+        } else if (this._viewerCount === 0) {
+            this._stopLivePreview();
+        }
+        if (!recActive) {
+            const statusEl = this.el.querySelector('[data-role="rec-status"]');
+            if (statusEl) statusEl.textContent = this._viewerCount > 0 ? 'Watching' : 'Idle';
+        }
+    }
+
+    _startLivePreview() {
+        if (this._livePreviewEl) return;
+        const img = document.createElement('img');
+        img.className = 'live-preview-feed';
+        img.src = `/camera/${this.id}/preview`;
+        const snapshotImg = this._getSnapshotImg();
+        const preview = snapshotImg.closest('.preview');
+        snapshotImg.hidden = true;
+        preview.querySelector('.offline-overlay').style.display = 'none';
+        preview.appendChild(img);
+        this._livePreviewEl = img;
+    }
+
+    _stopLivePreview() {
+        if (!this._livePreviewEl) return;
+        this._livePreviewEl.src = '';
+        this._livePreviewEl.remove();
+        this._livePreviewEl = null;
+        const snapshotImg = this._getSnapshotImg();
+        snapshotImg.hidden = false;
+        const preview = snapshotImg.closest('.preview');
+        preview.querySelector('.offline-overlay').style.display = '';
+    }
+
     _onRecorderState({ state, bytesUploaded, startedAt }) {
         const spec = REC_STATES[state] ?? REC_STATES.idle;
         const card = this.el;
@@ -373,7 +428,12 @@ export class CameraCard {
         if (state === 'idle') {
             this._stopLivenessPolling();
             this._unmountRecorderCanvas();
-            this._getSnapshotImg().src = `${this.snapshotBaseUrl}?t=${Date.now()}`;
+            if (this._viewerCount > 0) {
+                statusEl.textContent = 'Watching';
+                this._startLivePreview();
+            } else {
+                this._getSnapshotImg().src = `${this.snapshotBaseUrl}?t=${Date.now()}`;
+            }
         }
 
         this._updateSizeDisplay(sizeEl, state, bytesUploaded);

@@ -5,12 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- We now show live feed when camera is already being watched (costs no performance and nice to have)
+- The camera status ("Idle" label, by default) clearer, i.e : when a camera being watched
+- The two notes above close issue #13 proposing nice QoL changes
+
 ## v2.0.1 - 2026-04-22
 
 ### Fixed
 
 - "Stop" button now properly turns green if a client is requesting the camera feed
-
 
 ## v2.0.0 Web UI Recording, Polishing, QoL and more! - 2026-04-20
 

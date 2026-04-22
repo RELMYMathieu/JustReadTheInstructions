@@ -62,7 +62,7 @@ namespace JustReadTheInstructions
                 if (!first) sb.Append(',');
                 int id = kv.Key;
                 string name = HullCameraManager.Instance?.GetCameraDisplayName(id) ?? id.ToString();
-                sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,")
+                sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,\"viewerCount\":{kv.Value.MjpegClientCount},")
                   .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\"}}");
                 first = false;
             }
@@ -97,6 +97,7 @@ namespace JustReadTheInstructions
             {
                 case "snapshot": ServeSnapshot(ctx, state); break;
                 case "stream": ServeMjpeg(ctx, state); break;
+                case "preview": ServePreviewMjpeg(ctx, state); break;
                 case "status": ServeText(ctx, "ok", "text/plain"); break;
                 default: ServeError(ctx, 404, "Unknown action"); break;
             }
@@ -124,6 +125,12 @@ namespace JustReadTheInstructions
         }
 
         private static void ServeMjpeg(HttpListenerContext ctx, CameraStreamState state)
+            => ServeToClientDict(ctx, state.MjpegClients);
+
+        private static void ServePreviewMjpeg(HttpListenerContext ctx, CameraStreamState state)
+            => ServeToClientDict(ctx, state.PreviewClients);
+
+        private static void ServeToClientDict(HttpListenerContext ctx, System.Collections.Concurrent.ConcurrentDictionary<Guid, LatestFrameSlot> clients)
         {
             const string boundary = "jrtiboundary";
             ctx.Response.ContentType = $"multipart/x-mixed-replace; boundary={boundary}";
@@ -131,7 +138,7 @@ namespace JustReadTheInstructions
 
             var clientId = Guid.NewGuid();
             var slot = new LatestFrameSlot();
-            state.MjpegClients[clientId] = slot;
+            clients[clientId] = slot;
 
             try
             {
@@ -159,7 +166,7 @@ namespace JustReadTheInstructions
             catch { }
             finally
             {
-                state.MjpegClients.TryRemove(clientId, out _);
+                clients.TryRemove(clientId, out _);
                 slot.Dispose();
                 try { ctx.Response.Close(); } catch { }
             }
