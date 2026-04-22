@@ -96,7 +96,7 @@ namespace JustReadTheInstructions
             );
             camera.transform.localPosition = _hullCamera.cameraPosition;
 
-            camera.fieldOfView = JRTISettings.DefaultFOV;
+            camera.fieldOfView = _hullCamera.cameraFoV;
             camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
@@ -155,7 +155,7 @@ namespace JustReadTheInstructions
             camera.transform.localPosition = Vector3.zero;
             camera.transform.localScale = Vector3.one;
 
-            camera.fieldOfView = JRTISettings.DefaultFOV;
+            camera.fieldOfView = _hullCamera.cameraFoV;
             camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
@@ -206,7 +206,7 @@ namespace JustReadTheInstructions
             camera.transform.localRotation = Quaternion.identity;
             camera.transform.localScale = Vector3.one;
 
-            camera.fieldOfView = JRTISettings.DefaultFOV;
+            camera.fieldOfView = _hullCamera.cameraFoV;
             camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
@@ -336,6 +336,10 @@ namespace JustReadTheInstructions
         {
             return _hullCamera != null && _hullCamera.vessel != null && _hullCamera.vessel.loaded;
         }
+
+        public float GetFOV() => _hullCamera?.cameraFoV ?? 0f;
+        public float GetMinFOV() => _hullCamera?.cameraFoVMin ?? 0f;
+        public float GetMaxFOV() => _hullCamera?.cameraFoVMax ?? 0f;
 
         public void SetFieldOfView(float fov)
         {

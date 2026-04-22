@@ -17,6 +17,8 @@ namespace JustReadTheInstructions
         private bool _isResizing;
         private bool _minimalUI;
         private float _currentFOV;
+        private float _minFOV;
+        private float _maxFOV;
 
         private const float TitleBarHeight = 20;
         private const float ButtonSize = 18;
@@ -37,7 +39,9 @@ namespace JustReadTheInstructions
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
             _telemetry = new CameraTelemetry(renderer.GetVessel());
             WindowId = windowId;
-            _currentFOV = JRTISettings.DefaultFOV;
+            _currentFOV = renderer.GetFOV();
+            _minFOV = renderer.GetMinFOV();
+            _maxFOV = renderer.GetMaxFOV();
 
             InitializeStyles();
             CalculateInitialSize();
@@ -236,8 +240,8 @@ namespace JustReadTheInstructions
             float newFOV = GUI.VerticalSlider(
                 new Rect(controlX + 20, controlY, 20, 100),
                 _currentFOV,
-                120f,
-                30f
+                _maxFOV,
+                _minFOV
             );
 
             if (Math.Abs(newFOV - _currentFOV) > 0.1f)

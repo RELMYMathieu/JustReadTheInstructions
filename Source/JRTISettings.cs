@@ -15,7 +15,6 @@ namespace JustReadTheInstructions
         public static bool UseHDR { get; internal set; } = true;
         public static bool RenderEveryOtherFrame { get; internal set; } = true;
 
-        public static float DefaultFOV { get; internal set; } = 55f;
         public static float MaxWindowScale { get; internal set; } = 3f;
         public static float MinWindowScale { get; internal set; } = 0.5f;
 
@@ -55,7 +54,6 @@ namespace JustReadTheInstructions
             RenderWidth = Mathf.Clamp(RenderWidth, 128, 7680);
             RenderHeight = Mathf.Clamp(RenderHeight, 128, 4320);
             AntiAliasing = SanitizeAntiAliasing(AntiAliasing);
-            DefaultFOV = Mathf.Clamp(DefaultFOV, 10f, 170f);
             MaxPreviewSize = Mathf.Clamp(MaxPreviewSize, 100, 2000);
             MaxWindowScale = Mathf.Clamp(MaxWindowScale, 1f, 10f);
             MinWindowScale = Mathf.Clamp(MinWindowScale, 0.1f, 1f);
@@ -93,7 +91,6 @@ namespace JustReadTheInstructions
                 UseHDR = ParseBool(settings, "UseHDR", UseHDR);
                 RenderEveryOtherFrame = ParseBool(settings, "RenderEveryOtherFrame", RenderEveryOtherFrame);
                 MaxOpenCameras = ParseUInt(settings, "MaxOpenCameras", MaxOpenCameras, 1, 64);
-                DefaultFOV = ParseFloat(settings, "DefaultFOV", DefaultFOV);
                 MaxWindowScale = ParseFloat(settings, "MaxWindowScale", MaxWindowScale);
                 MinWindowScale = ParseFloat(settings, "MinWindowScale", MinWindowScale);
                 MaxPreviewSize = ParseInt(settings, "MaxPreviewSize", MaxPreviewSize);
@@ -111,7 +108,7 @@ namespace JustReadTheInstructions
 
                 Sanitize();
 
-                Debug.Log($"[JRTI]: Config loaded - {RenderWidth}x{RenderHeight}, FOV: {DefaultFOV}");
+                Debug.Log($"[JRTI]: Config loaded - {RenderWidth}x{RenderHeight}");
                 Debug.Log($"[JRTI]: Stream config - port:{StreamPort}, quality:{StreamJpegQuality}, maxFps:{StreamMaxFps}");
             }
             catch (Exception ex)
@@ -134,7 +131,6 @@ namespace JustReadTheInstructions
                 settings.AddValue("AntiAliasing", AntiAliasing);
                 settings.AddValue("UseHDR", UseHDR);
                 settings.AddValue("RenderEveryOtherFrame", RenderEveryOtherFrame);
-                settings.AddValue("DefaultFOV", DefaultFOV.ToString(CultureInfo.InvariantCulture));
                 settings.AddValue("MaxWindowScale", MaxWindowScale.ToString(CultureInfo.InvariantCulture));
                 settings.AddValue("MinWindowScale", MinWindowScale.ToString(CultureInfo.InvariantCulture));
                 settings.AddValue("MaxPreviewSize", MaxPreviewSize);

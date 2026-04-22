@@ -24,9 +24,9 @@ namespace JustReadTheInstructions
         private string _antiAliasing;
         private bool _renderEveryOtherFrame;
         private string _streamPort;
+
         private string _jpegQuality;
         private string _maxFps;
-        private string _defaultFov;
         private string _maxOpenCameras;
 
         private bool _secStream = true;
@@ -223,7 +223,6 @@ namespace JustReadTheInstructions
             DrawField("Render Width", ref _renderWidth);
             DrawField("Render Height", ref _renderHeight);
             DrawField("Anti-Aliasing  (0=off / 1/2/4/8)", ref _antiAliasing);
-            DrawField("Default FOV", ref _defaultFov);
             DrawField("Max Open Cameras", ref _maxOpenCameras);
             GUILayout.Space(4);
             _renderEveryOtherFrame = GUILayout.Toggle(_renderEveryOtherFrame, "Render every other frame (recommended)", _toggleStyle);
@@ -385,8 +384,6 @@ namespace JustReadTheInstructions
             if (int.TryParse(_streamPort, out int port)) JRTISettings.StreamPort = port;
             if (int.TryParse(_jpegQuality, out int q)) JRTISettings.StreamJpegQuality = q;
             if (int.TryParse(_maxFps, out int fps)) JRTISettings.StreamMaxFps = fps;
-            if (float.TryParse(_defaultFov, NumberStyles.Float, CultureInfo.InvariantCulture, out float f))
-                JRTISettings.DefaultFOV = f;
             if (uint.TryParse(_maxOpenCameras, out uint maxCams))
                 JRTISettings.MaxOpenCameras = (uint)Mathf.Clamp((int)maxCams, 1, 64);
 
@@ -403,7 +400,6 @@ namespace JustReadTheInstructions
             _streamPort = JRTISettings.StreamPort.ToString();
             _jpegQuality = JRTISettings.StreamJpegQuality.ToString();
             _maxFps = JRTISettings.StreamMaxFps.ToString();
-            _defaultFov = JRTISettings.DefaultFOV.ToString("F0");
             _maxOpenCameras = JRTISettings.MaxOpenCameras.ToString();
         }
 

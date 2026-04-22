@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - We now take a snapshot whenever camera goes to an inactive state from an active one doesn't watse ressources since it was active up until that point, smoothly allows to transition between active and inactive view
 - Fix customlos.png not found (error 404) in some instances, where the code would mistakenly interpret is as always present when it's only conditionally there
 - Watch button now still usable after camera disconnects (in cases where signal may come back)
+- Bumped up default settings (performance improvements since v1.0.0 allows for that!!)
+- Use Hullcam's FoV instead of our "own" FoV (still allow to modify it with the slider, but by default match Hullcam's if it's applicable)
 
 ### Fixed
 

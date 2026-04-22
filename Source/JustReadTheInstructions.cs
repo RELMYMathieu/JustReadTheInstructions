@@ -35,7 +35,6 @@ namespace JustReadTheInstructions
 
             Debug.Log($"[JRTI]: Initialization complete");
             Debug.Log($"[JRTI]: Render resolution: {JRTISettings.RenderWidth}x{JRTISettings.RenderHeight}");
-            Debug.Log($"[JRTI]: Default FOV: {JRTISettings.DefaultFOV}°");
         }
 
         private bool VerifyDependencies()
