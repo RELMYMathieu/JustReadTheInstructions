@@ -29,8 +29,11 @@ function main() {
     document.title = `Camera ${cameraId} - JRTI Stream`;
 
     let offAt = 0;
+    let losMode = false;
 
     const setLosImage = () => {
+        if (losMode) return;
+        losMode = true;
         img.onerror = null;
         img.src = LOS_IMAGE_URL;
         img.onerror = () => {
@@ -39,10 +42,8 @@ function main() {
         };
     };
 
-    const isLosImageShown = () =>
-        img.src.includes(LOS_IMAGE_URL) || img.src.includes(LOS_FALLBACK_IMAGE_URL);
-
     const onError = () => {
+        if (losMode) return;
         if (!offAt) offAt = Date.now();
         if (Date.now() - offAt >= VIEWER_LOS_DELAY_MS) {
             setLosImage();
@@ -52,6 +53,7 @@ function main() {
     };
 
     const onLoad = () => {
+        if (losMode) return;
         if (img.src.includes(base)) {
             offAt = 0;
         } else if (offAt) {
@@ -63,7 +65,7 @@ function main() {
     img.addEventListener('load', onLoad);
 
     setInterval(async () => {
-        if (isLosImageShown()) {
+        if (losMode) {
             const s = await checkStatus(cameraId);
             if (s.ok) location.reload();
             return;
