@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The camera status ("Idle" label, by default) clearer, i.e : when a camera being watched
 - The two notes above close issue #13 proposing nice QoL changes
 - Refactored the camera streaming JavaScript code (no functionality change)
+- We now take a snapshot whenever camera goes to an inactive state from an active one doesn't watse ressources since it was active up until that point, smoothly allows to transition between active and inactive view
 
 ## v2.0.1 - 2026-04-22
 

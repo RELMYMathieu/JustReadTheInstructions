@@ -57,6 +57,10 @@ export class CameraSnapshot {
         }
     }
 
+    refresh() {
+        return this._refresh();
+    }
+
     async _refresh() {
         if (this._loading) return;
         const recorder = this._getRecorder();

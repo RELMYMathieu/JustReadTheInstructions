@@ -61,7 +61,7 @@ export class CameraCard {
                     statusEl.textContent = 'Watching';
                     this._startLivePreview();
                 } else {
-                    this._getSnapshotImg().src = `${this.snapshotBaseUrl}?t=${Date.now()}`;
+                    this._snapshot.refresh();
                 }
             },
         });
@@ -306,5 +306,6 @@ export class CameraCard {
         snapshotImg.hidden = false;
         const preview = snapshotImg.closest('.preview');
         preview.querySelector('.offline-overlay').style.display = '';
+        this._snapshot.refresh();
     }
 }
