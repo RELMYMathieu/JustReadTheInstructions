@@ -1,7 +1,5 @@
 import {
     SNAPSHOT_REFRESH_MS,
-    LOS_DELAY_MS,
-    RECORDER_LOS_DELAY_MS,
     LOS_OVERLAY_HTML,
     WAITING_OVERLAY_HTML,
     API,
@@ -9,20 +7,8 @@ import {
 import { copyToClipboard } from './clipboard.js';
 import { checkStatus } from './api.js';
 import { CameraRecorder, isRecordingSupported } from './stream-recorder.js';
-
-function formatBytes(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-function formatDuration(ms) {
-    const s = Math.floor(ms / 1000);
-    const mm = String(Math.floor(s / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    return `${mm}:${ss}`;
-}
+import { CameraSnapshot } from './camera-snapshot.js';
+import { CameraRecordingUI } from './camera-recording-ui.js';
 
 function makeButton({ label, className = 'btn', role, title, onClick }) {
     const btn = document.createElement('button');
@@ -45,34 +31,6 @@ function makeCopyButton({ label, title, getText }) {
     return btn;
 }
 
-const REC_STATES = {
-    recording: {
-        cardClass: true,
-        statusClass: 'recording',
-        recBtn: { text: '■ Stop', active: true, disabled: false },
-        pauseBtn: { hidden: false, text: '⏸ Pause' },
-    },
-    paused: {
-        cardClass: true,
-        statusClass: 'paused',
-        status: '⏸ Paused',
-        recBtn: { text: '■ Stop', active: true, disabled: false },
-        pauseBtn: { hidden: false, text: '▶ Resume' },
-    },
-    finalizing: {
-        cardClass: false,
-        status: 'Saving...',
-        recBtn: { text: 'Saving...', active: false, disabled: true },
-        pauseBtn: { hidden: true },
-    },
-    idle: {
-        cardClass: false,
-        status: 'Idle',
-        recBtn: { text: '● Record', active: false, disabled: false },
-        pauseBtn: { hidden: true },
-    },
-};
-
 export class CameraCard {
     constructor(cam) {
         this.id = cam.id;
@@ -81,20 +39,34 @@ export class CameraCard {
         this.snapshotBaseUrl = cam.snapshotUrl;
         this.streaming = cam.streaming;
 
-        this.offlineSince = 0;
-        this.loadingSnapshot = false;
-        this.snapshotTimer = null;
-        this.durationTimer = null;
         this.livenessTimer = null;
         this.recorder = null;
         this.destroyed = false;
-        this._snapshotJitterTimer = null;
-        this._lastRecordingBytes = 0;
         this._viewerCount = 0;
         this._livePreviewEl = null;
 
         this.el = this._buildDom();
-        this._startSnapshotLoop();
+
+        this._snapshot = new CameraSnapshot(this.snapshotBaseUrl, this.el, {
+            getRecorder: () => this.recorder,
+            isLivePreviewActive: () => !!this._livePreviewEl,
+        });
+
+        this._recordingUI = new CameraRecordingUI(this.el, {
+            getRecorder: () => this.recorder,
+            getSnapshotImg: () => this._getSnapshotImg(),
+            onIdle: (statusEl) => {
+                this._stopLivenessPolling();
+                if (this._viewerCount > 0) {
+                    statusEl.textContent = 'Watching';
+                    this._startLivePreview();
+                } else {
+                    this._getSnapshotImg().src = `${this.snapshotBaseUrl}?t=${Date.now()}`;
+                }
+            },
+        });
+
+        this._snapshot.start();
 
         const initialViewerCount = cam.viewerCount ?? 0;
         if (initialViewerCount > 0) {
@@ -121,11 +93,10 @@ export class CameraCard {
     }
 
     dispose() {
-        this._stopSnapshotLoop();
+        this._snapshot.stop();
         this._stopLivePreview();
-        clearInterval(this.durationTimer);
+        this._recordingUI.dispose();
         clearInterval(this.livenessTimer);
-        this.durationTimer = null;
         this.livenessTimer = null;
         const img = this._getSnapshotImg();
         if (img?.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
@@ -141,13 +112,13 @@ export class CameraCard {
         this.destroyed = false;
         this.el.classList.remove('destroyed');
         this.update(cam);
-        this._startSnapshotLoop();
+        this._snapshot.start();
     }
 
     markDestroyed() {
         this.destroyed = true;
         this._stopLivePreview();
-        this._stopSnapshotLoop();
+        this._snapshot.stop();
         this.el.classList.add('offline', 'destroyed');
         const overlay = this.el.querySelector('.offline-overlay');
         if (overlay) overlay.innerHTML = LOS_OVERLAY_HTML;
@@ -248,67 +219,6 @@ export class CameraCard {
         return this.el.querySelector('.preview img');
     }
 
-    _startSnapshotLoop() {
-        this._refreshSnapshot();
-        this._snapshotJitterTimer = setTimeout(() => {
-            this._snapshotJitterTimer = null;
-            this.snapshotTimer = setInterval(() => this._refreshSnapshot(), SNAPSHOT_REFRESH_MS);
-        }, Math.random() * SNAPSHOT_REFRESH_MS);
-    }
-
-    _stopSnapshotLoop() {
-        clearTimeout(this._snapshotJitterTimer);
-        this._snapshotJitterTimer = null;
-        clearInterval(this.snapshotTimer);
-        this.snapshotTimer = null;
-    }
-
-    async _refreshSnapshot() {
-        if (this.loadingSnapshot) return;
-        if (this.recorder && this.recorder.state !== 'idle') return;
-        if (this._livePreviewEl) return;
-
-        const img = this._getSnapshotImg();
-        if (!img) return;
-
-        this.loadingSnapshot = true;
-        try {
-            const res = await fetch(`${this.snapshotBaseUrl}?t=${Date.now()}`);
-            if (!res.ok) throw new Error();
-            const blob = await res.blob();
-            const prev = img.src;
-            img.src = URL.createObjectURL(blob);
-            if (prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-            this._markOnline();
-        } catch {
-            this._markOffline();
-        } finally {
-            this.loadingSnapshot = false;
-        }
-    }
-
-    _markOnline() {
-        this.el.classList.remove('offline');
-        this.offlineSince = 0;
-        this._losSignaled = false;
-        const overlay = this.el.querySelector('.offline-overlay');
-        if (overlay) overlay.innerHTML = WAITING_OVERLAY_HTML;
-        this.recorder?.handleSignalRestored();
-    }
-
-    _markOffline() {
-        if (!this.offlineSince) this.offlineSince = Date.now();
-        this.el.classList.add('offline');
-        const overlay = this.el.querySelector('.offline-overlay');
-        if (overlay && Date.now() - this.offlineSince >= LOS_DELAY_MS) {
-            overlay.innerHTML = LOS_OVERLAY_HTML;
-        }
-        if (!this._losSignaled && Date.now() - this.offlineSince >= RECORDER_LOS_DELAY_MS) {
-            this._losSignaled = true;
-            this.recorder?.handleSignalLost();
-        }
-    }
-
     _togglePause() {
         if (this.recorder?.state === 'recording') this.recorder.pause();
         else if (this.recorder?.state === 'paused') this.recorder.resume();
@@ -337,8 +247,8 @@ export class CameraCard {
             cameraName: this.name,
             streamUrl: `/camera/${this.id}/stream`,
             isLocal,
-            onStateChange: (s) => this._onRecorderState(s),
-            onCanvasReady: (canvas) => this._mountRecorderCanvas(canvas),
+            onStateChange: (s) => this._recordingUI.onStateChange(s),
+            onCanvasReady: (canvas) => this._recordingUI.mountCanvas(canvas),
         });
 
         this.recorder.start();
@@ -350,8 +260,8 @@ export class CameraCard {
         this.livenessTimer = setInterval(async () => {
             if (!this.recorder?.isActive) return;
             const { ok, status } = await checkStatus(this.id);
-            if (status === 404 || !ok) this._markOffline();
-            else this._markOnline();
+            if (status === 404 || !ok) this._snapshot.markOffline();
+            else this._snapshot.markOnline();
         }, SNAPSHOT_REFRESH_MS);
     }
 
@@ -396,89 +306,5 @@ export class CameraCard {
         snapshotImg.hidden = false;
         const preview = snapshotImg.closest('.preview');
         preview.querySelector('.offline-overlay').style.display = '';
-    }
-
-    _onRecorderState({ state, bytesUploaded, startedAt }) {
-        const spec = REC_STATES[state] ?? REC_STATES.idle;
-        const card = this.el;
-        const recBtn = card.querySelector('[data-role="record"]');
-        const pauseBtn = card.querySelector('[data-role="pause"]');
-        const statusEl = card.querySelector('[data-role="rec-status"]');
-        const sizeEl = card.querySelector('[data-role="rec-size"]');
-
-        card.classList.toggle('recording', spec.cardClass);
-        statusEl?.classList.remove('recording', 'paused');
-        if (spec.statusClass) statusEl?.classList.add(spec.statusClass);
-
-        recBtn.textContent = spec.recBtn.text;
-        recBtn.classList.toggle('active', spec.recBtn.active);
-        recBtn.disabled = spec.recBtn.disabled;
-
-        pauseBtn.hidden = spec.pauseBtn.hidden;
-        if (!spec.pauseBtn.hidden) pauseBtn.textContent = spec.pauseBtn.text;
-
-        if (state === 'recording') {
-            statusEl.textContent = `● Recording ${formatDuration(Date.now() - startedAt)}`;
-            this._ensureDurationTimer(startedAt);
-        } else {
-            statusEl.textContent = spec.status;
-            this._clearDurationTimer();
-        }
-
-        if (state === 'idle') {
-            this._stopLivenessPolling();
-            this._unmountRecorderCanvas();
-            if (this._viewerCount > 0) {
-                statusEl.textContent = 'Watching';
-                this._startLivePreview();
-            } else {
-                this._getSnapshotImg().src = `${this.snapshotBaseUrl}?t=${Date.now()}`;
-            }
-        }
-
-        this._updateSizeDisplay(sizeEl, state, bytesUploaded);
-    }
-
-    _updateSizeDisplay(sizeEl, state, bytesUploaded) {
-        if (!sizeEl) return;
-
-        const active = state === 'recording' || state === 'paused' || state === 'finalizing';
-        if (active) this._lastRecordingBytes = bytesUploaded;
-
-        const bytes = active ? bytesUploaded : this._lastRecordingBytes;
-        sizeEl.textContent = bytes > 0 ? `LAST RECORDING SIZE = ${formatBytes(bytes)}` : '';
-    }
-
-    _ensureDurationTimer(startedAt) {
-        if (this.durationTimer) return;
-        const statusEl = this.el.querySelector('[data-role="rec-status"]');
-        this.durationTimer = setInterval(() => {
-            if (!this.recorder?.isActive) return;
-            if (this.recorder.state !== 'recording') return;
-            statusEl.textContent = `● Recording ${formatDuration(Date.now() - startedAt)}`;
-        }, 1000);
-    }
-
-    _mountRecorderCanvas(canvas) {
-        canvas.className = 'rec-live-preview';
-        const preview = this._getSnapshotImg().closest('.preview');
-        preview.querySelector('.offline-overlay').style.display = 'none';
-        this._getSnapshotImg().hidden = true;
-        preview.appendChild(canvas);
-    }
-
-    _unmountRecorderCanvas() {
-        const canvas = this.el.querySelector('.rec-live-preview');
-        if (!canvas) return;
-        canvas.remove();
-        const preview = this._getSnapshotImg().closest('.preview');
-        preview.querySelector('.offline-overlay').style.display = '';
-        this._getSnapshotImg().hidden = false;
-    }
-
-    _clearDurationTimer() {
-        if (!this.durationTimer) return;
-        clearInterval(this.durationTimer);
-        this.durationTimer = null;
     }
 }

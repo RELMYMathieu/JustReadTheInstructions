@@ -15,6 +15,7 @@ import {
 import { getSettings } from './recorder-settings.js';
 import { fixMp4 } from './fix-mp4.js';
 import { fixWebm } from './fix-webm.js';
+import { MjpegStreamReader } from './mjpeg-stream-reader.js';
 
 const IS_FIREFOX = typeof navigator !== 'undefined' && /Firefox\//.test(navigator.userAgent);
 
@@ -117,8 +118,7 @@ export class CameraRecorder {
         this._mediaRecorder = null;
         this._canvas = null;
         this._ctx = null;
-        this._fetchAbort = null;
-        this._streamRetryTimer = null;
+        this._reader = null;
         this._stream = null;
         this._sessionId = null;
         this._filename = null;
@@ -199,88 +199,40 @@ export class CameraRecorder {
     }
 
     _startCanvasPump() {
-        this._fetchAbort = new AbortController();
+        this._reader = new MjpegStreamReader(this.streamUrl, async (frame) => {
+            if (this.state === 'idle' || this.state === 'finalizing') return false;
 
-        const pump = async () => {
-            try {
-                const response = await fetch(`${this.streamUrl}?r=${Date.now()}`, {
-                    signal: this._fetchAbort.signal,
+            const bitmap = await createImageBitmap(new Blob([frame], { type: 'image/jpeg' }));
+
+            if (!this._canvas) {
+                this._canvas = document.createElement('canvas');
+                this._canvas.width = bitmap.width;
+                this._canvas.height = bitmap.height;
+                this._ctx = this._canvas.getContext('2d');
+                this._ctx.drawImage(bitmap, 0, 0);
+                this._onCanvasReady?.(this._canvas);
+                this._stream = this._canvas.captureStream(RECORDER_CAPTURE_FPS);
+                this._mediaRecorder = new MediaRecorder(this._stream, {
+                    mimeType: this._mimeType,
+                    videoBitsPerSecond: RECORDER_VIDEO_BPS,
                 });
-
-                const reader = response.body.getReader();
-                let buf = new Uint8Array(0);
-
-                const flush = async () => {
-                    while (true) {
-                        let soi = -1;
-                        for (let i = 0; i < buf.length - 1; i++) {
-                            if (buf[i] === 0xFF && buf[i + 1] === 0xD8) { soi = i; break; }
-                        }
-                        if (soi === -1) break;
-
-                        let eoi = -1;
-                        for (let i = soi + 2; i < buf.length - 1; i++) {
-                            if (buf[i] === 0xFF && buf[i + 1] === 0xD9) { eoi = i; break; }
-                        }
-                        if (eoi === -1) break;
-
-                        const frame = buf.slice(soi, eoi + 2);
-                        buf = buf.slice(eoi + 2);
-
-                        if (this.state === 'idle' || this.state === 'finalizing') break;
-
-                        const bitmap = await createImageBitmap(new Blob([frame], { type: 'image/jpeg' }));
-
-                        if (!this._canvas) {
-                            this._canvas = document.createElement('canvas');
-                            this._canvas.width = bitmap.width;
-                            this._canvas.height = bitmap.height;
-                            this._ctx = this._canvas.getContext('2d');
-                            this._ctx.drawImage(bitmap, 0, 0);
-                            this._onCanvasReady?.(this._canvas);
-                            this._stream = this._canvas.captureStream(RECORDER_CAPTURE_FPS);
-                            this._mediaRecorder = new MediaRecorder(this._stream, {
-                                mimeType: this._mimeType,
-                                videoBitsPerSecond: RECORDER_VIDEO_BPS,
-                            });
-                            this._mediaRecorder.addEventListener('dataavailable', (e) => this._onChunk(e));
-                            this._mediaRecorder.addEventListener('error', () => this._emergencyStop());
-                            this._mediaRecorder.start(RECORDER_CHUNK_MS);
-                        } else if (this._ctx) {
-                            this._ctx.drawImage(bitmap, 0, 0, this._canvas.width, this._canvas.height);
-                            this._stream?.getVideoTracks()[0]?.requestFrame?.();
-                        }
-
-                        bitmap.close();
-                    }
-                };
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const next = new Uint8Array(buf.length + value.length);
-                    next.set(buf);
-                    next.set(value, buf.length);
-                    buf = next;
-                    await flush();
-                }
-            } catch (e) {
-                if (e.name === 'AbortError') return;
-                if (this.state === 'idle' || this.state === 'finalizing') return;
-                this._streamRetryTimer = setTimeout(pump, 1000);
+                this._mediaRecorder.addEventListener('dataavailable', (e) => this._onChunk(e));
+                this._mediaRecorder.addEventListener('error', () => this._emergencyStop());
+                this._mediaRecorder.start(RECORDER_CHUNK_MS);
+            } else if (this._ctx) {
+                this._ctx.drawImage(bitmap, 0, 0, this._canvas.width, this._canvas.height);
+                this._stream?.getVideoTracks()[0]?.requestFrame?.();
             }
-        };
 
-        pump();
+            bitmap.close();
+            return true;
+        });
+        this._reader.start();
     }
 
     _stopCanvasPump() {
-        this._fetchAbort?.abort();
-        this._fetchAbort = null;
-        if (this._streamRetryTimer !== null) {
-            clearTimeout(this._streamRetryTimer);
-            this._streamRetryTimer = null;
-        }
+        this._reader?.stop();
+        this._reader = null;
     }
 
     _onChunk(event) {

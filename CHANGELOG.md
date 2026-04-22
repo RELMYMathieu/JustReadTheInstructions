@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - We now show live feed when camera is already being watched (costs no performance and nice to have)
 - The camera status ("Idle" label, by default) clearer, i.e : when a camera being watched
 - The two notes above close issue #13 proposing nice QoL changes
+- Refactored the camera streaming JavaScript code (no functionality change)
 
 ## v2.0.1 - 2026-04-22
 
