@@ -57,7 +57,7 @@ namespace JustReadTheInstructions
                 RenderTextureFormat.ARGB32
             )
             {
-                antiAliasing = ScattererIntegration.IsAvailable ? 1 : JRTISettings.AntiAliasing
+                antiAliasing = (ScattererIntegration.IsAvailable || JRTISettings.AntiAliasing == 0) ? 1 : JRTISettings.AntiAliasing
             };
 
             TargetTexture.Create();

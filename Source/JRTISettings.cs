@@ -36,7 +36,7 @@ namespace JustReadTheInstructions
         public static bool EnableScatterer { get; internal set; } = true;
         public static bool EnableHullcamFilter { get; internal set; } = true;
 
-        private static readonly int[] ValidAntiAliasingValues = { 1, 2, 4, 8 };
+        private static readonly int[] ValidAntiAliasingValues = { 0, 1, 2, 4, 8 };
 
         internal static int SanitizeAntiAliasing(int value)
         {

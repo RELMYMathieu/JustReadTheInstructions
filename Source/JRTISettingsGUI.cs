@@ -22,6 +22,7 @@ namespace JustReadTheInstructions
         private string _renderWidth;
         private string _renderHeight;
         private string _antiAliasing;
+        private bool _renderEveryOtherFrame;
         private string _streamPort;
         private string _jpegQuality;
         private string _maxFps;
@@ -221,9 +222,13 @@ namespace JustReadTheInstructions
             GUILayout.Space(4);
             DrawField("Render Width", ref _renderWidth);
             DrawField("Render Height", ref _renderHeight);
-            DrawField("Anti-Aliasing  (1/2/4/8)", ref _antiAliasing);
+            DrawField("Anti-Aliasing  (0=off / 1/2/4/8)", ref _antiAliasing);
             DrawField("Default FOV", ref _defaultFov);
             DrawField("Max Open Cameras", ref _maxOpenCameras);
+            GUILayout.Space(4);
+            _renderEveryOtherFrame = GUILayout.Toggle(_renderEveryOtherFrame, "Render every other frame (recommended)", _toggleStyle);
+            if (!_renderEveryOtherFrame)
+                GUILayout.Label("⚠ Rendering every frame doubles per-camera cost. Only viable on a top-tier GPU.", _warningStyle);
             GUILayout.Space(4);
             GUILayout.Label("Render resolution and AA apply on next camera open.", _noteStyle);
             GUILayout.Label("Stream port change requires game restart.", _noteStyle);
@@ -376,6 +381,7 @@ namespace JustReadTheInstructions
             if (int.TryParse(_renderWidth, out int w)) JRTISettings.RenderWidth = w;
             if (int.TryParse(_renderHeight, out int h)) JRTISettings.RenderHeight = h;
             if (int.TryParse(_antiAliasing, out int aa)) JRTISettings.AntiAliasing = aa;
+            JRTISettings.RenderEveryOtherFrame = _renderEveryOtherFrame;
             if (int.TryParse(_streamPort, out int port)) JRTISettings.StreamPort = port;
             if (int.TryParse(_jpegQuality, out int q)) JRTISettings.StreamJpegQuality = q;
             if (int.TryParse(_maxFps, out int fps)) JRTISettings.StreamMaxFps = fps;
@@ -393,6 +399,7 @@ namespace JustReadTheInstructions
             _renderWidth = JRTISettings.RenderWidth.ToString();
             _renderHeight = JRTISettings.RenderHeight.ToString();
             _antiAliasing = JRTISettings.AntiAliasing.ToString();
+            _renderEveryOtherFrame = JRTISettings.RenderEveryOtherFrame;
             _streamPort = JRTISettings.StreamPort.ToString();
             _jpegQuality = JRTISettings.StreamJpegQuality.ToString();
             _maxFps = JRTISettings.StreamMaxFps.ToString();

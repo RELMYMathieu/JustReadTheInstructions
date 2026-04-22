@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Draggable camera cards instead of static, "randomly" (not really :p) ordered camera cards
+- New "render every other frame" setting exposed, allowing rendering every frame (with warning about performance)
 
 ### Changed
 
@@ -20,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - We now take a snapshot whenever camera goes to an inactive state from an active one doesn't watse ressources since it was active up until that point, smoothly allows to transition between active and inactive view
 - Fix customlos.png not found (error 404) in some instances, where the code would mistakenly interpret is as always present when it's only conditionally there
 - Watch button now still usable after camera disconnects (in cases where signal may come back)
+
+### Fixed
+
+- Anti-Aliasing minimum option from 1 to 0 (so it's clearer 0 means NO AA)
 
 ## v2.0.1 - 2026-04-22
 
