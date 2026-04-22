@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Mod version label in settings menu
+
 ## v2.1.0 - 2026-04-22
 
 ### Added
@@ -29,13 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Anti-Aliasing minimum option from 1 to 0 (so it's clearer 0 means NO AA)
 - Mobile experience should feel a lot better with the new responsive layout and touch-friendly controls
 
-
 ## v2.0.1 - 2026-04-22
 
 ### Fixed
 
 - "Stop" button now properly turns green if a client is requesting the camera feed
-
 
 ## v2.0.0 Web UI Recording, Polishing, QoL and more! - 2026-04-20
 
