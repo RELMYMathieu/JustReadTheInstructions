@@ -99,7 +99,7 @@ namespace JustReadTheInstructions
             );
             camera.transform.localPosition = _hullCamera.cameraPosition;
 
-            camera.nearClipPlane = 0.07f; // Subjective near clip plane value
+            camera.nearClipPlane = 0.07f; // NOTE: Subjective near clip plane value
             camera.fieldOfView = _hullCamera.cameraFoV;
             camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
