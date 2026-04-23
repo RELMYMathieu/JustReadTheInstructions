@@ -193,7 +193,8 @@ namespace JustReadTheInstructions
 
             int stableId = HullCameraRenderer.GetStableId(camera);
             string vesselName = camera.vessel.GetDisplayName();
-            string displayName = $"{vesselName}.{camera.cameraName}";
+            string resolvedName = JRTICameraRuntime.ResolveName(camera.part.persistentId, camera.cameraName);
+            string displayName = $"{vesselName}.{resolvedName}";
             bool streamOnly = HullCameraManager.Instance?.IsStreamOnly(camera) ?? false;
             bool streaming = JRTIStreamServer.Instance?.IsStreaming(stableId) ?? false;
 
