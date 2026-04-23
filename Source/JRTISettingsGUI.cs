@@ -29,6 +29,8 @@ namespace JustReadTheInstructions
         private string _streamPort;
 
         private bool _enableDockingOverlay;
+        private bool _fixedPreviewAspectRatio;
+        private bool _minimalUI;
 
         private string _jpegQuality;
         private string _maxFps;
@@ -239,6 +241,8 @@ namespace JustReadTheInstructions
                 GUILayout.Label("⚠ Rendering every frame doubles per-camera cost. Only viable on a top-tier GPU.", _warningStyle);
             GUILayout.Space(4);
             _enableDockingOverlay = GUILayout.Toggle(_enableDockingOverlay, "Render overlay with telemetry on docking cameras", _toggleStyle);
+            _fixedPreviewAspectRatio = GUILayout.Toggle(_fixedPreviewAspectRatio, "Fixed preview aspect ratio (square preview window)", _toggleStyle);
+            _minimalUI = GUILayout.Toggle(_minimalUI, "Minimal UI by default (double-click preview to toggle)", _toggleStyle);
             GUILayout.Label("Render resolution and AA apply on next camera open.", _noteStyle);
             GUILayout.Label("Stream port change requires game restart.", _noteStyle);
         }
@@ -392,6 +396,8 @@ namespace JustReadTheInstructions
             if (int.TryParse(_antiAliasing, out int aa)) JRTISettings.AntiAliasing = aa;
             JRTISettings.RenderEveryOtherFrame = _renderEveryOtherFrame;
             JRTISettings.EnableDockingOverlay = _enableDockingOverlay;
+            JRTISettings.FixedPreviewAspectRatio = _fixedPreviewAspectRatio;
+            JRTISettings.MinimalUI = _minimalUI;
             if (int.TryParse(_streamPort, out int port)) JRTISettings.StreamPort = port;
             if (int.TryParse(_jpegQuality, out int q)) JRTISettings.StreamJpegQuality = q;
             if (int.TryParse(_maxFps, out int fps)) JRTISettings.StreamMaxFps = fps;
@@ -409,6 +415,8 @@ namespace JustReadTheInstructions
             _antiAliasing = JRTISettings.AntiAliasing.ToString();
             _renderEveryOtherFrame = JRTISettings.RenderEveryOtherFrame;
             _enableDockingOverlay = JRTISettings.EnableDockingOverlay;
+            _fixedPreviewAspectRatio = JRTISettings.FixedPreviewAspectRatio;
+            _minimalUI = JRTISettings.MinimalUI;
             _streamPort = JRTISettings.StreamPort.ToString();
             _jpegQuality = JRTISettings.StreamJpegQuality.ToString();
             _maxFps = JRTISettings.StreamMaxFps.ToString();

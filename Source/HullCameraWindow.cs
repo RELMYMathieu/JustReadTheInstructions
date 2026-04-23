@@ -15,7 +15,7 @@ namespace JustReadTheInstructions
         private float _previewHeight;
         private float _scale = 1f;
         private bool _isResizing;
-        private bool _minimalUI = true; // TODO: Expose flag in settings
+        private bool _minimalUI = JRTISettings.MinimalUI;
         private float _currentFOV;
         private float _minFOV;
         private float _maxFOV;
