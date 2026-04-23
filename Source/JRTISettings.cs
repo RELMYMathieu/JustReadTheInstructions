@@ -18,7 +18,7 @@ namespace JustReadTheInstructions
         public static float MaxWindowScale { get; internal set; } = 3f;
         public static float MinWindowScale { get; internal set; } = 0.5f;
 
-        public static bool FixedPreviewAspectRatio { get; internal set; } = true;
+        public static bool FixedPreviewAspectRatio { get; internal set; } = true; // TODO : Expose this field in the JRTI Settings UI
         public static int MaxPreviewSize { get; internal set; } = 360;
         public static uint MaxOpenCameras { get; internal set; } = 8u;
 
