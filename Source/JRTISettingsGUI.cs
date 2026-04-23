@@ -206,7 +206,6 @@ namespace JustReadTheInstructions
             }
 
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, false, true);
-            GUILayout.BeginVertical();
 
             DrawSection("▶ Stream / Capture", ref _secStream, DrawStreamSection);
             GUILayout.Space(4);
@@ -216,20 +215,17 @@ namespace JustReadTheInstructions
             GUILayout.Space(4);
             DrawSection("▶ Troubleshooting", ref _secTroubleshooting, DrawTroubleshootingSection);
 
-            GUILayout.Space(10);
+            GUILayout.EndScrollView();
+
+            GUILayout.Space(4);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Close", _buttonStyle)) Toggle();
             GUILayout.FlexibleSpace();
             if (Time.realtimeSinceStartup - _savedMessageTime < 2f)
                 GUILayout.Label("✓ Saved", _savedStyle);
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
             GUILayout.Label($"v{ModVersion}", _noteStyle);
             GUILayout.EndHorizontal();
 
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
