@@ -15,7 +15,7 @@ namespace JustReadTheInstructions
         private float _previewHeight;
         private float _scale = 1f;
         private bool _isResizing;
-        private bool _minimalUI;
+        private bool _minimalUI = true; // TODO : Expose flag in settings 
         private float _currentFOV;
         private float _minFOV;
         private float _maxFOV;
@@ -91,18 +91,25 @@ namespace JustReadTheInstructions
 
         private void CalculateInitialSize()
         {
-            float aspectRatio = (float)JRTISettings.RenderWidth / JRTISettings.RenderHeight;
             float maxSize = JRTISettings.MaxPreviewSize;
 
-            if (aspectRatio >= 1f)
+            if (JRTISettings.FixedPreviewAspectRatio)
             {
-                _previewWidth = maxSize;
-                _previewHeight = maxSize / aspectRatio;
+                _previewWidth = _previewHeight = maxSize;
             }
             else
             {
-                _previewHeight = maxSize;
-                _previewWidth = maxSize * aspectRatio;
+                float aspectRatio = (float)JRTISettings.RenderWidth / JRTISettings.RenderHeight;
+                if (aspectRatio >= 1f)
+                {
+                    _previewWidth = maxSize;
+                    _previewHeight = maxSize / aspectRatio;
+                }
+                else
+                {
+                    _previewHeight = maxSize;
+                    _previewWidth = maxSize * aspectRatio;
+                }
             }
 
             RecalculateWindowSize();
@@ -172,7 +179,7 @@ namespace JustReadTheInstructions
 
             bool streaming = JRTIStreamServer.Instance?.IsStreaming(_renderer.InstanceId) ?? false;
             GUI.color = streaming ? Color.green : Color.gray;
-            GUI.Label(new Rect(_windowWidth - ButtonSize * 3, 2, ButtonSize * 2, ButtonSize), streaming ? "● LIVE" : "○ OFFLINE", _titleStyle);
+            GUI.Label(new Rect(_windowWidth - ButtonSize * 4, 2, ButtonSize * 3, ButtonSize), streaming ? "● LIVE" : "○ OFFLINE", _titleStyle);
             GUI.color = Color.white;
 
             float scaledWidth = _previewWidth * _scale;
@@ -182,7 +189,7 @@ namespace JustReadTheInstructions
             GUI.DrawTexture(
                 previewRect,
                 _renderer.TargetTexture,
-                ScaleMode.StretchToFill,
+                ScaleMode.ScaleAndCrop,
                 false
             );
 
@@ -194,6 +201,8 @@ namespace JustReadTheInstructions
                 RecalculateWindowSize();
                 _windowRect.width = _windowWidth;
                 _windowRect.height = _windowHeight;
+
+                Event.current.Use();
             }
 
             if (!_minimalUI)
@@ -204,7 +213,19 @@ namespace JustReadTheInstructions
 
             HandleResize();
 
-            GUI.DragWindow(new Rect(0, 0, _windowWidth - ButtonSize - 4, TitleBarHeight));
+            Rect dragRect = new Rect(0, 0, _windowWidth - ButtonSize - 4, TitleBarHeight);
+
+            dragRect = Rect.MinMaxRect(
+                0,
+                0,
+                Mathf.Max(dragRect.xMax, previewRect.xMax),
+                Mathf.Max(dragRect.yMax, previewRect.yMax)
+            );
+
+            if (!(Event.current.type == EventType.MouseDown && Event.current.clickCount == 2))
+            {
+                GUI.DragWindow(dragRect);
+            }
         }
 
         private void DrawTelemetry(Rect previewRect)
