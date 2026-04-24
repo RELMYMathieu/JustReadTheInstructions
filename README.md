@@ -28,7 +28,7 @@
 ---
 
 >[!WARNING]
-> Mac OS has limited compatibility, the mod may not function properly. This is still being looked into.
+> **Mac OS**: Camera streaming works but uses a synchronous GPU readback fallback, as Metal does not support Unity's async readback API. This blocks the main thread briefly each captured frame and may cause minor stuttering at higher stream framerates.
 
 ## Overview
 

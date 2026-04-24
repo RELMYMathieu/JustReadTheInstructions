@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Drag the in-game preview by the camera image (on large screens, it can be difficult to target the title bar with the mouse...)
 - More space for the streaming label
+- Mac camera streaming now works via a synchronous GPU readback fallback (Metal does not support Unity's async readback API)
 
 ## v2.1.0 - 2026-04-22
 

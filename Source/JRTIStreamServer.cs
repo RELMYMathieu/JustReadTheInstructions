@@ -97,6 +97,12 @@ namespace JustReadTheInstructions
             int rtHeight = renderTexture.height;
             int quality = JRTISettings.StreamJpegQuality;
 
+            if (!SystemInfo.supportsAsyncGPUReadback)
+            {
+                CaptureFrameSync(cameraId, renderTexture, rtWidth, rtHeight, quality);
+                return;
+            }
+
             AsyncGPUReadback.Request(renderTexture, 0, TextureFormat.RGB24, (request) =>
             {
                 _captureInFlight[cameraId] = false;
@@ -115,6 +121,36 @@ namespace JustReadTheInstructions
                     if (jpeg != null && _states.TryGetValue(cameraId, out var s2))
                         s2.PushFrame(jpeg);
                 });
+            });
+        }
+
+        private void CaptureFrameSync(int cameraId, RenderTexture renderTexture, int rtWidth, int rtHeight, int quality)
+        {
+            var previous = RenderTexture.active;
+            RenderTexture.active = renderTexture;
+
+            var tex = new Texture2D(rtWidth, rtHeight, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, rtWidth, rtHeight), 0, 0);
+            tex.Apply();
+
+            RenderTexture.active = previous;
+
+            var raw = tex.GetRawTextureData();
+            Destroy(tex);
+
+            _captureInFlight[cameraId] = false;
+
+            if (!_states.TryGetValue(cameraId, out _))
+                return;
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                var jpeg = ImageConversion.EncodeArrayToJPG(
+                    raw, GraphicsFormat.R8G8B8_UNorm,
+                    (uint)rtWidth, (uint)rtHeight, 0, quality);
+
+                if (jpeg != null && _states.TryGetValue(cameraId, out var s2))
+                    s2.PushFrame(jpeg);
             });
         }
 
