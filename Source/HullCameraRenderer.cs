@@ -54,8 +54,6 @@ namespace JustReadTheInstructions
         {
             var config = hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
             return JRTICameraRuntime.ResolveId(hullCamera.part.persistentId, config?.jrtiId ?? 0);
-            var config = hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
-            return JRTICameraRuntime.ResolveId(hullCamera.part.persistentId, config?.jrtiId ?? 0);
         }
 
         private void InitializeRenderTexture()
