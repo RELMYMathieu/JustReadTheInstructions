@@ -340,7 +340,17 @@ namespace JustReadTheInstructions
             if (_hullCamera?.vessel == null)
                 return "Unknown Camera";
 
-            return $"{_hullCamera.vessel.GetDisplayName()}.{_hullCamera.cameraName}";
+            var config = _hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
+            string name = !string.IsNullOrEmpty(config?.jrtiName) ? config.jrtiName : _hullCamera.cameraName;
+            return $"{_hullCamera.vessel.GetDisplayName()}.{name}";
+        }
+
+        public CameraFilter.eCameraMode GetCameraMode()
+        {
+            if (_hullCamera == null)
+                return CameraFilter.eCameraMode.Normal;
+
+            return (CameraFilter.eCameraMode)(_hullCamera?.cameraMode);
         }
 
         public Vessel GetVessel()
