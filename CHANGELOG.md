@@ -5,9 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Unreleased
+## Unreleased
 
-- Cameras can now be named & given a unique ID via the right-click part menu in the VAB - stored in the craft file
+### Added
+
+- Cameras can now be named & given a unique ID via the right-click part menu in the VAB - stored in the craft file, no external config needed
+
+### Fixed
+
+- Opening more than 4 viewer tabs no longer stalls - the status poll in the viewer now only starts after signal loss, eliminating the persistent per-tab connection that was saturating the browser's HTTP/1.1 connection pool
 
 ## v2.2.0 - 2026-04-24
 
@@ -21,10 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docking camera overlay with telemetry
 - A new parameter `FixedPreviewAspectRatio` (boolean) to `settings.cfg`, allowing the in-game camera preview to be forced to a 1:1 aspect ratio
 - Mod version label in settings menu
-
-### Fixed
-
-- Opening more than 4 viewer tabs no longer stalls - the status poll in the viewer now only starts after signal loss, eliminating the persistent per-tab connection that was saturating the browser's HTTP/1.1 connection pool
 - Minimal UI option in settings
 - Fixed preview aspect ratio when `FixedPreviewAspectRatio` is enabled, so it doesn't stretch to fit the container (user setting)
 - Added recording groups to allow recording a select subset of cameras within a group
