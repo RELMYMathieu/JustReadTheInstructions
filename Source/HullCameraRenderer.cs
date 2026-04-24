@@ -54,6 +54,8 @@ namespace JustReadTheInstructions
         {
             var config = hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
             return JRTICameraRuntime.ResolveId(hullCamera.part.persistentId, config?.jrtiId ?? 0);
+            var config = hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
+            return JRTICameraRuntime.ResolveId(hullCamera.part.persistentId, config?.jrtiId ?? 0);
         }
 
         private void InitializeRenderTexture()
@@ -338,17 +340,7 @@ namespace JustReadTheInstructions
             if (_hullCamera?.vessel == null)
                 return "Unknown Camera";
 
-            var config = _hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
-            string name = !string.IsNullOrEmpty(config?.jrtiName) ? config.jrtiName : _hullCamera.cameraName;
-            return $"{_hullCamera.vessel.GetDisplayName()}.{name}";
-        }
-
-        public CameraFilter.eCameraMode GetCameraMode()
-        {
-            if (_hullCamera == null)
-                return CameraFilter.eCameraMode.Normal;
-
-            return (CameraFilter.eCameraMode)(_hullCamera?.cameraMode);
+            return $"{_hullCamera.vessel.GetDisplayName()}.{_hullCamera.cameraName}";
         }
 
         public Vessel GetVessel()
