@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- In-game UI polish pass
+
 ### Added
 
 - Per-camera brightness, contrast, and gamma controls in the web viewer - adjustments are applied server-side so all viewers on the local network see the same image
