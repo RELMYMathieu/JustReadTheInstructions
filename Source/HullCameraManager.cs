@@ -214,6 +214,21 @@ namespace JustReadTheInstructions
 
         public bool HasCamera(int stableId) => _renderers.ContainsKey(stableId);
 
+        public float? GetFov(int stableId)
+            => _renderers.TryGetValue(stableId, out var r) ? r.GetFOV() : (float?)null;
+
+        public float? GetFovMin(int stableId)
+            => _renderers.TryGetValue(stableId, out var r) ? r.GetMinFOV() : (float?)null;
+
+        public float? GetFovMax(int stableId)
+            => _renderers.TryGetValue(stableId, out var r) ? r.GetMaxFOV() : (float?)null;
+
+        public void SetFov(int stableId, float fov)
+        {
+            if (!_renderers.TryGetValue(stableId, out var r)) return;
+            r.SetFieldOfView(Mathf.Clamp(fov, r.GetMinFOV(), r.GetMaxFOV()));
+        }
+
         public int GetOpenCameraCount() => _renderers.Count;
 
         public string GetCameraDisplayName(int stableId)

@@ -81,6 +81,7 @@
 		<Compile Include="JRTIStreamServer.Types.cs" />
 		<Compile Include="JRTICameraConfigModule.cs" />
 		<Compile Include="JRTICameraRuntime.cs" />
+		<Compile Include="CameraImageAdjust.cs" />
 		<Compile Include="JustReadTheInstructions.cs" />
 		<Compile Include="Properties/AssemblyInfo.cs" />
 	</ItemGroup>

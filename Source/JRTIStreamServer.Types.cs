@@ -41,6 +41,28 @@ namespace JustReadTheInstructions
             public byte[] LatestJpeg;
             public readonly object JpegLock = new object();
 
+            public float Brightness;
+            public float Contrast = 1f;
+            public float Gamma = 1f;
+
+            private byte[] _lut;
+            private float _lutBrightness;
+            private float _lutContrast = -1f;
+            private float _lutGamma;
+
+            public bool HasAdjustment => Brightness != 0f || Contrast != 1f || Gamma != 1f;
+
+            public byte[] GetLut()
+            {
+                if (_lut != null && _lutBrightness == Brightness && _lutContrast == Contrast && _lutGamma == Gamma)
+                    return _lut;
+                _lut = CameraImageAdjust.BuildLut(Brightness, Contrast, Gamma);
+                _lutBrightness = Brightness;
+                _lutContrast = Contrast;
+                _lutGamma = Gamma;
+                return _lut;
+            }
+
             private volatile bool _snapshotPending;
 
             public readonly ConcurrentDictionary<Guid, LatestFrameSlot> MjpegClients

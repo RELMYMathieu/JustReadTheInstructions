@@ -7,6 +7,7 @@ import {
     API,
 } from './config.js';
 import { checkStatus } from './api.js';
+import { initControls } from './camera-controls.js';
 
 function getCameraId() {
     const params = new URLSearchParams(location.search);
@@ -27,6 +28,8 @@ function main() {
     const base = API.stream(cameraId);
     img.src = base;
     document.title = `Camera ${cameraId} - JRTI Stream`;
+
+    initControls(cameraId);
 
     const hud = document.getElementById('viewer-hud');
     const hudName = document.getElementById('viewer-hud-name');

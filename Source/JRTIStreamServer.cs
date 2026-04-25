@@ -111,9 +111,12 @@ namespace JustReadTheInstructions
                     return;
 
                 var raw = request.GetData<byte>().ToArray();
+                byte[] lut = s.HasAdjustment ? s.GetLut() : null;
 
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
+                    if (lut != null) CameraImageAdjust.Apply(raw, lut);
+
                     var jpeg = ImageConversion.EncodeArrayToJPG(
                         raw, GraphicsFormat.R8G8B8_UNorm,
                         (uint)rtWidth, (uint)rtHeight, 0, quality);
@@ -140,11 +143,15 @@ namespace JustReadTheInstructions
 
             _captureInFlight[cameraId] = false;
 
-            if (!_states.TryGetValue(cameraId, out _))
+            if (!_states.TryGetValue(cameraId, out var state))
                 return;
+
+            byte[] lut = state.HasAdjustment ? state.GetLut() : null;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
+                if (lut != null) CameraImageAdjust.Apply(raw, lut);
+
                 var jpeg = ImageConversion.EncodeArrayToJPG(
                     raw, GraphicsFormat.R8G8B8_UNorm,
                     (uint)rtWidth, (uint)rtHeight, 0, quality);

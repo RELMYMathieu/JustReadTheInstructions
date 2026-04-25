@@ -48,6 +48,20 @@ export function finalizeRecordingBeacon(sessionId, filename) {
     } catch { }
 }
 
+export async function getCameraSettings(cameraId) {
+    const res = await fetch(API.settings(cameraId));
+    if (!res.ok) throw new Error(`settings fetch failed: ${res.status}`);
+    return res.json();
+}
+
+export async function setCameraSettings(cameraId, settings) {
+    await fetch(API.settings(cameraId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+    });
+}
+
 export function abortRecording(sessionId, filename) {
     return fetch(`/recordings/${sessionId}/abort?name=${encodeURIComponent(filename)}`, {
         method: 'POST',
