@@ -269,7 +269,8 @@ namespace JustReadTheInstructions
             GUILayout.Space(2);
             DrawToggle(ref _fixedPreviewAspectRatio, "Fixed preview aspect ratio (square preview window)");
             GUILayout.Space(2);
-            DrawToggle(ref _minimalUI, "Open camera windows in minimal mode by default (double-click the camera preview to toggle)");
+            DrawToggle(ref _minimalUI, "Camera windows open minimized by default");
+            GUILayout.Label("Double-click the preview to toggle per window.", _descriptionStyle);
             GUILayout.Space(4);
             GUILayout.Label("Render resolution and AA apply on next camera open.", _noteStyle);
             GUILayout.Label("Stream port change requires game restart.", _noteStyle);
