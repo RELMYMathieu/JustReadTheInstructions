@@ -385,7 +385,7 @@ namespace JustReadTheInstructions
             var b = new byte[width];
             long v = val;
             for (int i = width - 1; i > 0; i--) { b[i] = (byte)(v & 0xFF); v >>= 8; }
-            b[0] = (byte)((v & (marker - 1)) | marker);
+            b[0] = (byte)((v & (uint)(marker - 1)) | (uint)marker);
             return b;
         }
 

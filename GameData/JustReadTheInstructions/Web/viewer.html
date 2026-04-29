@@ -12,6 +12,35 @@
         <span class="viewer-hud-live"><span class="viewer-hud-dot"></span>LIVE</span>
         <span class="viewer-hud-name" id="viewer-hud-name"></span>
     </div>
+    <div id="viewer-controls" class="viewer-controls">
+        <button id="controls-toggle" class="controls-toggle" title="Image controls">&#9881;</button>
+        <div id="controls-panel" class="controls-panel" hidden>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Brightness</span>
+                <input type="range" id="ctrl-brightness" class="ctrl-slider" min="-1" max="1" step="0.01" value="0">
+                <span class="ctrl-val" id="val-brightness">0.00</span>
+                <button class="ctrl-reset-btn" data-reset="brightness" data-default="0">&#8635;</button>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Contrast</span>
+                <input type="range" id="ctrl-contrast" class="ctrl-slider" min="0" max="3" step="0.01" value="1">
+                <span class="ctrl-val" id="val-contrast">1.00</span>
+                <button class="ctrl-reset-btn" data-reset="contrast" data-default="1">&#8635;</button>
+            </div>
+            <div class="ctrl-row">
+                <span class="ctrl-label">Gamma</span>
+                <input type="range" id="ctrl-gamma" class="ctrl-slider" min="0.1" max="5" step="0.01" value="1">
+                <span class="ctrl-val" id="val-gamma">1.00</span>
+                <button class="ctrl-reset-btn" data-reset="gamma" data-default="1">&#8635;</button>
+            </div>
+            <div class="ctrl-row" id="fov-row" hidden>
+                <span class="ctrl-label">FOV</span>
+                <input type="range" id="ctrl-fov" class="ctrl-slider" min="1" max="180" step="1" value="60">
+                <span class="ctrl-val" id="val-fov">60°</span>
+                <button class="ctrl-reset-btn" data-reset="fov">&#8635;</button>
+            </div>
+        </div>
+    </div>
     <script type="module" src="/js/viewer.js"></script>
 </body>
 </html>

@@ -9,9 +9,9 @@ namespace JustReadTheInstructions
     public class JRTIMainGUI : MonoBehaviour
     {
         private const int WindowId = 1900;
-        private const float WindowWidth = 500;
-        private const float MaxCameraListHeight = 280f;
-        private const float EntryHeight = 28f;
+        private const float WindowWidth = 520;
+        private const float MaxCameraListHeight = 320f;
+        private const float EntryHeight = 34f;
         private const float CameraListRefreshInterval = 1f;
 
         private static Texture2D _appIcon;
@@ -87,7 +87,7 @@ namespace JustReadTheInstructions
 
             _titleStyle = new GUIStyle(skin.label)
             {
-                fontSize = 11,
+                fontSize = 12,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
                 normal = { textColor = Color.white }
@@ -95,38 +95,38 @@ namespace JustReadTheInstructions
 
             _buttonStyle = new GUIStyle(skin.button)
             {
-                fontSize = 11,
+                fontSize = 12,
                 alignment = TextAnchor.MiddleLeft,
-                padding = new RectOffset(8, 8, 4, 4)
+                padding = new RectOffset(10, 10, 6, 6)
             };
 
             _streamBtnStyle = new GUIStyle(skin.button)
             {
-                fontSize = 11,
+                fontSize = 12,
                 alignment = TextAnchor.MiddleCenter,
-                padding = new RectOffset(4, 4, 4, 4),
+                padding = new RectOffset(6, 6, 6, 6),
                 normal = { textColor = new Color(0.4f, 1f, 0.4f) },
                 hover = { textColor = new Color(0.4f, 1f, 0.4f) }
             };
 
             _stopBtnStyle = new GUIStyle(skin.button)
             {
-                fontSize = 11,
+                fontSize = 12,
                 alignment = TextAnchor.MiddleCenter,
-                padding = new RectOffset(4, 4, 4, 4),
+                padding = new RectOffset(6, 6, 6, 6),
                 normal = { textColor = new Color(1f, 0.4f, 0.4f) },
                 hover = { textColor = new Color(1f, 0.4f, 0.4f) }
             };
 
             _labelStyle = new GUIStyle(skin.label)
             {
-                fontSize = 11,
+                fontSize = 12,
                 normal = { textColor = Color.white }
             };
 
             _dimLabelStyle = new GUIStyle(skin.label)
             {
-                fontSize = 10,
+                fontSize = 11,
                 alignment = TextAnchor.MiddleCenter,
                 normal = { textColor = Color.gray }
             };
@@ -146,19 +146,19 @@ namespace JustReadTheInstructions
             int openCount = HullCameraManager.Instance?.GetOpenCameraCount() ?? 0;
             int totalCount = _cachedAllCameras.Count;
 
-            GUILayout.Space(2);
+            GUILayout.Space(6);
             GUILayout.Label($"Cameras: {openCount} open / {totalCount} total", _dimLabelStyle);
-            GUILayout.Space(4);
+            GUILayout.Space(8);
 
             DrawCameraList();
 
-            GUILayout.Space(6);
+            GUILayout.Space(8);
 
             DrawActionButtons(openCount);
 
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             GUILayout.Label($"localhost:{JRTISettings.StreamPort}", _dimLabelStyle);
-            GUILayout.Space(4);
+            GUILayout.Space(6);
 
             GUI.DragWindow(new Rect(0, 0, WindowWidth, 24));
         }
@@ -193,7 +193,9 @@ namespace JustReadTheInstructions
 
             int stableId = HullCameraRenderer.GetStableId(camera);
             string vesselName = camera.vessel.GetDisplayName();
-            string displayName = $"{vesselName}.{camera.cameraName}";
+            var config = camera.part.FindModuleImplementing<JRTICameraConfigModule>();
+            string cameraName = !string.IsNullOrEmpty(config?.jrtiName) ? config.jrtiName : camera.cameraName;
+            string displayName = $"{vesselName}.{cameraName}";
             bool streamOnly = HullCameraManager.Instance?.IsStreamOnly(camera) ?? false;
             bool streaming = JRTIStreamServer.Instance?.IsStreaming(stableId) ?? false;
 
@@ -227,6 +229,7 @@ namespace JustReadTheInstructions
             {
                 if (GUILayout.Button("Stream All", _buttonStyle))
                     StreamAllCameras();
+                GUILayout.Space(4);
             }
 
             GUILayout.BeginHorizontal();

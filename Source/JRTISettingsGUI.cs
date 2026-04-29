@@ -15,7 +15,7 @@ namespace JustReadTheInstructions
         private bool _isVisible;
         private bool _lastHotkey8State;
         private bool _lastHotkey9State;
-        private Rect _windowRect = new Rect(200, 80, 420, 540);
+        private Rect _windowRect = new Rect(200, 80, 460, 580);
         private Vector2 _scrollPosition;
         private const int WindowId = 1902;
 
@@ -156,39 +156,40 @@ namespace JustReadTheInstructions
         private void InitStyles()
         {
             var skin = HighLogic.Skin ?? GUI.skin;
-            _labelStyle = new GUIStyle(skin.label) { fontSize = 11, normal = { textColor = Color.white } };
-            _fieldStyle = new GUIStyle(skin.textField) { fontSize = 11 };
-            _buttonStyle = new GUIStyle(skin.button) { fontSize = 11 };
+            _labelStyle = new GUIStyle(skin.label) { fontSize = 12, normal = { textColor = Color.white } };
+            _fieldStyle = new GUIStyle(skin.textField) { fontSize = 12 };
+            _buttonStyle = new GUIStyle(skin.button) { fontSize = 12 };
             _sectionHeaderStyle = new GUIStyle(skin.button)
             {
-                fontSize = 13,
+                fontSize = 14,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleLeft,
+                padding = new RectOffset(10, 10, 7, 7),
                 normal = { textColor = new Color(0.8f, 0.9f, 1f) }
             };
-            _toggleStyle = new GUIStyle(skin.toggle) { fontSize = 11, margin = new RectOffset(4, 4, 4, 4) };
+            _toggleStyle = new GUIStyle(skin.toggle) { fontSize = 12, margin = new RectOffset(4, 4, 6, 6) };
             _descriptionStyle = new GUIStyle(skin.label)
             {
-                fontSize = 10,
+                fontSize = 11,
                 wordWrap = true,
                 normal = { textColor = Color.gray }
             };
             _noteStyle = new GUIStyle(skin.label)
             {
-                fontSize = 10,
+                fontSize = 11,
                 wordWrap = true,
                 normal = { textColor = new Color(1f, 1f, 0.65f) }
             };
             _savedStyle = new GUIStyle(skin.label)
             {
-                fontSize = 11,
+                fontSize = 12,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleRight,
                 normal = { textColor = new Color(0.4f, 1f, 0.4f) }
             };
             _warningStyle = new GUIStyle(skin.label)
             {
-                fontSize = 10,
+                fontSize = 11,
                 wordWrap = true,
                 normal = { textColor = new Color(1f, 0.7f, 0.4f) }
             };
@@ -208,11 +209,11 @@ namespace JustReadTheInstructions
             _scrollPosition = GUILayout.BeginScrollView(_scrollPosition, false, true);
 
             DrawSection("▶ Stream / Capture", ref _secStream, DrawStreamSection);
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             DrawSection("▶ Visual Mod Integrations", ref _secIntegrations, DrawIntegrationsSection);
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             DrawSection("▶ Diagnostics", ref _secDiagnostics, DrawDiagnosticsSection);
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             DrawSection("▶ Troubleshooting", ref _secTroubleshooting, DrawTroubleshootingSection);
 
             GUILayout.EndScrollView();
@@ -244,29 +245,41 @@ namespace JustReadTheInstructions
 
         private void DrawStreamSection()
         {
+            GUILayout.Space(2);
             DrawField("Port", ref _streamPort, "f_port");
+            GUILayout.Space(2);
             DrawField("JPEG Quality  (1-100)", ref _jpegQuality, "f_quality");
+            GUILayout.Space(2);
             DrawField("Max FPS", ref _maxFps, "f_fps");
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             DrawField("Render Width", ref _renderWidth, "f_width");
+            GUILayout.Space(2);
             DrawField("Render Height", ref _renderHeight, "f_height");
+            GUILayout.Space(2);
             DrawField("Anti-Aliasing  (0=off / 1/2/4/8)", ref _antiAliasing, "f_aa");
+            GUILayout.Space(2);
             DrawField("Max Open Cameras", ref _maxOpenCameras, "f_cameras");
-            GUILayout.Space(4);
+            GUILayout.Space(6);
 
             DrawToggle(ref _renderEveryOtherFrame, "Render every other frame (recommended)");
             if (!_renderEveryOtherFrame)
                 GUILayout.Label("⚠ Rendering every frame doubles per-camera cost. Only viable on a top-tier GPU.", _warningStyle);
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             DrawToggle(ref _enableDockingOverlay, "Render overlay with telemetry on docking cameras");
+            GUILayout.Space(2);
             DrawToggle(ref _fixedPreviewAspectRatio, "Fixed preview aspect ratio (square preview window)");
-            DrawToggle(ref _minimalUI, "Minimal UI by default (double-click preview to toggle)");
+            GUILayout.Space(2);
+            DrawToggle(ref _minimalUI, "Camera windows open minimized by default");
+            GUILayout.Label("Double-click the preview to toggle per window.", _descriptionStyle);
+            GUILayout.Space(4);
             GUILayout.Label("Render resolution and AA apply on next camera open.", _noteStyle);
             GUILayout.Label("Stream port change requires game restart.", _noteStyle);
+            GUILayout.Space(2);
         }
 
         private void DrawIntegrationsSection()
         {
+            GUILayout.Space(2);
             DrawIntegrationToggle(
                 "Deferred Rendering",
                 JRTISettings.EnableDeferred,
@@ -274,7 +287,7 @@ namespace JustReadTheInstructions
                 DeferredIntegration.IsAvailable,
                 "Deferred shading pipeline for JRTI cameras"
             );
-            GUILayout.Space(3);
+            GUILayout.Space(5);
             DrawIntegrationToggle(
                 "TUFX Post-Processing",
                 JRTISettings.EnableTUFX,
@@ -282,7 +295,7 @@ namespace JustReadTheInstructions
                 TUFXIntegration.IsAvailable,
                 "TUFX post-processing effects (bloom, tone-mapping, etc.)"
             );
-            GUILayout.Space(3);
+            GUILayout.Space(5);
             DrawIntegrationToggle(
                 "Scatterer (Ocean & Atmosphere)",
                 JRTISettings.EnableScatterer,
@@ -290,7 +303,7 @@ namespace JustReadTheInstructions
                 ScattererIntegration.IsAvailable,
                 "Scatterer atmospheric scattering - disables MSAA on JRTI cameras"
             );
-            GUILayout.Space(6);
+            GUILayout.Space(8);
             DrawIntegrationToggle(
                 "EVE (Clouds & Water)",
                 JRTISettings.EnableEVE,
@@ -298,7 +311,7 @@ namespace JustReadTheInstructions
                 EVEIntegration.IsAvailable,
                 "Environmental Visual Enhancements - clouds, water, atmospheric effects"
             );
-            GUILayout.Space(3);
+            GUILayout.Space(5);
             DrawIntegrationToggle(
                 "Parallax (Terrain Scatter)",
                 JRTISettings.EnableParallax,
@@ -306,7 +319,7 @@ namespace JustReadTheInstructions
                 ParallaxIntegration.IsAvailable,
                 "Parallax-Continued - grass, rocks, trees near camera (can be heavy)"
             );
-            GUILayout.Space(3);
+            GUILayout.Space(5);
             DrawIntegrationToggle(
                 "Firefly (Re-entry Effects)",
                 JRTISettings.EnableFirefly,
@@ -314,7 +327,7 @@ namespace JustReadTheInstructions
                 FireflyIntegration.IsAvailable,
                 "Firefly - atmospheric re-entry plasma effects near camera"
             );
-            GUILayout.Space(6);
+            GUILayout.Space(8);
             DrawIntegrationToggle(
                 "HullcamVDS Camera Filter",
                 JRTISettings.EnableHullcamFilter,
@@ -322,12 +335,14 @@ namespace JustReadTheInstructions
                 HullcamFilterIntegration.IsAvailable,
                 "Applies the active Hullcam filter/overlay (night-vision, CRT, etc.) to the stream frame"
             );
-            GUILayout.Space(4);
+            GUILayout.Space(6);
             GUILayout.Label("Changes apply immediately to all open cameras. Re-open a camera to fully reinitialize its integration stack.", _noteStyle);
+            GUILayout.Space(2);
         }
 
         private void DrawDiagnosticsSection()
         {
+            GUILayout.Space(2);
             int openCameras = HullCameraManager.Instance?.GetOpenCameraCount() ?? 0;
             GUILayout.Label($"Open cameras: {openCameras}", _labelStyle);
 
@@ -336,12 +351,13 @@ namespace JustReadTheInstructions
 
             GUILayout.Label($"HullcamFilter discovered: {HullcamFilterIntegration.IsAvailable}", _labelStyle);
 
-            GUILayout.Space(6);
+            GUILayout.Space(8);
             if (GUILayout.Button("Print Diagnostics to Log", _buttonStyle))
                 PrintDiagnostics();
 
             GUILayout.Space(4);
             GUILayout.Label("Output goes to KSP.log.", _noteStyle);
+            GUILayout.Space(2);
         }
 
         private void DrawTroubleshootingSection()
@@ -369,6 +385,7 @@ namespace JustReadTheInstructions
         private void DrawIntegrationToggle(string name, bool enabled, System.Action<bool> setEnabled, bool available, string description)
         {
             GUILayout.BeginVertical("box");
+            GUILayout.Space(2);
             GUILayout.BeginHorizontal();
 
             bool newValue = GUILayout.Toggle(enabled, name, _toggleStyle);
@@ -396,7 +413,9 @@ namespace JustReadTheInstructions
             }
 
             GUILayout.EndHorizontal();
+            GUILayout.Space(2);
             GUILayout.Label(description, _descriptionStyle);
+            GUILayout.Space(2);
             GUILayout.EndVertical();
         }
 

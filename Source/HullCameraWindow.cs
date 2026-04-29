@@ -163,6 +163,9 @@ namespace JustReadTheInstructions
                 HighLogic.Skin.window
             );
 
+            _windowRect.width = _windowWidth;
+            _windowRect.height = _windowHeight;
+
             ClampWindowToScreen();
         }
 
@@ -199,9 +202,6 @@ namespace JustReadTheInstructions
             {
                 _minimalUI = !_minimalUI;
                 RecalculateWindowSize();
-                _windowRect.width = _windowWidth;
-                _windowRect.height = _windowHeight;
-
                 Event.current.Use();
             }
 
@@ -341,8 +341,6 @@ namespace JustReadTheInstructions
                     );
 
                     RecalculateWindowSize();
-                    _windowRect.width = _windowWidth;
-                    _windowRect.height = _windowHeight;
                 }
             }
         }

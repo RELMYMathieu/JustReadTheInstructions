@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- In-game UI polish pass - more spacious layouts, larger text, roomier buttons and camera controls
+
+### Added
+
+- Per-camera brightness, contrast, and gamma controls in the web viewer - adjustments are applied server-side so all viewers on the local network see the same image
+- Per-camera FOV control in the web viewer (shown when the camera reports a valid FOV range from KSP)
+
+### Fixed
+
+- Camera windows now open in full UI mode by default - minimal mode (preview only) can be enabled in settings or toggled per-window with a double-click
+- Double-clicking the camera preview to toggle minimal mode now correctly resizes the window immediately (used to bug out and not properly resize until the next manual resize from the user)
+
+## v2.2.0.1 - 2026-04-24
+
+### Added
+
+- Cameras can now be named & given a unique ID via the right-click part menu in the VAB - stored in the craft file, no external config needed
+
+### Fixed
+
+- Opening more than 4 viewer tabs no longer stalls - the status poll in the viewer now only starts after signal loss, eliminating the persistent per-tab connection that was saturating the browser's HTTP/1.1 connection pool
+- WebM VINT encoding bitwise-or on sign-extended operand
+
+
 ## v2.2.0 - 2026-04-24
 
 ### Changed

@@ -7,6 +7,7 @@ import {
     API,
 } from './config.js';
 import { checkStatus } from './api.js';
+import { initControls } from './camera-controls.js';
 
 function getCameraId() {
     const params = new URLSearchParams(location.search);
@@ -27,6 +28,8 @@ function main() {
     const base = API.stream(cameraId);
     img.src = base;
     document.title = `Camera ${cameraId} - JRTI Stream`;
+
+    initControls(cameraId);
 
     const hud = document.getElementById('viewer-hud');
     const hudName = document.getElementById('viewer-hud-name');
@@ -54,6 +57,10 @@ function main() {
             img.onerror = null;
             img.src = LOS_FALLBACK_IMAGE_URL;
         };
+        setInterval(async () => {
+            const s = await checkStatus(cameraId);
+            if (s.ok) location.reload();
+        }, VIEWER_STATUS_POLL_MS);
     };
 
     const onError = () => {
@@ -77,21 +84,6 @@ function main() {
 
     img.addEventListener('error', onError);
     img.addEventListener('load', onLoad);
-
-    setInterval(async () => {
-        if (losMode) {
-            const s = await checkStatus(cameraId);
-            if (s.ok) location.reload();
-            return;
-        }
-        const s = await checkStatus(cameraId);
-        if (s.status === 404) {
-            if (!offAt) offAt = Date.now();
-            if (Date.now() - offAt >= VIEWER_LOS_DELAY_MS) setLosImage();
-        } else if (s.ok) {
-            offAt = 0;
-        }
-    }, VIEWER_STATUS_POLL_MS);
 }
 
 main();

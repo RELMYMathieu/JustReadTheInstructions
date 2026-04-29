@@ -99,6 +99,7 @@ namespace JustReadTheInstructions
                 case "stream": ServeMjpeg(ctx, state); break;
                 case "preview": ServePreviewMjpeg(ctx, state); break;
                 case "status": ServeText(ctx, "ok", "text/plain"); break;
+                case "settings": ServeOrUpdateSettings(ctx, cameraId, state); break;
                 default: ServeError(ctx, 404, "Unknown action"); break;
             }
         }
@@ -170,6 +171,65 @@ namespace JustReadTheInstructions
                 slot.Dispose();
                 try { ctx.Response.Close(); } catch { }
             }
+        }
+
+        private static void ServeOrUpdateSettings(HttpListenerContext ctx, int cameraId, CameraStreamState state)
+        {
+            if (ctx.Request.HttpMethod == "POST")
+            {
+                string body;
+                using (var reader = new System.IO.StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                    body = reader.ReadToEnd();
+
+                if (TryParseJsonFloat(body, "brightness", out var b))
+                    state.Brightness = UnityEngine.Mathf.Clamp(b, -1f, 1f);
+                if (TryParseJsonFloat(body, "contrast", out var c))
+                    state.Contrast = UnityEngine.Mathf.Clamp(c, 0f, 3f);
+                if (TryParseJsonFloat(body, "gamma", out var g))
+                    state.Gamma = UnityEngine.Mathf.Clamp(g, 0.1f, 5f);
+                if (TryParseJsonFloat(body, "fov", out var fov))
+                    HullCameraManager.Instance?.SetFov(cameraId, fov);
+
+                ctx.Response.StatusCode = 200;
+                ctx.Response.Close();
+                return;
+            }
+
+            var ic = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new StringBuilder("{");
+            sb.Append($"\"brightness\":{state.Brightness.ToString("F2", ic)},");
+            sb.Append($"\"contrast\":{state.Contrast.ToString("F2", ic)},");
+            sb.Append($"\"gamma\":{state.Gamma.ToString("F2", ic)}");
+
+            float? fovVal = HullCameraManager.Instance?.GetFov(cameraId);
+            float? fovMin = HullCameraManager.Instance?.GetFovMin(cameraId);
+            float? fovMax = HullCameraManager.Instance?.GetFovMax(cameraId);
+            if (fovVal.HasValue && fovMax.GetValueOrDefault() > fovMin.GetValueOrDefault())
+            {
+                sb.Append($",\"fov\":{fovVal.Value.ToString("F1", ic)}");
+                sb.Append($",\"fovMin\":{fovMin.Value.ToString("F1", ic)}");
+                sb.Append($",\"fovMax\":{fovMax.Value.ToString("F1", ic)}");
+            }
+
+            sb.Append("}");
+            ServeText(ctx, sb.ToString(), "application/json");
+        }
+
+        private static bool TryParseJsonFloat(string json, string key, out float value)
+        {
+            value = 0f;
+            var pattern = $"\"{key}\"";
+            int idx = json.IndexOf(pattern, StringComparison.Ordinal);
+            if (idx < 0) return false;
+            idx += pattern.Length;
+            while (idx < json.Length && (json[idx] == ' ' || json[idx] == ':')) idx++;
+            int start = idx;
+            while (idx < json.Length && (json[idx] == '-' || json[idx] == '.' || char.IsDigit(json[idx]))) idx++;
+            return float.TryParse(
+                json.Substring(start, idx - start),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out value);
         }
 
         private static void ServeText(HttpListenerContext ctx, string text, string contentType)

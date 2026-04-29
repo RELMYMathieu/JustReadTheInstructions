@@ -23,6 +23,7 @@ export const API = Object.freeze({
     snapshot: (id) => `/camera/${id}/snapshot?t=${Date.now()}`,
     stream: (id) => `/camera/${id}/stream`,
     status: (id) => `/camera/${id}/status`,
+    settings: (id) => `/camera/${id}/settings`,
     viewer: (id) => `/viewer.html?id=${id}`,
     recordingAppend: (sessionId, filename) =>
         `/recordings/${sessionId}/append?name=${encodeURIComponent(filename)}`,
