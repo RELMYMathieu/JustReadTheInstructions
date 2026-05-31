@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **(Experimental)** Scatterer sun flare now renders through JRTI cameras - the per-camera sun flare hook is mirrored onto our cameras via reflection so the flare stops being culled on the JRTI feed. Requires Scatterer integration enabled. New this beta and lightly tested - please report flares that fail to appear at some sun angles, look misplaced, or affect the main view
+- **(Experimental)** Scatterer sun flare now renders through JRTI cameras - the per-camera sun flare hook is mirrored onto our cameras via reflection so the flare stops being culled on the JRTI feed. Requires Scatterer integration enabled. This beta is lightly tested - please report flares that fail to appear at some sun angles, look misplaced, or affect the main view
 
 ### Fixed
 
