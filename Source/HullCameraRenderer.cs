@@ -32,6 +32,7 @@ namespace JustReadTheInstructions
         private bool _parallaxApplied;
         private bool _fireflyApplied;
         private bool _scattererApplied;
+        private bool _farPqsReady;
 
         private DockingCameraOverlay _dockingOverlay;
 
@@ -164,17 +165,7 @@ namespace JustReadTheInstructions
             var camera = camObj.AddComponent<Camera>();
             camera.CopyFrom(mainFarPqsCam);
 
-            camera.useOcclusionCulling = false;
-            camera.name = "JRTI_FarPQS";
-            camera.transform.parent = nearCamera.transform.parent;
-            camera.transform.localPosition = nearCamera.transform.localPosition;
-            camera.transform.localRotation = nearCamera.transform.localRotation;
-            camera.transform.localScale = nearCamera.transform.localScale;
-
-            camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = TargetTexture;
-            camera.allowHDR = JRTISettings.UseHDR;
-            camera.allowMSAA = !ScattererIntegration.IsAvailable;
+            ConfigureFarPqsCamera(camera);
 
             if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
@@ -188,6 +179,26 @@ namespace JustReadTheInstructions
             camObj.AddComponent<CanvasFix>();
 
             _cameras[FarPqsCameraIndex] = camera;
+            camera.enabled = false;
+        }
+
+        private void ConfigureFarPqsCamera(Camera camera)
+        {
+            var nearCamera = _cameras[NearCameraIndex];
+            if (camera == null || nearCamera == null)
+                return;
+
+            camera.useOcclusionCulling = false;
+            camera.name = "JRTI_FarPQS";
+            camera.transform.parent = nearCamera.transform.parent;
+            camera.transform.localPosition = nearCamera.transform.localPosition;
+            camera.transform.localRotation = nearCamera.transform.localRotation;
+            camera.transform.localScale = nearCamera.transform.localScale;
+
+            camera.fieldOfView = _hullCamera.cameraFoV;
+            camera.targetTexture = TargetTexture;
+            camera.allowHDR = JRTISettings.UseHDR;
+            camera.allowMSAA = !ScattererIntegration.IsAvailable;
             camera.enabled = false;
         }
 
@@ -308,6 +319,8 @@ namespace JustReadTheInstructions
 
             if (!TargetTexture.IsCreated()) TargetTexture.Create();
 
+            SynchronizeFarPqsCamera();
+
             if (_parallaxApplied) RenderParallaxScatters();
 
             StripRaymarchedLightBuffers();
@@ -318,6 +331,9 @@ namespace JustReadTheInstructions
 
             for (int i = _cameras.Length - 1; i >= 0; i--)
             {
+                if (i == FarPqsCameraIndex && !_farPqsReady)
+                    continue;
+
                 var camera = _cameras[i];
                 if (camera == null) continue;
                 camera.targetTexture = TargetTexture;
@@ -337,6 +353,27 @@ namespace JustReadTheInstructions
                 _dockingOverlay.Render(TargetTexture);
 
             JRTIStreamServer.Instance?.TryCaptureFrame(InstanceId, TargetTexture);
+        }
+
+        private void SynchronizeFarPqsCamera()
+        {
+            _farPqsReady = false;
+
+            var mainFarPqsCam = FindCameraByName("Camera 01", logIfMissing: false);
+            if (mainFarPqsCam == null || !mainFarPqsCam.enabled || !mainFarPqsCam.gameObject.activeInHierarchy)
+                return;
+
+            if (_cameras[FarPqsCameraIndex] == null)
+            {
+                SetupFarPqsCamera();
+            }
+            else
+            {
+                _cameras[FarPqsCameraIndex].CopyFrom(mainFarPqsCam);
+                ConfigureFarPqsCamera(_cameras[FarPqsCameraIndex]);
+            }
+
+            _farPqsReady = _cameras[FarPqsCameraIndex] != null;
         }
 
         private void RenderParallaxScatters()
