@@ -21,27 +21,33 @@ namespace JustReadTheInstructions
 
         void OnEnable()
         {
-            if (!_initialized)
-                Initialize();
+            EnsureInitialized();
         }
 
-        private static void Initialize()
+        private static bool EnsureInitialized()
         {
-            _initialized = true;
+            var mainCamera = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
+            if (_initialized && _mainCamera == mainCamera && IsAlive(_scattererInstance))
+                return true;
 
+            return Initialize(mainCamera);
+        }
+
+        private static bool Initialize(Camera mainCamera)
+        {
             try
             {
                 var assembly = AssemblyLoader.loadedAssemblies
                     .FirstOrDefault(a => a.name == "Scatterer")?.assembly;
 
                 if (assembly == null)
-                    return;
+                    return false;
 
                 var scattererType = assembly.GetType("Scatterer.Scatterer");
                 if (scattererType == null)
                 {
                     Debug.LogWarning("[JRTI-CameraSwap]: Scatterer.Scatterer type not found");
-                    return;
+                    return false;
                 }
 
                 var instanceProp = scattererType.GetProperty("Instance",
@@ -52,7 +58,7 @@ namespace JustReadTheInstructions
                 if (_scattererInstance == null)
                 {
                     Debug.LogWarning("[JRTI-CameraSwap]: Scatterer.Instance is null");
-                    return;
+                    return false;
                 }
 
                 _nearCameraField = scattererType.GetField("nearCamera",
@@ -61,21 +67,39 @@ namespace JustReadTheInstructions
                 if (_nearCameraField == null)
                 {
                     Debug.LogWarning("[JRTI-CameraSwap]: nearCamera field not found");
-                    return;
+                    return false;
                 }
 
-                _mainCamera = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
+                if (mainCamera == null)
+                    return false;
+
+                _mainCamera = mainCamera;
+                _initialized = true;
                 Debug.Log("[JRTI-CameraSwap]: Ready - will swap Scatterer.Instance.nearCamera in OnPreCull");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[JRTI-CameraSwap]: Init failed: {ex.Message}");
+                _initialized = false;
+                return false;
             }
+        }
+
+        private static bool IsAlive(object value)
+        {
+            if (value == null)
+                return false;
+
+            var unityObject = value as UnityEngine.Object;
+            return unityObject == null
+                ? ReferenceEquals(unityObject, null)
+                : unityObject != null;
         }
 
         void OnPreCull()
         {
-            if (_scattererInstance == null || _nearCameraField == null)
+            if (!EnsureInitialized() || _nearCameraField == null)
                 return;
 
             _nearCameraField.SetValue(_scattererInstance, _camera);
@@ -83,7 +107,7 @@ namespace JustReadTheInstructions
 
         void OnPostRender()
         {
-            if (_scattererInstance == null || _nearCameraField == null)
+            if (!_initialized || !IsAlive(_scattererInstance) || _nearCameraField == null)
                 return;
 
             if (_mainCamera != null)

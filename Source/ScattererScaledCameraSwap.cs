@@ -29,27 +29,33 @@ namespace JustReadTheInstructions
 
         void OnEnable()
         {
-            if (!_initialized)
-                Initialize();
+            EnsureInitialized();
         }
 
-        private static void Initialize()
+        private static bool EnsureInitialized()
         {
-            _initialized = true;
+            var scaledCamera = Camera.allCameras.FirstOrDefault(c => c.name == "Camera ScaledSpace");
+            if (_initialized && _mainScaledCamera == scaledCamera && IsAlive(_scattererInstance))
+                return true;
 
+            return Initialize(scaledCamera);
+        }
+
+        private static bool Initialize(Camera scaledCamera)
+        {
             try
             {
                 var assembly = AssemblyLoader.loadedAssemblies
                     .FirstOrDefault(a => a.name == "Scatterer")?.assembly;
 
                 if (assembly == null)
-                    return;
+                    return false;
 
                 var scattererType = assembly.GetType("Scatterer.Scatterer");
                 if (scattererType == null)
                 {
                     Debug.LogWarning("[JRTI-ScaledSwap]: Scatterer.Scatterer type not found");
-                    return;
+                    return false;
                 }
 
                 var instanceProp = scattererType.GetProperty("Instance",
@@ -60,7 +66,7 @@ namespace JustReadTheInstructions
                 if (_scattererInstance == null)
                 {
                     Debug.LogWarning("[JRTI-ScaledSwap]: Scatterer.Instance is null");
-                    return;
+                    return false;
                 }
 
                 foreach (var name in _candidateFieldNames)
@@ -79,21 +85,39 @@ namespace JustReadTheInstructions
                 if (_scaledCameraField == null)
                 {
                     Debug.LogWarning("[JRTI-ScaledSwap]: No scaled-space camera field found - swap disabled");
-                    return;
+                    return false;
                 }
 
-                _mainScaledCamera = Camera.allCameras.FirstOrDefault(c => c.name == "Camera ScaledSpace");
+                if (scaledCamera == null)
+                    return false;
+
+                _mainScaledCamera = scaledCamera;
+                _initialized = true;
                 Debug.Log("[JRTI-ScaledSwap]: Ready");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[JRTI-ScaledSwap]: Init failed: {ex.Message}");
+                _initialized = false;
+                return false;
             }
+        }
+
+        private static bool IsAlive(object value)
+        {
+            if (value == null)
+                return false;
+
+            var unityObject = value as UnityEngine.Object;
+            return unityObject == null
+                ? ReferenceEquals(unityObject, null)
+                : unityObject != null;
         }
 
         void OnPreCull()
         {
-            if (_scattererInstance == null || _scaledCameraField == null)
+            if (!EnsureInitialized() || _scaledCameraField == null)
                 return;
 
             _scaledCameraField.SetValue(_scattererInstance, _camera);
@@ -101,7 +125,7 @@ namespace JustReadTheInstructions
 
         void OnPostRender()
         {
-            if (_scattererInstance == null || _scaledCameraField == null)
+            if (!_initialized || !IsAlive(_scattererInstance) || _scaledCameraField == null)
                 return;
 
             if (_mainScaledCamera != null)

@@ -11,7 +11,7 @@ namespace JustReadTheInstructions
     public class HullCameraRenderer
     {
         private readonly MuMechModuleHullCamera _hullCamera;
-        private readonly Camera[] _cameras = new Camera[3];
+        private readonly Camera[] _cameras = new Camera[4];
         private readonly Dictionary<Light, CommandBuffer> _strippedRaymarchedBuffers = new Dictionary<Light, CommandBuffer>();
         private int _frameCount;
 
@@ -22,8 +22,9 @@ namespace JustReadTheInstructions
         public int InstanceId { get; }
 
         private const int NearCameraIndex = 0;
-        private const int ScaledCameraIndex = 1;
-        private const int GalaxyCameraIndex = 2;
+        private const int FarPqsCameraIndex = 1;
+        private const int ScaledCameraIndex = 2;
+        private const int GalaxyCameraIndex = 3;
 
         private bool _deferredApplied;
         private bool _tufxApplied;
@@ -31,6 +32,7 @@ namespace JustReadTheInstructions
         private bool _parallaxApplied;
         private bool _fireflyApplied;
         private bool _scattererApplied;
+        private bool _farPqsReady;
 
         private DockingCameraOverlay _dockingOverlay;
 
@@ -74,6 +76,7 @@ namespace JustReadTheInstructions
         private void SetupCameras()
         {
             SetupNearCamera();
+            SetupFarPqsCamera();
             SetupScaledCamera();
             SetupGalaxyCamera();
 
@@ -143,6 +146,59 @@ namespace JustReadTheInstructions
                 camObj.AddComponent<ScattererCameraSwap>();
 
             _cameras[NearCameraIndex] = camera;
+            camera.enabled = false;
+        }
+
+        private void SetupFarPqsCamera()
+        {
+            // KSP keeps Camera 01 active for the OpenGL flight-camera stack. It is
+            // disabled on backends that do not use the separate PQS pass.
+            var mainFarPqsCam = FindCameraByName("Camera 01", logIfMissing: false);
+            if (mainFarPqsCam == null || !mainFarPqsCam.enabled || !mainFarPqsCam.gameObject.activeInHierarchy)
+                return;
+
+            var nearCamera = _cameras[NearCameraIndex];
+            if (nearCamera == null)
+                return;
+
+            var camObj = new GameObject("JRTI_FarPQS_" + InstanceId);
+            var camera = camObj.AddComponent<Camera>();
+            camera.CopyFrom(mainFarPqsCam);
+
+            ConfigureFarPqsCamera(camera);
+
+            if (JRTISettings.EnableDeferred)
+                DeferredIntegration.ApplyToCamera(camera, 10);
+
+            if (JRTISettings.EnableTUFX)
+                TUFXIntegration.ApplyToCamera(camera);
+
+            if (JRTISettings.EnableParallax)
+                ParallaxIntegration.ApplyToCamera(camera);
+
+            camObj.AddComponent<CanvasFix>();
+
+            _cameras[FarPqsCameraIndex] = camera;
+            camera.enabled = false;
+        }
+
+        private void ConfigureFarPqsCamera(Camera camera)
+        {
+            var nearCamera = _cameras[NearCameraIndex];
+            if (camera == null || nearCamera == null)
+                return;
+
+            camera.useOcclusionCulling = false;
+            camera.name = "JRTI_FarPQS";
+            camera.transform.parent = nearCamera.transform.parent;
+            camera.transform.localPosition = nearCamera.transform.localPosition;
+            camera.transform.localRotation = nearCamera.transform.localRotation;
+            camera.transform.localScale = nearCamera.transform.localScale;
+
+            camera.fieldOfView = _hullCamera.cameraFoV;
+            camera.targetTexture = TargetTexture;
+            camera.allowHDR = JRTISettings.UseHDR;
+            camera.allowMSAA = !ScattererIntegration.IsAvailable;
             camera.enabled = false;
         }
 
@@ -237,7 +293,7 @@ namespace JustReadTheInstructions
             camera.enabled = false;
         }
 
-        private Camera FindCameraByName(string cameraName)
+        private Camera FindCameraByName(string cameraName, bool logIfMissing = true)
         {
             foreach (var cam in Camera.allCameras)
             {
@@ -245,7 +301,8 @@ namespace JustReadTheInstructions
                     return cam;
             }
 
-            Debug.LogWarning($"[JRTI]: Camera '{cameraName}' not found");
+            if (logIfMissing)
+                Debug.LogWarning($"[JRTI]: Camera '{cameraName}' not found");
             return null;
         }
 
@@ -262,6 +319,8 @@ namespace JustReadTheInstructions
 
             if (!TargetTexture.IsCreated()) TargetTexture.Create();
 
+            SynchronizeFarPqsCamera();
+
             if (_parallaxApplied) RenderParallaxScatters();
 
             StripRaymarchedLightBuffers();
@@ -272,6 +331,9 @@ namespace JustReadTheInstructions
 
             for (int i = _cameras.Length - 1; i >= 0; i--)
             {
+                if (i == FarPqsCameraIndex && !_farPqsReady)
+                    continue;
+
                 var camera = _cameras[i];
                 if (camera == null) continue;
                 camera.targetTexture = TargetTexture;
@@ -291,6 +353,27 @@ namespace JustReadTheInstructions
                 _dockingOverlay.Render(TargetTexture);
 
             JRTIStreamServer.Instance?.TryCaptureFrame(InstanceId, TargetTexture);
+        }
+
+        private void SynchronizeFarPqsCamera()
+        {
+            _farPqsReady = false;
+
+            var mainFarPqsCam = FindCameraByName("Camera 01", logIfMissing: false);
+            if (mainFarPqsCam == null || !mainFarPqsCam.enabled || !mainFarPqsCam.gameObject.activeInHierarchy)
+                return;
+
+            if (_cameras[FarPqsCameraIndex] == null)
+            {
+                SetupFarPqsCamera();
+            }
+            else
+            {
+                _cameras[FarPqsCameraIndex].CopyFrom(mainFarPqsCam);
+                ConfigureFarPqsCamera(_cameras[FarPqsCameraIndex]);
+            }
+
+            _farPqsReady = _cameras[FarPqsCameraIndex] != null;
         }
 
         private void RenderParallaxScatters()
