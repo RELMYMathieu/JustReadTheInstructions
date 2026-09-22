@@ -192,10 +192,7 @@ namespace JustReadTheInstructions
             if (camera == null || camera.vessel == null) return;
 
             int stableId = HullCameraRenderer.GetStableId(camera);
-            string vesselName = camera.vessel.GetDisplayName();
-            var config = camera.part.FindModuleImplementing<JRTICameraConfigModule>();
-            string cameraName = !string.IsNullOrEmpty(config?.jrtiName) ? config.jrtiName : camera.cameraName;
-            string displayName = $"{vesselName}.{cameraName}";
+            string displayName = $"{camera.vessel.GetDisplayName()}.{HullCameraRenderer.GetCameraName(camera)}";
             bool streamOnly = HullCameraManager.Instance?.IsStreamOnly(camera) ?? false;
             bool streaming = JRTIStreamServer.Instance?.IsStreaming(stableId) ?? false;
 

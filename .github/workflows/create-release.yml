@@ -56,6 +56,15 @@ jobs:
           python3 Tools/generate_changelog_cfg.py
           git add GameData/JustReadTheInstructions/changelog.cfg
 
+      - name: Sync assembly version
+        run: |
+          ASSEMBLY_VERSION="${{ steps.normalize.outputs.bare }}"
+          while [ "$(echo "$ASSEMBLY_VERSION" | tr -cd '.' | wc -c)" -lt 3 ]; do
+            ASSEMBLY_VERSION="$ASSEMBLY_VERSION.0"
+          done
+          sed -i -E "s/(Assembly(File)?Version\(\")[0-9.]+/\1$ASSEMBLY_VERSION/" Source/Properties/AssemblyInfo.cs
+          git add Source/Properties/AssemblyInfo.cs
+
       - name: Commit and tag
         run: |
           git config --global user.name "github-actions"

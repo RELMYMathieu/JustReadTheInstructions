@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Fixed
+
+- Cameras sharing the same part (e.g. Starship Expansion Project's booster and ship parts) now work independently; opening or streaming one camera no longer marks every camera on that part as open/streaming. A custom ID set on such a part now numbers its cameras in order (ID 10 gives 10, 11, 12...), and a custom name is suffixed with each camera's own name
+- The plugin DLL's assembly version now matches the release; it had been left at `2.3.0.0` since v2.3.0, so tools reading the DLL version reported the wrong release
+
+
 ## v2.4.0 - 2026-09-20
 
 ### Added

@@ -55,8 +55,25 @@ namespace JustReadTheInstructions
         public static int GetStableId(MuMechModuleHullCamera hullCamera)
         {
             var config = hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
-            return JRTICameraRuntime.ResolveId(hullCamera.part.persistentId, config?.jrtiId ?? 0);
+            return JRTICameraRuntime.ResolveId(hullCamera.part.persistentId, GetCameraIndex(hullCamera), config?.jrtiId ?? 0);
         }
+
+        public static int GetCameraIndex(MuMechModuleHullCamera hullCamera)
+            => GetPartCameras(hullCamera).IndexOf(hullCamera);
+
+        public static string GetCameraName(MuMechModuleHullCamera hullCamera)
+        {
+            var config = hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
+            if (string.IsNullOrEmpty(config?.jrtiName))
+                return hullCamera.cameraName;
+
+            return GetPartCameras(hullCamera).Count > 1
+                ? $"{config.jrtiName}.{hullCamera.cameraName}"
+                : config.jrtiName;
+        }
+
+        private static List<MuMechModuleHullCamera> GetPartCameras(MuMechModuleHullCamera hullCamera)
+            => hullCamera.part.FindModulesImplementing<MuMechModuleHullCamera>();
 
         private void InitializeRenderTexture()
         {
@@ -426,9 +443,7 @@ namespace JustReadTheInstructions
             if (_hullCamera?.vessel == null)
                 return "Unknown Camera";
 
-            var config = _hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
-            string name = !string.IsNullOrEmpty(config?.jrtiName) ? config.jrtiName : _hullCamera.cameraName;
-            return $"{_hullCamera.vessel.GetDisplayName()}.{name}";
+            return $"{_hullCamera.vessel.GetDisplayName()}.{GetCameraName(_hullCamera)}";
         }
 
         public CameraFilter.eCameraMode GetCameraMode()

@@ -127,11 +127,11 @@ namespace JustReadTheInstructions
         {
             if (!FlightGlobals.ready) return;
 
-            var live = new HashSet<uint>();
+            var live = new HashSet<(uint, int)>();
             foreach (var camera in GetAllAvailableCameras())
             {
                 if (camera?.part != null)
-                    live.Add(camera.part.persistentId);
+                    live.Add((camera.part.persistentId, HullCameraRenderer.GetCameraIndex(camera)));
             }
 
             JRTICameraRuntime.RetainOnly(live);
