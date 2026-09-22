@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Cameras sharing the same part (e.g. Starship Expansion Project's booster and ship parts) now work independently; opening or streaming one camera no longer marks every camera on that part as open/streaming. A custom ID set on such a part now numbers its cameras in order (ID 10 gives 10, 11, 12...), and a custom name is suffixed with each camera's own name
+- Cameras sharing the same part (e.g. Starship Expansion Project's booster and ship parts) now work independently; opening or streaming one camera no longer marks every camera on that part as open/streaming. A custom ID set on such a part now numbers its cameras in order (ID 10 gives 10, 11, 12...), and a custom name is suffixed with each camera's own name (thanks to Recoleto for bringing this to my attention)
 - The plugin DLL's assembly version now matches the release; it had been left at `2.3.0.0` since v2.3.0, so tools reading the DLL version reported the wrong release
 
 
