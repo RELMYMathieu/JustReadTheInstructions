@@ -85,8 +85,8 @@ async function checkLaunchId() {
     try {
         const res = await fetch('/session');
         if (!res.ok) return;
-        const { launchId, inGameRecording } = await res.json();
-        setInGameRecordingAvailable(inGameRecording === true);
+        const { launchId, inGameRecording, codecs } = await res.json();
+        setInGameRecordingAvailable(inGameRecording === true, codecs);
         const stored = localStorage.getItem(LAUNCH_ID_KEY);
         if (stored !== launchId) {
             localStorage.removeItem(KNOWN_CAMERAS_KEY);

@@ -50,8 +50,8 @@ export function finalizeRecordingBeacon(sessionId, filename) {
     } catch { }
 }
 
-export async function gameRecording(cameraId, action) {
-    const res = await fetch(API.gameRecording(cameraId, action), { method: 'POST' });
+export async function gameRecording(cameraId, action, codec) {
+    const res = await fetch(API.gameRecording(cameraId, action, codec), { method: 'POST' });
     if (!res.ok) throw new Error(`in-game recording ${action} failed: ${res.status} ${await res.text()}`);
     return res.json();
 }

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Performance overlay (Ctrl+Alt+F7 in flight, or Settings > Diagnostics) - game FPS and frame time, JRTI's own cost per frame, memory and garbage collections, plus per-camera render and stream stats. Can log to CSV (`PluginData/PerfLogs/`), and the latest sample is served as JSON at `/debug/stats`
+- Diagnostics page in the web UI (gauge button, or `/debug.html`) - the same numbers live, with the last two minutes charted and values needing attention highlighted
+- "Spread camera renders across frames" setting (on by default) - cameras take turns rendering instead of all on the same frame, evening out frame times with several cameras open or streaming
+- Camera layout page in the web UI (grid button, or `/layout.html`) - watch several cameras in one window, with Spotlight (one large tile), Fullscreen and Fill (edge to edge split screens). Layouts are saved by camera name and can be shared as a link (`layout.html?cams=10,11,12`), handy as a single OBS browser source
+- All cameras of a layout stream over one connection (`/streams?ids=1,2,3`), so large layouts no longer hit the browser's limit of 6 connections per host
+- In-game recording, now the default - the Record button records an MP4 inside the game with the graphics card's encoder (Media Foundation on Windows, ffmpeg on Linux and macOS). Steady frame rate, keeps recording when the web page is closed, stays playable if the game crashes and scrubs cleanly in every player
+- "Video codec" option in the web UI's recorder settings - H.264 stays the default, AV1 is available on Linux and macOS when ffmpeg has an AV1 encoder (not on Windows yet). See the README's "Recording & Codecs" section
+- The browser recorder stays as a fallback when in-game recording can't start, and can still be picked in "Record with" (for example to save to another device). In-game recording can be turned off in the settings window
+
+### Changed
+
+- Every camera now renders at most Max FPS times per second, whether it has an in-game window, a stream, or both, instead of every (other) game frame. Streamed cameras only render when the stream needs a new frame. Camera windows used to render at half the game's frame rate (72 FPS on a 144 FPS game), so this is much lighter at high frame rates. Max FPS is now correctly labeled "camera windows and streams" since it applies to both respectively.
+- Much less memory churn while streaming, which should reduce stutter. Each camera reuses its frame buffers instead of allocating a new one per frame (about 2.7 MB per frame at 720p), and per-render camera lookups no longer allocate
+- At most two frames per camera are read back and encoded at once, so JPEG encoding can no longer pile up behind a slow CPU, while a slow readback or encode no longer lowers the stream's frame rate
+- OpenGL (no async readback) no longer uploads every captured frame back to the GPU
+- Stream captures now land on the game frame closest to when they are due instead of the first frame after, so a stream's frame spacing stays even when the game runs at about a multiple of Max FPS
+- The main page's live card previews (shown for cameras someone is watching) now share one connection instead of opening one each, so the main page open next to a layout page or several viewers no longer runs into the browser's limit of 6 (or whatever the browser limits it to) connections per host
+
+### Deprecated
+
+- The browser recorder (MediaRecorder in the web page, uploaded in chunks) is now the legacy recorder, shown as "legacy" in the web UI. It will be removed in v3.0.0 along with its upload endpoints and the MP4/WebM fixers, as the in-game recorder is a much better solution and is much easier to maintain and debug.
+
+### Removed
+
+- Render camera windows every other frame setting has been replaced by the Max FPS setting which applies to both camera windows in game and in the streamer Web UI.
+
+### Fixed
+
+- When the web UI's port is taken by another program, JRTI now says so on screen and in the settings window next to the Port field, instead of only writing it to KSP.log.
+- Streamed cameras now **properly** pace their frames attempting to hover towards the "Max framerate" option when being watched, which makes the viewing experience a lot smoother.
+- Camera feeds recover on their own after closing the map view. Opening the map switches KSP's cameras and visual mods like Scatterer and EVE to map mode, and JRTI cameras kept the broken rendering until they were closed and reopened. They are now rebuilt half a second after the map closes, without interrupting streams, viewers or recordings (may cause a very brief freeze or lag spike to cameras that are rendering)
+- Recordings no longer get stuck on "Saving..." or keep showing as recording after the game has already saved them. When the server closes a recording on its own (no data for 30 seconds), the web UI now notices and returns to idle instead of sending requests that keep failing, and saving gives up waiting after 15 seconds and leaves the file to the server
+- Recording heartbeats now use their own endpoint and no longer pile up while the connection is slow
+- A recording's camera stream now reconnects on its own when it ends (for example when the camera is closed and reopened in game), so a recording paused on signal loss records live frames again when it resumes instead of a frozen image
+
+
 ## v2.4.1 - 2026-09-22
 
 ### Fixed

@@ -42,6 +42,11 @@ if you close or reload the page, and the file stays playable if the game
 crashes. Windows uses its built-in encoder; Linux and macOS need ffmpeg
 installed (for example "sudo apt install ffmpeg" or "brew install ffmpeg").
 
+"Video codec" in Settings picks the recording codec. Keep H.264 unless you
+know your tools handle something else: it opens everywhere. AV1 is offered
+on Linux and macOS when ffmpeg has an AV1 encoder; many editors, older
+players and phones cannot open AV1 files.
+
 If in-game recording cannot start, the legacy browser recorder takes over. It
 is deprecated and will be removed in v3.0.0. "Record with" in Settings picks
 one; in-game recording can also be turned off in JRTI's settings window.

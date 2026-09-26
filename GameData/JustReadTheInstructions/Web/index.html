@@ -48,6 +48,16 @@
                 <select id="settings-recorder"></select>
             </div>
 
+            <div class="settings-row" id="settings-codec-row" hidden>
+                <label for="settings-codec">Video codec</label>
+                <select id="settings-codec"></select>
+            </div>
+
+            <div class="settings-hint settings-warning" id="settings-codec-warning" hidden>
+                You are not recording in H.264. Check that your editor, player or OBS setup opens these
+                files before relying on them.
+            </div>
+
             <div class="settings-row">
                 <label for="settings-los">On signal loss while recording</label>
                 <select id="settings-los"></select>
@@ -56,8 +66,8 @@
             <div class="settings-hint">
                 Recordings are saved on the KSP host inside
                 <code>GameData/JustReadTheInstructions/Web/recordings/</code>.
-                Recording in the game encodes H.264 MP4 on the graphics card and keeps going
-                if this page is closed. The legacy browser recorder is only used when in-game
+                Recording in the game encodes an MP4 on the graphics card (H.264 unless you pick
+                another codec) and keeps going if this page is closed. The legacy browser recorder is only used when in-game
                 recording is unavailable or picked above, and will be removed in v3.0.0.
             </div>
 

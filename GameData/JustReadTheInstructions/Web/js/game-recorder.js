@@ -1,4 +1,5 @@
 import { gameRecording } from './api.js';
+import { selectedGameCodec } from './recorder-settings.js';
 
 export class GameRecorder {
     constructor({ cameraId, onStateChange }) {
@@ -21,7 +22,7 @@ export class GameRecorder {
     }
 
     async start() {
-        this.adopt(await gameRecording(this.cameraId, 'start'));
+        this.adopt(await gameRecording(this.cameraId, 'start', selectedGameCodec()));
     }
 
     adopt(info) {

@@ -603,6 +603,11 @@ h1 {
     line-height: 1.4;
 }
 
+    .settings-hint.settings-warning {
+        color: var(--warn);
+        margin: 0 0 0.5rem;
+    }
+
 .viewer-body {
     margin: 0;
     background: #000;

@@ -122,12 +122,56 @@ GameData/JustReadTheInstructions/Web/images/los.png
 > [!CAUTION]
 > Editing files in the `Web` folder is not supported and may break the mod's functionality.
 
+## Recording & Codecs
+
+Recordings are started from the web UI and saved on the machine running KSP, in `GameData/JustReadTheInstructions/Web/recordings/`. Live feeds and the stream URLs you give OBS are always MJPEG: the codecs below only apply to recordings.
+
+> [!WARNING]
+> Keep **H.264** unless you know your tools handle something else. H.264 opens in every editor, player, phone and OBS setup. Other codecs are for people who have checked that their whole workflow supports them.
+
+### Picking a codec
+
+Open **Settings** (gear icon) in the web UI and choose a **Video codec**. Only codecs that work on the machine running KSP are listed, and the choice is remembered per browser. JRTI's in-game settings window shows which encoders were found.
+
+### In-game recorder (default)
+
+Every recording is an MP4 at the camera's render resolution, at a constant frame rate (Max FPS), with a keyframe every 2 seconds and a bitrate of 0.2 bits per pixel per frame (about 12 Mbps at 1080p 30 FPS). JRTI picks the first encoder that works, trying graphics card encoders before CPU encoders:
+
+| Codec | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| **H.264** (default) | Media Foundation: graphics card, or Windows' own software encoder | `h264_nvenc` → `h264_vaapi` → `h264_qsv` → `libx264` → `libopenh264` | `h264_videotoolbox` → `libx264` → `libopenh264` |
+| **AV1** | Not available yet | `av1_nvenc` → `av1_vaapi` → `av1_qsv` → `libsvtav1` | `libsvtav1` (Apple chips have no AV1 encoder) |
+
+Linux and macOS record through [ffmpeg](https://ffmpeg.org/), which must be installed (for example `sudo apt install ffmpeg` or `brew install ffmpeg`). To see which encoders your ffmpeg build has:
+
+```bash
+ffmpeg -hide_banner -encoders | grep -E "264|av1"
+```
+
+| Encoder | Runs on |
+| --- | --- |
+| `*_nvenc` | NVIDIA graphics cards. AV1 needs an RTX 40 series or newer |
+| `*_vaapi` | AMD and Intel graphics cards through Mesa or Intel's media driver. AV1 needs an AMD RX 7000 series, Intel Arc, Intel Core Ultra or newer |
+| `*_qsv` | Intel graphics. AV1 needs Intel Arc, Intel Core Ultra or newer |
+| `h264_videotoolbox` | Macs |
+| `libx264`, `libopenh264`, `libsvtav1` | The CPU. Slower, and can drop frames at high resolutions while KSP is running |
+
+**About AV1:** JRTI gives AV1 the same bitrate as H.264, so files are about the same size but keep more detail. Recent VLC, mpv and web browsers play AV1, and Windows needs Microsoft's *AV1 Video Extension* to preview it. Check that your editor imports AV1 before recording anything important with it.
+
+### Legacy browser recorder
+
+Used when in-game recording is unavailable, or when **Record with** is set to *This browser*. The browser picks the first format it supports, and the **Video codec** setting does not apply:
+
+* **Chrome, Edge and other Chromium browsers:** H.264 MP4 → VP9 WebM → VP8 WebM
+* **Firefox:** VP9 WebM → VP8 WebM
+
+This recorder is deprecated and will be removed in v3.0.0.
+
 ## Known Issues
 
 A few known issues are tracked but not yet fixed:
 
 * **Firefox recording output is unreliable.** The recorded file may be corrupt or unplayable. Use Chrome or Edge for recording until this is resolved.
-* **Stale zero-byte buffer files** are sometimes left in the recordings folder after a session ends. They are safe to delete manually.
 * **macOS is not properly supported.** A GPU async API used internally by this Unity version is unavailable on macOS, a legacy quirk inherited from KSP's Unity build. A fix is being investigated.
 * **Performance degradation with Parallax.** Parallax integration is disabled by default. Enabling it in the Settings menu may cause significant frame-rate drops.
 

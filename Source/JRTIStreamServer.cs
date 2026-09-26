@@ -406,7 +406,7 @@ namespace JustReadTheInstructions
         private void ServeSession(HttpListenerContext ctx)
         {
             string inGameRecording = InGameRecordingAvailable ? "true" : "false";
-            ServeText(ctx, $"{{\"launchId\":\"{LaunchId}\",\"inGameRecording\":{inGameRecording}}}", "application/json");
+            ServeText(ctx, $"{{\"launchId\":\"{LaunchId}\",\"inGameRecording\":{inGameRecording},\"codecs\":{CodecsJson()}}}", "application/json");
         }
 
         private void HandleRequest(HttpListenerContext ctx)

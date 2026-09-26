@@ -2,7 +2,7 @@ using System;
 
 namespace JustReadTheInstructions
 {
-    internal sealed class MediaFoundationEncoder : IH264Encoder
+    internal sealed class MediaFoundationEncoder : IVideoEncoder
     {
         private const uint HighProfile = 100;
         private const uint UnconstrainedVbr = 2;

@@ -27,12 +27,12 @@ namespace JustReadTheInstructions
 
         private readonly int _fps;
         private readonly int _frameBytes;
-        private readonly Func<IH264Encoder> _createEncoder;
+        private readonly Func<IVideoEncoder> _createEncoder;
         private readonly Action<string> _log;
         private readonly BlockingCollection<QueuedFrame> _queue = new BlockingCollection<QueuedFrame>();
         private readonly ManualResetEventSlim _started = new ManualResetEventSlim(false);
         private readonly Thread _thread;
-        private volatile IH264Encoder _encoder;
+        private volatile IVideoEncoder _encoder;
         private volatile string _error;
         private volatile bool _discard;
         private int _stopping;
@@ -41,7 +41,7 @@ namespace JustReadTheInstructions
         private long _pausedTicks;
         private long _pausedAt;
 
-        public Mp4Recorder(string filePath, int width, int height, int fps, Func<IH264Encoder> createEncoder, Action<string> log)
+        public Mp4Recorder(string filePath, int width, int height, int fps, Func<IVideoEncoder> createEncoder, Action<string> log)
         {
             FilePath = filePath;
             _fps = fps;
@@ -123,7 +123,7 @@ namespace JustReadTheInstructions
 
         private bool WriteRecording()
         {
-            IH264Encoder encoder = null;
+            IVideoEncoder encoder = null;
             object previous = null;
             object current = null;
             try

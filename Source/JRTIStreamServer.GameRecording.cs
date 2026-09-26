@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -44,6 +45,12 @@ namespace JustReadTheInstructions
                 ServeError(ctx, 409, "In-game recording needs an even Render Width and Height");
                 return;
             }
+            var requestedCodec = ctx.Request.QueryString["codec"] ?? VideoEncoders.Id(VideoCodec.H264);
+            if (!VideoEncoders.TryParse(requestedCodec, out var codec) || !VideoEncoders.Supports(codec))
+            {
+                ServeError(ctx, 409, $"The {requestedCodec} codec is not available on this system");
+                return;
+            }
 
             lock (state.RecordingLock)
             {
@@ -54,7 +61,7 @@ namespace JustReadTheInstructions
                     try
                     {
                         var recorder = new Mp4Recorder(path, width, height, fps,
-                            () => VideoEncoders.Create(path, width, height, fps),
+                            () => VideoEncoders.Create(codec, path, width, height, fps),
                             message => Debug.LogWarning($"[JRTI-Stream]: {message}"));
                         state.SetRecorder(recorder);
                         Debug.Log($"[JRTI-Stream]: In-game recording started with {recorder.EncoderDescription}: {path}");
@@ -90,6 +97,14 @@ namespace JustReadTheInstructions
             if (safe.Length > 80) safe = safe.Substring(0, 80);
             if (safe.Length == 0) safe = "camera";
             return $"{safe}__cam{cameraId}__{DateTime.Now:yyyy-MM-dd_HHmmss}.mp4";
+        }
+
+        private static string CodecsJson()
+        {
+            var ids = new List<string>();
+            foreach (var codec in VideoEncoders.Available)
+                ids.Add($"\"{VideoEncoders.Id(codec)}\"");
+            return $"[{string.Join(",", ids)}]";
         }
 
         internal static string RecordingJson(CameraStreamState state)

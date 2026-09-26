@@ -33,7 +33,7 @@ export const API = Object.freeze({
     streams: (ids, preview) => `/streams?ids=${ids.join(',')}${preview ? '&preview=1' : ''}`,
     status: (id) => `/camera/${id}/status`,
     settings: (id) => `/camera/${id}/settings`,
-    gameRecording: (id, action) => `/camera/${id}/recording/${action}`,
+    gameRecording: (id, action, codec) => `/camera/${id}/recording/${action}${codec ? `?codec=${codec}` : ''}`,
     viewer: (id) => `/viewer.html?id=${id}`,
     debugStats: '/debug/stats',
     recordingAppend: (sessionId, filename) =>
@@ -55,4 +55,9 @@ export const DEFAULT_LOS_BEHAVIOR = LOS_BEHAVIORS.AUTO_SAVE;
 export const RECORDERS = Object.freeze({
     GAME: 'game',
     BROWSER: 'browser',
+});
+
+export const VIDEO_CODECS = Object.freeze({
+    H264: 'h264',
+    AV1: 'av1',
 });

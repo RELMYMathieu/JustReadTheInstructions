@@ -6,7 +6,7 @@ using System.Text;
 
 namespace JustReadTheInstructions
 {
-    internal sealed class FfmpegEncoder : IH264Encoder
+    internal sealed class FfmpegEncoder : IVideoEncoder
     {
         private const int FinishTimeoutMs = 60_000;
         private const int ErrorTailChars = 2000;

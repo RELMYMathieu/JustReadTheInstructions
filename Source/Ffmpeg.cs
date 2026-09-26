@@ -12,28 +12,36 @@ namespace JustReadTheInstructions
         private const string RenderNodeFolder = "/dev/dri";
         private static readonly string[] ExtraSearchFolders = { "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/snap/bin" };
 
-        internal sealed class Codec
+        private const int ProbeWidth = 256;
+        private const int ProbeHeight = 144;
+        private const int ProbeFps = 30;
+
+        internal sealed class Encoder
         {
+            public readonly VideoCodec Codec;
             public readonly string Name;
             public readonly string DeviceArguments;
             public readonly string Filter;
             public readonly string EncoderArguments;
+            public readonly bool CapsBitrate;
 
-            public Codec(string name, string deviceArguments, string filter, string encoderArguments)
+            public Encoder(VideoCodec codec, string name, string deviceArguments, string filter, string encoderArguments, bool capsBitrate = true)
             {
+                Codec = codec;
                 Name = name;
                 DeviceArguments = deviceArguments;
                 Filter = filter;
                 EncoderArguments = encoderArguments;
+                CapsBitrate = capsBitrate;
             }
         }
 
         private static int _probeStarted;
-        private static volatile Codec _selected;
+        private static readonly Encoder[] _selected = new Encoder[Enum.GetValues(typeof(VideoCodec)).Length];
         private static volatile string _status = "Checking for ffmpeg...";
         private static volatile string _executable;
 
-        public static Codec Selected => _selected;
+        public static Encoder Selected(VideoCodec codec) => Volatile.Read(ref _selected[(int)codec]);
         public static string Status => _status;
 
         public static void ProbeInBackground()
@@ -42,11 +50,11 @@ namespace JustReadTheInstructions
             new Thread(Probe) { IsBackground = true, Name = "JRTI-FfmpegProbe" }.Start();
         }
 
-        public static IH264Encoder CreateEncoder(string path, int width, int height, int fps)
+        public static IVideoEncoder CreateEncoder(VideoCodec codec, string path, int width, int height, int fps)
         {
-            var codec = _selected;
-            if (codec == null) throw new InvalidOperationException(_status);
-            return new FfmpegEncoder(_executable, EncodeArguments(codec, path, width, height, fps), $"{codec.Name} (ffmpeg)", width * height * 4);
+            var encoder = Selected(codec);
+            if (encoder == null) throw new InvalidOperationException($"ffmpeg has no working {codec} encoder");
+            return new FfmpegEncoder(_executable, EncodeArguments(encoder, path, width, height, fps), $"{encoder.Name} (ffmpeg)", width * height * 4);
         }
 
         private static void Probe()
@@ -60,14 +68,15 @@ namespace JustReadTheInstructions
                     return;
                 }
 
-                foreach (var codec in Candidates())
+                foreach (VideoCodec codec in Enum.GetValues(typeof(VideoCodec)))
                 {
-                    if (!Works(codec)) continue;
-                    _selected = codec;
-                    _status = $"Encoder: {codec.Name} (ffmpeg)";
-                    return;
+                    var encoder = FirstWorking(codec);
+                    if (encoder == null) continue;
+                    Volatile.Write(ref _selected[(int)codec], encoder);
+                    _status = DescribeSelected();
                 }
-                _status = "ffmpeg has no working H.264 encoder: recordings use the browser";
+                if (Selected(VideoCodec.H264) == null)
+                    _status = "ffmpeg has no working H.264 encoder: recordings use the browser";
             }
             catch (Exception ex)
             {
@@ -75,15 +84,38 @@ namespace JustReadTheInstructions
             }
         }
 
-        private static IEnumerable<Codec> Candidates()
+        private static Encoder FirstWorking(VideoCodec codec)
         {
-            yield return new Codec("h264_nvenc", "", "vflip", "-c:v h264_nvenc -profile:v high");
-            foreach (var node in RenderNodes())
-                yield return new Codec("h264_vaapi", $"-vaapi_device {node}", "vflip,format=nv12,hwupload", "-c:v h264_vaapi -profile:v high");
-            yield return new Codec("h264_videotoolbox", "", "vflip,format=nv12", "-c:v h264_videotoolbox -profile:v high");
-            yield return new Codec("h264_qsv", "", "vflip,format=nv12", "-c:v h264_qsv -profile:v high");
-            yield return new Codec("libx264", "", "vflip,format=yuv420p", "-c:v libx264 -preset veryfast -profile:v high");
-            yield return new Codec("libopenh264", "", "vflip,format=yuv420p", "-c:v libopenh264");
+            foreach (var encoder in Candidates())
+                if (encoder.Codec == codec && Works(encoder)) return encoder;
+            return null;
+        }
+
+        private static string DescribeSelected()
+        {
+            var names = new List<string>();
+            foreach (var encoder in _selected)
+                if (encoder != null) names.Add(encoder.Name);
+            return $"Encoders: {string.Join(", ", names)} (ffmpeg)";
+        }
+
+        private static IEnumerable<Encoder> Candidates()
+        {
+            var nodes = RenderNodes();
+
+            yield return new Encoder(VideoCodec.H264, "h264_nvenc", "", "vflip", "-c:v h264_nvenc -profile:v high");
+            foreach (var node in nodes)
+                yield return new Encoder(VideoCodec.H264, "h264_vaapi", $"-vaapi_device {node}", "vflip,format=nv12,hwupload", "-c:v h264_vaapi -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_videotoolbox", "", "vflip,format=nv12", "-c:v h264_videotoolbox -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_qsv", "", "vflip,format=nv12", "-c:v h264_qsv -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "libx264", "", "vflip,format=yuv420p", "-c:v libx264 -preset veryfast -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "libopenh264", "", "vflip,format=yuv420p", "-c:v libopenh264");
+
+            yield return new Encoder(VideoCodec.AV1, "av1_nvenc", "", "vflip", "-c:v av1_nvenc");
+            foreach (var node in nodes)
+                yield return new Encoder(VideoCodec.AV1, "av1_vaapi", $"-vaapi_device {node}", "vflip,format=nv12,hwupload", "-c:v av1_vaapi");
+            yield return new Encoder(VideoCodec.AV1, "av1_qsv", "", "vflip,format=nv12", "-c:v av1_qsv");
+            yield return new Encoder(VideoCodec.AV1, "libsvtav1", "", "vflip,format=yuv420p", "-c:v libsvtav1 -preset 10", capsBitrate: false);
         }
 
         private static IEnumerable<string> RenderNodes()
@@ -94,25 +126,27 @@ namespace JustReadTheInstructions
             return nodes;
         }
 
-        private static string EncodeArguments(Codec codec, string path, int width, int height, int fps)
-        {
-            uint bitrate = VideoEncoders.Bitrate(width, height, fps);
-            return $"-hide_banner -loglevel error -nostats {codec.DeviceArguments} " +
-                   $"-f rawvideo -pix_fmt rgba -video_size {width}x{height} -framerate {fps} -i pipe:0 " +
-                   $"-vf {codec.Filter} {codec.EncoderArguments} -b:v {bitrate} -maxrate {bitrate * 3 / 2} -bufsize {bitrate * 2} " +
-                   $"-g {fps * VideoEncoders.GopSeconds} -movflags +frag_keyframe+empty_moov+default_base_moof -f mp4 -y \"{path}\"";
-        }
+        private static string EncodeArguments(Encoder encoder, string path, int width, int height, int fps)
+            => Arguments(encoder, $"-f rawvideo -pix_fmt rgba -video_size {width}x{height} -framerate {fps} -i pipe:0", width, height, fps,
+                         $"-movflags +frag_keyframe+empty_moov+default_base_moof -f mp4 -y \"{path}\"");
 
-        private static string ProbeArguments(Codec codec)
-            => $"-hide_banner -loglevel error -nostats {codec.DeviceArguments} " +
-               "-f lavfi -i color=c=gray:s=256x144:r=30,format=rgba -frames:v 3 " +
-               $"-vf {codec.Filter} {codec.EncoderArguments} -b:v 500k -f null -";
+        private static string ProbeArguments(Encoder encoder)
+            => Arguments(encoder, $"-f lavfi -i color=c=gray:s={ProbeWidth}x{ProbeHeight}:r={ProbeFps},format=rgba -frames:v 3", ProbeWidth, ProbeHeight, ProbeFps,
+                         "-f null -");
 
-        private static bool Works(Codec codec)
+        private static string Arguments(Encoder encoder, string input, int width, int height, int fps, string output)
+            => $"-hide_banner -loglevel error -nostats {encoder.DeviceArguments} {input} " +
+               $"-vf {encoder.Filter} {encoder.EncoderArguments} {RateArguments(encoder, VideoEncoders.Bitrate(width, height, fps))} " +
+               $"-g {fps * VideoEncoders.GopSeconds} {output}";
+
+        private static string RateArguments(Encoder encoder, uint bitrate)
+            => encoder.CapsBitrate ? $"-b:v {bitrate} -maxrate {bitrate * 3 / 2} -bufsize {bitrate * 2}" : $"-b:v {bitrate}";
+
+        private static bool Works(Encoder encoder)
         {
             try
             {
-                using (var process = Start(_executable, ProbeArguments(codec), redirectInput: false))
+                using (var process = Start(_executable, ProbeArguments(encoder), redirectInput: false))
                 {
                     process.BeginErrorReadLine();
                     if (process.WaitForExit(ProbeTimeoutMs)) return process.ExitCode == 0;
