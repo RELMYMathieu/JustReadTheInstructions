@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JRTI Layout</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+</head>
+<body class="layout-body">
+    <main id="layout-grid" class="layout-grid"></main>
+
+    <p class="layout-empty" id="layout-empty" hidden>No tiles yet. Add one to start watching cameras.</p>
+
+    <header class="layout-toolbar layout-chrome">
+        <h1>Camera Layout</h1>
+        <span class="layout-status" id="layout-status"></span>
+        <div class="global-actions">
+            <button type="button" class="btn" id="layout-add"><i class="fa-solid fa-plus"></i><span>Add tile</span></button>
+            <button type="button" class="btn" id="layout-copy" title="Copy a link to this layout, for a bookmark or an OBS browser source"><i class="fa-solid fa-link"></i><span>Copy link</span></button>
+            <button type="button" class="btn" id="layout-fill" aria-pressed="false" title="Fill the window edge to edge: no gaps or black bars, feeds are cropped to fit"><i class="fa-solid fa-border-none"></i><span>Fill</span></button>
+            <button type="button" class="btn" id="layout-fullscreen" title="Show only the cameras (Esc to leave)"><i class="fa-solid fa-expand"></i><span>Fullscreen</span></button>
+            <a class="btn" href="/">Cameras</a>
+        </div>
+    </header>
+
+    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true">
+        <div class="modal">
+            <div class="modal-title">Clipboard blocked. Press Ctrl+C / Cmd+C, then Enter or close.</div>
+            <input id="copy-input" type="text" readonly>
+            <div class="modal-actions">
+                <a id="copy-select-btn" class="btn" href="#">Select</a>
+                <a id="copy-close-btn" class="btn" href="#">Close</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/layout.js"></script>
+</body>
+</html>
