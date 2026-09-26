@@ -3,6 +3,7 @@ import {
     RECORDER_CAPTURE_FPS,
     RECORDER_VIDEO_BPS,
     RECORDER_HEARTBEAT_MS,
+    RECORDER_FINALIZE_TIMEOUT_MS,
     LOS_BEHAVIORS,
 } from './config.js';
 import {
@@ -32,6 +33,8 @@ const MIME_CANDIDATES = IS_FIREFOX
         'video/webm;codecs=vp8',
         'video/webm',
     ];
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function pickMimeType() {
     if (typeof MediaRecorder === 'undefined') return null;
@@ -126,6 +129,7 @@ export class CameraRecorder {
         this._finalizePromise = null;
         this._aborted = false;
         this._heartbeatTimer = null;
+        this._heartbeatPending = false;
         this._localChunks = null;
         this._onCanvasReady = onCanvasReady || null;
     }
@@ -258,12 +262,16 @@ export class CameraRecorder {
                 this._notify();
             } catch (err) {
                 console.error('[JRTI] chunk upload failed', err);
-                if (err.message?.includes('410')) {
-                    this._aborted = true;
-                    this._finalize();
-                }
+                if (err.message?.includes('410')) this._onServerClosed(sessionId);
             }
         });
+    }
+
+    _onServerClosed(sessionId) {
+        if (sessionId !== this._sessionId || this._aborted) return;
+        console.warn('[JRTI] server already closed and saved this recording', sessionId);
+        this._aborted = true;
+        this._finalize();
     }
 
     async _finalize() {
@@ -277,37 +285,15 @@ export class CameraRecorder {
 
         this._finalizePromise = (async () => {
             try {
-                if (this._mediaRecorder && this._mediaRecorder.state !== 'inactive') {
-                    await new Promise((resolve) => {
-                        const done = () => { clearTimeout(timer); resolve(); };
-                        const timer = setTimeout(done, 3000);
-                        this._mediaRecorder.addEventListener('stop', done, { once: true });
-                        try { this._mediaRecorder.requestData(); } catch { }
-                        try { this._mediaRecorder.stop(); } catch { done(); }
-                    });
-                }
+                await this._stopMediaRecorder();
 
-                if (!this.isLocal) {
-                    const raw = new Blob(this._localChunks, { type: this._mimeType });
-                    const mime = this._mimeType?.toLowerCase() ?? '';
-                    let blob;
-                    if (mime.includes('mp4')) {
-                        blob = await fixMp4(raw).catch(() => raw);
-                    } else if (mime.includes('webm')) {
-                        blob = await fixWebm(raw).catch(() => raw);
-                    } else {
-                        blob = raw;
-                    }
-                    await saveLocalBlob(blob, filename);
-                    return;
-                }
-
-                await this._pendingUploads;
-
-                try {
-                    await finalizeRecording(sessionId, filename);
-                } catch (err) {
-                    console.error('[JRTI] finalize failed', err);
+                if (this.isLocal) {
+                    await Promise.race([
+                        this._finishUpload(sessionId, filename),
+                        delay(RECORDER_FINALIZE_TIMEOUT_MS),
+                    ]);
+                } else {
+                    await this._saveLocalCopy(filename);
                 }
             } finally {
                 this._cleanup();
@@ -316,6 +302,44 @@ export class CameraRecorder {
         })();
 
         return this._finalizePromise;
+    }
+
+    _stopMediaRecorder() {
+        const recorder = this._mediaRecorder;
+        if (!recorder || recorder.state === 'inactive') return Promise.resolve();
+
+        return new Promise((resolve) => {
+            const done = () => { clearTimeout(timer); resolve(); };
+            const timer = setTimeout(done, 3000);
+            recorder.addEventListener('stop', done, { once: true });
+            try { recorder.requestData(); } catch { }
+            try { recorder.stop(); } catch { done(); }
+        });
+    }
+
+    async _finishUpload(sessionId, filename) {
+        await this._pendingUploads;
+        if (this._aborted) return;
+
+        try {
+            await finalizeRecording(sessionId, filename);
+        } catch (err) {
+            console.error('[JRTI] finalize failed', err);
+        }
+    }
+
+    async _saveLocalCopy(filename) {
+        const raw = new Blob(this._localChunks, { type: this._mimeType });
+        const mime = this._mimeType?.toLowerCase() ?? '';
+        let blob;
+        if (mime.includes('mp4')) {
+            blob = await fixMp4(raw).catch(() => raw);
+        } else if (mime.includes('webm')) {
+            blob = await fixWebm(raw).catch(() => raw);
+        } else {
+            blob = raw;
+        }
+        await saveLocalBlob(blob, filename);
     }
 
     async _uploadWithRetry(sessionId, filename, blob, mimeType) {
@@ -327,7 +351,7 @@ export class CameraRecorder {
             } catch (err) {
                 if (err.message?.includes('410')) throw err;
                 lastErr = err;
-                await new Promise(r => setTimeout(r, 400 * (i + 1)));
+                await delay(400 * (i + 1));
             }
         }
         throw lastErr;
@@ -378,9 +402,12 @@ export class CameraRecorder {
         if (this._heartbeatTimer) return;
         const sessionId = this._sessionId;
         const filename = this._filename;
-        this._heartbeatTimer = setInterval(() => {
-            if (this._aborted || !this.isActive) return;
-            heartbeatRecording(sessionId, filename);
+        this._heartbeatTimer = setInterval(async () => {
+            if (this._aborted || !this.isActive || this._heartbeatPending) return;
+            this._heartbeatPending = true;
+            const status = await heartbeatRecording(sessionId, filename);
+            this._heartbeatPending = false;
+            if (status === 410) this._onServerClosed(sessionId);
         }, RECORDER_HEARTBEAT_MS);
     }
 

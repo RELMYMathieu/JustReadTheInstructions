@@ -9,7 +9,15 @@ export const RECORDER_CHUNK_MS = 2000;
 export const RECORDER_CAPTURE_FPS = 24;
 export const RECORDER_VIDEO_BPS = 3_500_000;
 export const RECORDER_HEARTBEAT_MS = 5000;
+export const RECORDER_FINALIZE_TIMEOUT_MS = 15000;
 export const RECORDER_LOS_DELAY_MS = 5000;
+
+export const DEBUG_POLL_MS = 1000;
+export const DEBUG_REQUEST_TIMEOUT_MS = 3000;
+export const DEBUG_HISTORY_SAMPLES = 120;
+
+export const LAYOUT_SIGNAL_CHECK_MS = 1000;
+export const LAYOUT_CHROME_HIDE_MS = 3000;
 
 export const LOS_IMAGE_URL = '/images/customlos.png';
 export const LOS_FALLBACK_IMAGE_URL = '/images/los.png';
@@ -22,13 +30,18 @@ export const API = Object.freeze({
     cameras: '/cameras',
     snapshot: (id) => `/camera/${id}/snapshot?t=${Date.now()}`,
     stream: (id) => `/camera/${id}/stream`,
+    streams: (ids, preview) => `/streams?ids=${ids.join(',')}${preview ? '&preview=1' : ''}`,
     status: (id) => `/camera/${id}/status`,
     settings: (id) => `/camera/${id}/settings`,
+    gameRecording: (id, action) => `/camera/${id}/recording/${action}`,
     viewer: (id) => `/viewer.html?id=${id}`,
+    debugStats: '/debug/stats',
     recordingAppend: (sessionId, filename) =>
         `/recordings/${sessionId}/append?name=${encodeURIComponent(filename)}`,
     recordingFinalize: (sessionId, filename) =>
         `/recordings/${sessionId}/finalize?name=${encodeURIComponent(filename)}`,
+    recordingHeartbeat: (sessionId, filename) =>
+        `/recordings/${sessionId}/heartbeat?name=${encodeURIComponent(filename)}`,
 });
 
 export const LOS_BEHAVIORS = Object.freeze({
@@ -38,3 +51,8 @@ export const LOS_BEHAVIORS = Object.freeze({
 });
 
 export const DEFAULT_LOS_BEHAVIOR = LOS_BEHAVIORS.AUTO_SAVE;
+
+export const RECORDERS = Object.freeze({
+    GAME: 'game',
+    BROWSER: 'browser',
+});

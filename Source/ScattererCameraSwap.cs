@@ -26,11 +26,11 @@ namespace JustReadTheInstructions
 
         private static bool EnsureInitialized()
         {
-            var mainCamera = Camera.allCameras.FirstOrDefault(c => c.name == "Camera 00");
-            if (_initialized && _mainCamera == mainCamera && IsAlive(_scattererInstance))
+            if (_initialized && _mainCamera != null && _mainCamera.isActiveAndEnabled && IsAlive(_scattererInstance))
                 return true;
 
-            return Initialize(mainCamera);
+            var mainCamera = CameraLookup.FindActive("Camera 00");
+            return mainCamera != null && Initialize(mainCamera);
         }
 
         private static bool Initialize(Camera mainCamera)

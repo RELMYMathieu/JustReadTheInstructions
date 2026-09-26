@@ -4,6 +4,7 @@ import { CameraCard } from './camera-card.js';
 import { mountSettingsUI } from './settings-ui.js';
 import { enableDragOrder } from './drag-order.js';
 import { RecordingGroups } from './recording-groups.js';
+import { setInGameRecordingAvailable } from './recorder-settings.js';
 
 const KNOWN_CAMERAS_KEY = 'jrti-known-cameras';
 const LAUNCH_ID_KEY = 'jrti-launch-id';
@@ -84,7 +85,8 @@ async function checkLaunchId() {
     try {
         const res = await fetch('/session');
         if (!res.ok) return;
-        const { launchId } = await res.json();
+        const { launchId, inGameRecording } = await res.json();
+        setInGameRecordingAvailable(inGameRecording === true);
         const stored = localStorage.getItem(LAUNCH_ID_KEY);
         if (stored !== launchId) {
             localStorage.removeItem(KNOWN_CAMERAS_KEY);

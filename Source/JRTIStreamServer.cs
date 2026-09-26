@@ -4,7 +4,6 @@ using System.IO;
 using System.Net;
 using System.Threading;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
 namespace JustReadTheInstructions
@@ -25,10 +24,6 @@ namespace JustReadTheInstructions
 
         private readonly ConcurrentDictionary<int, CameraStreamState> _states
             = new ConcurrentDictionary<int, CameraStreamState>();
-        private readonly ConcurrentDictionary<int, float> _lastCaptureTimes
-            = new ConcurrentDictionary<int, float>();
-        private readonly ConcurrentDictionary<int, bool> _captureInFlight
-            = new ConcurrentDictionary<int, bool>();
         private readonly ConcurrentDictionary<string, RecordingSession> _recordings
             = new ConcurrentDictionary<string, RecordingSession>();
         private readonly ConcurrentDictionary<string, DateTime> _finalizedSessions
@@ -36,7 +31,27 @@ namespace JustReadTheInstructions
 
         private static readonly TimeSpan FinalizedRetention = TimeSpan.FromSeconds(60);
 
-        private float MinCapturePeriod => 1f / Mathf.Max(1, JRTISettings.StreamMaxFps);
+        private const int PortCheckTimeoutMs = 3000;
+        private const string SteamPortHint = "(Steam's web inspector often takes 8080)";
+        private const string PortFixHint = "Pick another Port in JRTI settings (Ctrl+Alt+F8), then restart the game.";
+
+        private enum PortCheckResult { ThisServer, OtherProgram, NoAnswer }
+
+        public static string PortWarning { get; private set; }
+        private volatile bool _portWarningPending;
+
+        private static long _recordedBytesTotal;
+        internal static long RecordedBytesTotal => Interlocked.Read(ref _recordedBytesTotal);
+        internal int RecordingCount
+        {
+            get
+            {
+                int count = _recordings.Count;
+                foreach (var state in _states.Values)
+                    if (state.Recorder != null) count++;
+                return count;
+            }
+        }
 
         void Awake()
         {
@@ -54,6 +69,13 @@ namespace JustReadTheInstructions
 
         void Start() => StartServer();
 
+        void Update()
+        {
+            if (!_portWarningPending) return;
+            _portWarningPending = false;
+            ShowPortWarning();
+        }
+
         void OnDestroy()
         {
             StopServer();
@@ -67,15 +89,13 @@ namespace JustReadTheInstructions
             catch (Exception ex) { Debug.LogError($"[JRTI-Stream]: Could not create recordings directory: {ex.Message}"); }
         }
 
-        public void RegisterCamera(int cameraId)
-            => _states.GetOrAdd(cameraId, _ => new CameraStreamState());
+        public void RegisterCamera(int cameraId, int frameWidth, int frameHeight)
+            => _states.GetOrAdd(cameraId, _ => new CameraStreamState(frameWidth, frameHeight));
 
         public void UnregisterCamera(int cameraId)
         {
             if (_states.TryRemove(cameraId, out var state))
                 state.Dispose();
-            _lastCaptureTimes.TryRemove(cameraId, out _);
-            _captureInFlight.TryRemove(cameraId, out _);
         }
 
         public void PublishCameraInfo(int cameraId, string displayName, float fov, float fovMin, float fovMax)
@@ -93,91 +113,105 @@ namespace JustReadTheInstructions
         public bool IsStreaming(int cameraId)
             => _states.TryGetValue(cameraId, out var s) && s.MjpegClientCount > 0;
 
-        public bool HasActiveClients(int cameraId)
-            => _states.TryGetValue(cameraId, out var s) && s.HasActiveClients;
-
-        public void TryCaptureFrame(int cameraId, RenderTexture renderTexture)
+        public bool TryGetCaptureOverdue(int cameraId, float now, out float overdue)
         {
-            if (!_states.TryGetValue(cameraId, out var state) || !state.HasActiveClients)
-                return;
-
-            float now = Time.unscaledTime;
-            _lastCaptureTimes.TryGetValue(cameraId, out float last);
-            if (now - last < MinCapturePeriod)
-                return;
-
-            _captureInFlight.TryGetValue(cameraId, out bool inFlight);
-            if (inFlight)
-                return;
-
-            _lastCaptureTimes[cameraId] = now;
-            _captureInFlight[cameraId] = true;
-
-            int rtWidth = renderTexture.width;
-            int rtHeight = renderTexture.height;
-            int quality = JRTISettings.StreamJpegQuality;
-
-            if (!SystemInfo.supportsAsyncGPUReadback)
-            {
-                CaptureFrameSync(cameraId, renderTexture, rtWidth, rtHeight, quality);
-                return;
-            }
-
-            AsyncGPUReadback.Request(renderTexture, 0, TextureFormat.RGB24, (request) =>
-            {
-                _captureInFlight[cameraId] = false;
-
-                if (request.hasError || !_states.TryGetValue(cameraId, out var s))
-                    return;
-
-                var raw = request.GetData<byte>().ToArray();
-                byte[] lut = s.HasAdjustment ? s.GetLut() : null;
-
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    if (lut != null) CameraImageAdjust.Apply(raw, lut);
-
-                    var jpeg = ImageConversion.EncodeArrayToJPG(
-                        raw, GraphicsFormat.R8G8B8_UNorm,
-                        (uint)rtWidth, (uint)rtHeight, 0, quality);
-
-                    if (jpeg != null && _states.TryGetValue(cameraId, out var s2))
-                        s2.PushFrame(jpeg);
-                });
-            });
+            overdue = float.NegativeInfinity;
+            if (!_states.TryGetValue(cameraId, out var s) || !s.HasActiveClients)
+                return false;
+            overdue = s.CaptureOverdue(now);
+            return true;
         }
 
-        private void CaptureFrameSync(int cameraId, RenderTexture renderTexture, int rtWidth, int rtHeight, int quality)
+        public void GetClientCounts(int cameraId, out int streamClients, out int previewClients)
         {
-            var previous = RenderTexture.active;
-            RenderTexture.active = renderTexture;
+            streamClients = 0;
+            previewClients = 0;
+            if (!_states.TryGetValue(cameraId, out var s)) return;
+            streamClients = s.MjpegClients.Count;
+            previewClients = s.PreviewClients.Count;
+        }
 
-            var tex = new Texture2D(rtWidth, rtHeight, TextureFormat.RGB24, false);
-            tex.ReadPixels(new Rect(0, 0, rtWidth, rtHeight), 0, 0);
-            tex.Apply();
-
-            RenderTexture.active = previous;
-
-            var raw = tex.GetRawTextureData();
-            Destroy(tex);
-
-            _captureInFlight[cameraId] = false;
-
+        public void CaptureFrame(int cameraId, RenderTexture renderTexture, bool rephase)
+        {
             if (!_states.TryGetValue(cameraId, out var state))
                 return;
 
+            long start = JRTIPerf.Now();
+            long sequence = state.BeginCapture(Time.unscaledTime, JRTISettings.FramePeriod, rephase);
+
+            int width = renderTexture.width;
+            int height = renderTexture.height;
+            bool rgba = state.Recorder != null;
+            var format = rgba ? TextureFormat.RGBA32 : TextureFormat.RGB24;
+
+            if (!SystemInfo.supportsAsyncGPUReadback)
+            {
+                var raw = ReadPixelsSync(state, renderTexture, format);
+                EncodeAndPublish(cameraId, state, new CapturedFrame(raw, width, height, rgba, start, sequence));
+                JRTIPerf.RecordSince(cameraId, CameraMetric.CaptureIssue, start);
+                return;
+            }
+
+            AsyncGPUReadback.Request(renderTexture, 0, format, request =>
+            {
+                if (request.hasError || !_states.ContainsKey(cameraId))
+                {
+                    state.EndCapture(null);
+                    return;
+                }
+
+                JRTIPerf.RecordSince(cameraId, CameraMetric.Readback, start);
+                long copyStart = JRTIPerf.Now();
+                var data = request.GetData<byte>();
+                var raw = state.RentFrameBuffer(data.Length);
+                data.CopyTo(raw);
+                EncodeAndPublish(cameraId, state, new CapturedFrame(raw, width, height, rgba, start, sequence));
+                JRTIPerf.RecordMainThread(cameraId, CameraMetric.ReadbackCopy, copyStart);
+            });
+            JRTIPerf.RecordSince(cameraId, CameraMetric.CaptureIssue, start);
+        }
+
+        private static byte[] ReadPixelsSync(CameraStreamState state, RenderTexture renderTexture, TextureFormat format)
+        {
+            var tex = state.GetReadbackTexture(renderTexture.width, renderTexture.height, format);
+
+            var previous = RenderTexture.active;
+            RenderTexture.active = renderTexture;
+            tex.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
+            RenderTexture.active = previous;
+
+            var data = tex.GetRawTextureData<byte>();
+            var raw = state.RentFrameBuffer(data.Length);
+            data.CopyTo(raw);
+            return raw;
+        }
+
+        private static void EncodeAndPublish(int cameraId, CameraStreamState state, CapturedFrame frame)
+        {
             byte[] lut = state.HasAdjustment ? state.GetLut() : null;
+            long queued = JRTIPerf.Now();
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                if (lut != null) CameraImageAdjust.Apply(raw, lut);
+                try
+                {
+                    long started = JRTIPerf.Now();
+                    if (lut != null) CameraImageAdjust.Apply(frame.Raw, lut);
+                    if (frame.Rgba) state.Recorder?.Write(frame.Raw, frame.CapturedAt);
+                    if (!state.NeedsJpeg) return;
 
-                var jpeg = ImageConversion.EncodeArrayToJPG(
-                    raw, GraphicsFormat.R8G8B8_UNorm,
-                    (uint)rtWidth, (uint)rtHeight, 0, quality);
+                    var jpeg = ImageConversion.EncodeArrayToJPG(
+                        frame.Raw, frame.Format,
+                        (uint)frame.Width, (uint)frame.Height, 0, JRTISettings.StreamJpegQuality);
 
-                if (jpeg != null && _states.TryGetValue(cameraId, out var s2))
-                    s2.PushFrame(jpeg);
+                    if (jpeg == null) return;
+                    state.PushFrame(jpeg, frame.Sequence);
+                    JRTIPerf.RecordEncode(cameraId, queued, started, jpeg.Length);
+                }
+                finally
+                {
+                    state.EndCapture(frame.Raw);
+                }
             });
         }
 
@@ -190,15 +224,21 @@ namespace JustReadTheInstructions
             }
 
             _listener = new HttpListener();
+            int port = JRTISettings.StreamPort;
 
-            bool started = TryBind($"http://*:{JRTISettings.StreamPort}/")
-                        || TryBind($"http://localhost:{JRTISettings.StreamPort}/");
+            bool started = TryBind($"http://*:{port}/")
+                        || TryBind($"http://localhost:{port}/");
 
             if (!started)
             {
-                Debug.LogError("[JRTI-Stream]: Could not bind to any address. Streaming disabled.");
+                PortWarning = $"Web UI could not start: port {port} is already used by another program {SteamPortHint}. {PortFixHint}";
+                ShowPortWarning();
                 return;
             }
+
+            PortWarning = null;
+            new Thread(() => VerifyPortOwnership(port)) { IsBackground = true, Name = "JRTI-PortCheck" }.Start();
+            VideoEncoders.Prepare();
 
             _running = true;
             _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "JRTI-StreamServer" };
@@ -207,6 +247,51 @@ namespace JustReadTheInstructions
             _watchdogThread.Start();
 
             Debug.Log($"[JRTI-Stream]: Web UI at http://localhost:{JRTISettings.StreamPort}/");
+        }
+
+        private static void ShowPortWarning()
+        {
+            Debug.LogError($"[JRTI-Stream]: {PortWarning}");
+            ScreenMessages.PostScreenMessage($"[JRTI] {PortWarning}", 12f, ScreenMessageStyle.UPPER_CENTER);
+        }
+
+        private void VerifyPortOwnership(int port)
+        {
+            switch (CheckPort(port))
+            {
+                case PortCheckResult.ThisServer:
+                    return;
+                case PortCheckResult.OtherProgram:
+                    PortWarning = $"Another program also answers on port {port} {SteamPortHint}, so localhost:{port} may show its page instead of JRTI's. {PortFixHint}";
+                    break;
+                default:
+                    PortWarning = $"Could not confirm the web UI on port {port}: either the port check timed out or the port is busy {SteamPortHint}. If the browser does not show JRTI's page: {PortFixHint}";
+                    break;
+            }
+            _portWarningPending = true;
+        }
+
+        private PortCheckResult CheckPort(int port)
+        {
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create($"http://127.0.0.1:{port}/session");
+                request.Proxy = null;
+                request.Timeout = PortCheckTimeoutMs;
+                using (var response = request.GetResponse())
+                using (var reader = new StreamReader(response.GetResponseStream()))
+                    return reader.ReadToEnd().Contains(LaunchId) ? PortCheckResult.ThisServer : PortCheckResult.OtherProgram;
+            }
+            catch (WebException ex) when (ex.Response != null)
+            {
+                ex.Response.Close();
+                return PortCheckResult.OtherProgram;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[JRTI-Stream]: Port check on 127.0.0.1:{port} got no answer: {ex.Message}");
+                return PortCheckResult.NoAnswer;
+            }
         }
 
         private bool TryBind(string prefix)
@@ -318,6 +403,12 @@ namespace JustReadTheInstructions
             }
         }
 
+        private void ServeSession(HttpListenerContext ctx)
+        {
+            string inGameRecording = InGameRecordingAvailable ? "true" : "false";
+            ServeText(ctx, $"{{\"launchId\":\"{LaunchId}\",\"inGameRecording\":{inGameRecording}}}", "application/json");
+        }
+
         private void HandleRequest(HttpListenerContext ctx)
         {
             try
@@ -327,7 +418,9 @@ namespace JustReadTheInstructions
 
                 if (trimmed == "" || trimmed == "/index.html") { ServeStaticFile(ctx, "index.html"); return; }
                 if (trimmed == "/cameras") { ServeCameraList(ctx); return; }
-                if (trimmed == "/session") { ServeText(ctx, $"{{\"launchId\":\"{LaunchId}\"}}", "application/json"); return; }
+                if (trimmed == "/streams") { ServeMultiStream(ctx); return; }
+                if (trimmed == "/session") { ServeSession(ctx); return; }
+                if (trimmed == "/debug/stats") { ServeDebugStats(ctx); return; }
                 if (trimmed.StartsWith("/recordings/")) { HandleRecordingEndpoint(ctx, trimmed); return; }
                 if (trimmed.StartsWith("/camera/")) { ServeCameraEndpoint(ctx, trimmed); return; }
 

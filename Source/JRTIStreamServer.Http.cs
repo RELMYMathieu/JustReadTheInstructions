@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 
 namespace JustReadTheInstructions
@@ -16,6 +19,10 @@ namespace JustReadTheInstructions
 
         private static readonly StringComparison PathComparison =
             Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        private const string MjpegBoundary = "jrtiboundary";
+        private const int StreamIdleTimeoutMs = 30_000;
+        private static readonly byte[] MjpegPartEnd = Encoding.ASCII.GetBytes("\r\n");
 
         private void ServeStaticFile(HttpListenerContext ctx, string relativePath)
         {
@@ -62,7 +69,8 @@ namespace JustReadTheInstructions
                 int id = kv.Key;
                 string name = kv.Value.DisplayName ?? id.ToString();
                 sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,\"viewerCount\":{kv.Value.MjpegClientCount},")
-                  .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\"}}");
+                  .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\",")
+                  .Append($"\"recording\":{RecordingJson(kv.Value)}}}");
                 first = false;
             }
 
@@ -99,6 +107,7 @@ namespace JustReadTheInstructions
                 case "preview": ServePreviewMjpeg(ctx, state); break;
                 case "status": ServeText(ctx, "ok", "text/plain"); break;
                 case "settings": ServeOrUpdateSettings(ctx, cameraId, state); break;
+                case "recording": HandleGameRecording(ctx, cameraId, state, parts.Length > 3 ? parts[3] : ""); break;
                 default: ServeError(ctx, 404, "Unknown action"); break;
             }
         }
@@ -130,11 +139,9 @@ namespace JustReadTheInstructions
         private static void ServePreviewMjpeg(HttpListenerContext ctx, CameraStreamState state)
             => ServeToClientDict(ctx, state.PreviewClients);
 
-        private static void ServeToClientDict(HttpListenerContext ctx, System.Collections.Concurrent.ConcurrentDictionary<Guid, LatestFrameSlot> clients)
+        private static void ServeToClientDict(HttpListenerContext ctx, ConcurrentDictionary<Guid, LatestFrameSlot> clients)
         {
-            const string boundary = "jrtiboundary";
-            ctx.Response.ContentType = $"multipart/x-mixed-replace; boundary={boundary}";
-            ctx.Response.SendChunked = true;
+            BeginMjpegResponse(ctx);
 
             var clientId = Guid.NewGuid();
             var slot = new LatestFrameSlot();
@@ -142,25 +149,12 @@ namespace JustReadTheInstructions
 
             try
             {
-                var outStream = ctx.Response.OutputStream;
-                var boundaryHdr = Encoding.ASCII.GetBytes($"--{boundary}\r\n");
-                var crlf = Encoding.ASCII.GetBytes("\r\n");
-                var hdrPrefix = Encoding.ASCII.GetBytes("Content-Type: image/jpeg\r\nContent-Length: ");
-                var hdrSuffix = Encoding.ASCII.GetBytes("\r\n\r\n");
-
-                while (true)
+                var output = ctx.Response.OutputStream;
+                byte[] jpeg;
+                while ((jpeg = slot.Take(StreamIdleTimeoutMs)) != null)
                 {
-                    var jpeg = slot.Take(30_000);
-                    if (jpeg == null) break;
-
-                    var lenBytes = Encoding.ASCII.GetBytes(jpeg.Length.ToString());
-                    outStream.Write(boundaryHdr, 0, boundaryHdr.Length);
-                    outStream.Write(hdrPrefix, 0, hdrPrefix.Length);
-                    outStream.Write(lenBytes, 0, lenBytes.Length);
-                    outStream.Write(hdrSuffix, 0, hdrSuffix.Length);
-                    outStream.Write(jpeg, 0, jpeg.Length);
-                    outStream.Write(crlf, 0, crlf.Length);
-                    outStream.Flush();
+                    WriteMjpegPart(output, jpeg, "");
+                    output.Flush();
                 }
             }
             catch { }
@@ -170,6 +164,95 @@ namespace JustReadTheInstructions
                 slot.Dispose();
                 try { ctx.Response.Close(); } catch { }
             }
+        }
+
+        private void ServeMultiStream(HttpListenerContext ctx)
+        {
+            var clientId = Guid.NewGuid();
+            var signal = new ManualResetEventSlim(false);
+            bool preview = ctx.Request.QueryString["preview"] == "1";
+            var sources = SubscribeStreamClients(ctx.Request.QueryString["ids"], preview, clientId, signal);
+
+            if (sources.Count == 0)
+            {
+                ServeError(ctx, 404, "No matching cameras");
+                return;
+            }
+
+            BeginMjpegResponse(ctx);
+
+            try
+            {
+                var output = ctx.Response.OutputStream;
+                while (signal.Wait(StreamIdleTimeoutMs))
+                {
+                    signal.Reset();
+                    bool anyOpen = false;
+                    foreach (var source in sources)
+                    {
+                        if (source.Slot.IsDisposed) continue;
+                        anyOpen = true;
+                        var jpeg = source.Slot.TakeReady();
+                        if (jpeg != null) WriteMjpegPart(output, jpeg, source.PartHeaders);
+                    }
+                    if (!anyOpen) break;
+                    output.Flush();
+                }
+            }
+            catch { }
+            finally
+            {
+                foreach (var source in sources)
+                {
+                    source.Clients.TryRemove(clientId, out _);
+                    source.Slot.Dispose();
+                }
+                try { ctx.Response.Close(); } catch { }
+            }
+        }
+
+        private List<(ConcurrentDictionary<Guid, LatestFrameSlot> Clients, LatestFrameSlot Slot, string PartHeaders)> SubscribeStreamClients(
+            string idList, bool preview, Guid clientId, ManualResetEventSlim signal)
+        {
+            var sources = new List<(ConcurrentDictionary<Guid, LatestFrameSlot>, LatestFrameSlot, string)>();
+            foreach (var token in (idList ?? "").Split(','))
+            {
+                if (!int.TryParse(token, out int cameraId) || !_states.TryGetValue(cameraId, out var state)) continue;
+
+                var clients = preview ? state.PreviewClients : state.MjpegClients;
+                if (clients.ContainsKey(clientId)) continue;
+
+                var slot = new LatestFrameSlot(signal);
+                clients[clientId] = slot;
+                sources.Add((clients, slot, $"X-Camera-Id: {cameraId}\r\n"));
+            }
+            return sources;
+        }
+
+        private static void BeginMjpegResponse(HttpListenerContext ctx)
+        {
+            ctx.Response.ContentType = $"multipart/x-mixed-replace; boundary={MjpegBoundary}";
+            ctx.Response.SendChunked = true;
+        }
+
+        private static void WriteMjpegPart(Stream output, byte[] jpeg, string extraHeaders)
+        {
+            var header = Encoding.ASCII.GetBytes(
+                $"--{MjpegBoundary}\r\nContent-Type: image/jpeg\r\nContent-Length: {jpeg.Length}\r\n{extraHeaders}\r\n");
+            output.Write(header, 0, header.Length);
+            output.Write(jpeg, 0, jpeg.Length);
+            output.Write(MjpegPartEnd, 0, MjpegPartEnd.Length);
+        }
+
+        private static void ServeDebugStats(HttpListenerContext ctx)
+        {
+            var snapshot = JRTIPerfMonitor.Instance?.Latest;
+            if (snapshot == null)
+            {
+                ServeError(ctx, 503, "No performance sample yet");
+                return;
+            }
+            ServeText(ctx, PerfFormat.ToJson(snapshot), "application/json");
         }
 
         private static void ServeOrUpdateSettings(HttpListenerContext ctx, int cameraId, CameraStreamState state)
@@ -246,7 +329,7 @@ namespace JustReadTheInstructions
         private static bool PathsEqual(string a, string b)
             => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), PathComparison);
 
-        private static string EscapeJson(string s)
+        internal static string EscapeJson(string s)
             => s.Replace("\\", "\\\\").Replace("\"", "\\\"")
                 .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
 

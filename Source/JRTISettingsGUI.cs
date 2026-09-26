@@ -25,7 +25,8 @@ namespace JustReadTheInstructions
         private string _renderWidth;
         private string _renderHeight;
         private string _antiAliasing;
-        private bool _renderEveryOtherFrame;
+        private bool _spreadCaptures;
+        private bool _inGameRecording;
         private bool _enableStreamServer;
         private string _streamPort;
 
@@ -253,10 +254,13 @@ namespace JustReadTheInstructions
                 GUILayout.Label("⚠ Web viewer, MJPEG export, and recording are unavailable while this is off.", _warningStyle);
             GUILayout.Space(6);
             DrawField("Port", ref _streamPort, "f_port");
+            string portWarning = JRTIStreamServer.PortWarning;
+            if (portWarning != null)
+                GUILayout.Label("⚠ " + portWarning, _warningStyle);
             GUILayout.Space(2);
             DrawField("JPEG Quality  (1-100)", ref _jpegQuality, "f_quality");
             GUILayout.Space(2);
-            DrawField("Max FPS", ref _maxFps, "f_fps");
+            DrawField("Max FPS  (camera windows and streams)", ref _maxFps, "f_fps");
             GUILayout.Space(6);
             DrawField("Render Width", ref _renderWidth, "f_width");
             GUILayout.Space(2);
@@ -267,9 +271,17 @@ namespace JustReadTheInstructions
             DrawField("Max Open Cameras", ref _maxOpenCameras, "f_cameras");
             GUILayout.Space(6);
 
-            DrawToggle(ref _renderEveryOtherFrame, "Render every other frame (recommended)");
-            if (!_renderEveryOtherFrame)
-                GUILayout.Label("⚠ Rendering every frame doubles per-camera cost. Only viable on a top-tier GPU.", _warningStyle);
+            GUILayout.Label("Every camera renders at most Max FPS times per second, in its window and in streams alike. Each render costs about as much as the game's own view, so lower Max FPS if the game slows down.", _descriptionStyle);
+            GUILayout.Space(6);
+            DrawToggle(ref _spreadCaptures, "Spread camera renders across frames (recommended)");
+            GUILayout.Label("Cameras take turns instead of all rendering on the same frame, for smoother frame times. Each camera keeps its own frame rate.", _descriptionStyle);
+            GUILayout.Space(6);
+            DrawToggle(ref _inGameRecording, "Record in game with the graphics card's video encoder  (recommended)");
+            GUILayout.Label("Recordings are saved as H.264 MP4 at the render resolution, encoded by the graphics card. Windows uses its built-in encoder; Linux and macOS use ffmpeg if it is installed. Turn off to use the legacy browser recorder (removed in v3.0.0).", _descriptionStyle);
+            VideoEncoders.Prepare();
+            if (_inGameRecording)
+                GUILayout.Label(VideoEncoders.IsAvailable ? VideoEncoders.Status : "⚠ " + VideoEncoders.Status,
+                    VideoEncoders.IsAvailable ? _descriptionStyle : _warningStyle);
             GUILayout.Space(6);
             DrawToggle(ref _enableDockingOverlay, "Render overlay with telemetry on docking cameras");
             GUILayout.Space(2);
@@ -360,6 +372,13 @@ namespace JustReadTheInstructions
             GUILayout.Space(8);
             if (GUILayout.Button("Print Diagnostics to Log", _buttonStyle))
                 PrintDiagnostics();
+
+            if (JRTIPerfMonitor.Instance != null)
+            {
+                GUILayout.Space(4);
+                if (GUILayout.Button("Performance Overlay  (Ctrl+Alt+F7)", _buttonStyle))
+                    JRTIPerfMonitor.Instance.ToggleOverlay();
+            }
 
             GUILayout.Space(4);
             GUILayout.Label("Output goes to KSP.log.", _noteStyle);
@@ -459,7 +478,8 @@ namespace JustReadTheInstructions
             if (int.TryParse(_renderWidth, out int w)) JRTISettings.RenderWidth = w;
             if (int.TryParse(_renderHeight, out int h)) JRTISettings.RenderHeight = h;
             if (int.TryParse(_antiAliasing, out int aa)) JRTISettings.AntiAliasing = aa;
-            JRTISettings.RenderEveryOtherFrame = _renderEveryOtherFrame;
+            JRTISettings.SpreadCaptures = _spreadCaptures;
+            JRTISettings.InGameRecording = _inGameRecording;
             JRTISettings.EnableStreamServer = _enableStreamServer;
             JRTISettings.EnableDockingOverlay = _enableDockingOverlay;
             JRTISettings.FixedPreviewAspectRatio = _fixedPreviewAspectRatio;
@@ -479,7 +499,8 @@ namespace JustReadTheInstructions
             _renderWidth = JRTISettings.RenderWidth.ToString();
             _renderHeight = JRTISettings.RenderHeight.ToString();
             _antiAliasing = JRTISettings.AntiAliasing.ToString();
-            _renderEveryOtherFrame = JRTISettings.RenderEveryOtherFrame;
+            _spreadCaptures = JRTISettings.SpreadCaptures;
+            _inGameRecording = JRTISettings.InGameRecording;
             _enableStreamServer = JRTISettings.EnableStreamServer;
             _enableDockingOverlay = JRTISettings.EnableDockingOverlay;
             _fixedPreviewAspectRatio = JRTISettings.FixedPreviewAspectRatio;

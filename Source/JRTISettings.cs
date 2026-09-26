@@ -13,7 +13,6 @@ namespace JustReadTheInstructions
         public static int RenderHeight { get; internal set; } = 720;
         public static int AntiAliasing { get; internal set; } = 2;
         public static bool UseHDR { get; internal set; } = true;
-        public static bool RenderEveryOtherFrame { get; internal set; } = true;
 
         public static bool EnableDockingOverlay { get; internal set; } = true;
 
@@ -31,6 +30,10 @@ namespace JustReadTheInstructions
         public static int StreamPort { get; internal set; } = 8080;
         public static int StreamJpegQuality { get; internal set; } = 90;
         public static int StreamMaxFps { get; internal set; } = 30;
+        public static bool SpreadCaptures { get; internal set; } = true;
+        public static bool InGameRecording { get; internal set; } = true;
+
+        public static float FramePeriod => 1f / Mathf.Max(1, StreamMaxFps);
 
         public static bool EnableDeferred { get; internal set; } = true;
         public static bool EnableTUFX { get; internal set; } = true;
@@ -94,7 +97,6 @@ namespace JustReadTheInstructions
                 RenderHeight = ParseInt(settings, "RenderHeight", RenderHeight);
                 AntiAliasing = ParseInt(settings, "AntiAliasing", AntiAliasing);
                 UseHDR = ParseBool(settings, "UseHDR", UseHDR);
-                RenderEveryOtherFrame = ParseBool(settings, "RenderEveryOtherFrame", RenderEveryOtherFrame);
                 EnableDockingOverlay = ParseBool(settings, "EnableDockingOverlay", EnableDockingOverlay);
                 MaxOpenCameras = ParseUInt(settings, "MaxOpenCameras", MaxOpenCameras, 1, 64);
                 MaxWindowScale = ParseFloat(settings, "MaxWindowScale", MaxWindowScale);
@@ -106,6 +108,8 @@ namespace JustReadTheInstructions
                 StreamPort = ParseInt(settings, "StreamPort", StreamPort);
                 StreamJpegQuality = ParseInt(settings, "StreamJpegQuality", StreamJpegQuality);
                 StreamMaxFps = ParseInt(settings, "StreamMaxFps", StreamMaxFps);
+                SpreadCaptures = ParseBool(settings, "SpreadCaptures", SpreadCaptures);
+                InGameRecording = ParseBool(settings, "InGameRecording", InGameRecording);
 
                 EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
                 EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
@@ -139,7 +143,6 @@ namespace JustReadTheInstructions
                 settings.AddValue("RenderHeight", RenderHeight);
                 settings.AddValue("AntiAliasing", AntiAliasing);
                 settings.AddValue("UseHDR", UseHDR);
-                settings.AddValue("RenderEveryOtherFrame", RenderEveryOtherFrame);
                 settings.AddValue("EnableDockingOverlay", EnableDockingOverlay);
                 settings.AddValue("MaxWindowScale", MaxWindowScale.ToString(CultureInfo.InvariantCulture));
                 settings.AddValue("MinWindowScale", MinWindowScale.ToString(CultureInfo.InvariantCulture));
@@ -151,6 +154,8 @@ namespace JustReadTheInstructions
                 settings.AddValue("StreamPort", StreamPort);
                 settings.AddValue("StreamJpegQuality", StreamJpegQuality);
                 settings.AddValue("StreamMaxFps", StreamMaxFps);
+                settings.AddValue("SpreadCaptures", SpreadCaptures);
+                settings.AddValue("InGameRecording", InGameRecording);
 
                 settings.AddValue("EnableDeferred", EnableDeferred);
                 settings.AddValue("EnableTUFX", EnableTUFX);

@@ -53,6 +53,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Compile Include="CameraLookup.cs" />
 		<Compile Include="CameraSynchronizer.cs" />
 		<Compile Include="CameraTelemetry.cs" />
 		<Compile Include="CanvasFix.cs" />
@@ -72,7 +73,21 @@
 		<Compile Include="DeferredIntegration.cs" />
 		<Compile Include="JRTIMainGUI.cs" />
 		<Compile Include="JRTISettings.cs" />
+		<Compile Include="JRTIPerf.cs" />
+		<Compile Include="JRTIPerfLog.cs" />
+		<Compile Include="JRTIPerfMonitor.cs" />
+		<Compile Include="JRTIPerfSnapshot.cs" />
 		<Compile Include="JRTIStreamServer.cs" />
+		<Compile Include="JRTIStreamServer.GameRecording.cs" />
+		<Compile Include="MediaFoundation.cs" />
+		<Compile Include="Mp4Recorder.cs" />
+		<Compile Include="Mp4Remuxer.cs" />
+		<Compile Include="ConstantRateClock.cs" />
+		<Compile Include="FrameSchedule.cs" />
+		<Compile Include="VideoEncoders.cs" />
+		<Compile Include="MediaFoundationEncoder.cs" />
+		<Compile Include="Ffmpeg.cs" />
+		<Compile Include="FfmpegEncoder.cs" />
 		<Compile Include="JRTIStreamServer.Http.cs" />
 		<Compile Include="JRTIStreamServer.Recording.cs" />
 		<Compile Include="JRTIStreamServer.Mp4.cs" />

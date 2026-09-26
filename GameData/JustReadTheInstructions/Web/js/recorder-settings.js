@@ -1,13 +1,18 @@
-import { LOS_BEHAVIORS, DEFAULT_LOS_BEHAVIOR } from './config.js';
+import { LOS_BEHAVIORS, DEFAULT_LOS_BEHAVIOR, RECORDERS } from './config.js';
 
 const STORAGE_KEY = 'jrti.recorder.settings.v1';
 
 const DEFAULTS = Object.freeze({
     losBehavior: DEFAULT_LOS_BEHAVIOR,
+    recorder: RECORDERS.GAME,
 });
 
 function isValidBehavior(value) {
     return Object.values(LOS_BEHAVIORS).includes(value);
+}
+
+function isValidRecorder(value) {
+    return Object.values(RECORDERS).includes(value);
 }
 
 function load() {
@@ -15,8 +20,10 @@ function load() {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return { ...DEFAULTS };
         const parsed = JSON.parse(raw);
-        const losBehavior = isValidBehavior(parsed.losBehavior) ? parsed.losBehavior : DEFAULTS.losBehavior;
-        return { losBehavior };
+        return {
+            losBehavior: isValidBehavior(parsed.losBehavior) ? parsed.losBehavior : DEFAULTS.losBehavior,
+            recorder: isValidRecorder(parsed.recorder) ? parsed.recorder : DEFAULTS.recorder,
+        };
     } catch {
         return { ...DEFAULTS };
     }
@@ -30,6 +37,7 @@ function save(state) {
 }
 
 let cached = load();
+let inGameRecordingAvailable = false;
 const listeners = new Set();
 
 export function getSettings() {
@@ -45,4 +53,16 @@ export function updateSettings(patch) {
 export function onChange(listener) {
     listeners.add(listener);
     return () => listeners.delete(listener);
+}
+
+export function setInGameRecordingAvailable(available) {
+    inGameRecordingAvailable = available;
+}
+
+export function isInGameRecordingAvailable() {
+    return inGameRecordingAvailable;
+}
+
+export function usesGameRecorder() {
+    return inGameRecordingAvailable && cached.recorder === RECORDERS.GAME;
 }

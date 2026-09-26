@@ -24,11 +24,13 @@ export async function uploadRecordingChunk(sessionId, filename, blob, mimeType) 
     if (!res.ok) throw new Error(`upload chunk failed: ${res.status}`);
 }
 
-export function heartbeatRecording(sessionId, filename) {
-    return fetch(API.recordingAppend(sessionId, filename), {
-        method: 'POST',
-        body: '',
-    }).catch(() => { });
+export async function heartbeatRecording(sessionId, filename) {
+    try {
+        const res = await fetch(API.recordingHeartbeat(sessionId, filename), { method: 'POST' });
+        return res.status;
+    } catch {
+        return 0;
+    }
 }
 
 export async function finalizeRecording(sessionId, filename) {
@@ -46,6 +48,12 @@ export function finalizeRecordingBeacon(sessionId, filename) {
             keepalive: true,
         }).catch(() => { });
     } catch { }
+}
+
+export async function gameRecording(cameraId, action) {
+    const res = await fetch(API.gameRecording(cameraId, action), { method: 'POST' });
+    if (!res.ok) throw new Error(`in-game recording ${action} failed: ${res.status} ${await res.text()}`);
+    return res.json();
 }
 
 export async function getCameraSettings(cameraId) {

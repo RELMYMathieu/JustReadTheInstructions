@@ -281,7 +281,8 @@ h1 {
         transition: opacity 0.3s ease-out;
     }
 
-    .preview .offline-overlay {
+    .preview .offline-overlay,
+    .layout-tile .offline-overlay {
         display: none;
         position: absolute;
         inset: 0;
@@ -294,7 +295,8 @@ h1 {
         font-size: 0.75rem;
     }
 
-.camera-card.offline .preview .offline-overlay {
+.camera-card.offline .preview .offline-overlay,
+.layout-tile.offline .offline-overlay {
     display: flex;
 }
 
@@ -583,7 +585,8 @@ h1 {
         color: var(--text);
     }
 
-    .settings-row select {
+    .settings-row select,
+    .layout-picker {
         background: var(--bg);
         color: var(--text);
         border: 1px solid var(--border);
@@ -828,5 +831,294 @@ h1 {
     .btn {
         padding: 0.4rem 0.65rem;
         min-height: 2.25rem;
+    }
+}
+
+.debug-updated {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    align-self: center;
+}
+
+.debug-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.debug-tile {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+}
+
+.debug-tile-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.debug-tile-value {
+    font-size: 1.3rem;
+    margin: 0.2rem 0;
+}
+
+.debug-tile-detail {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.debug-tile.debug-warn {
+    border-color: var(--warn);
+}
+
+.debug-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.debug-chart {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+}
+
+.debug-chart canvas {
+    display: block;
+    width: 100%;
+    height: 160px;
+}
+
+.debug-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.9rem;
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.debug-legend-item::before {
+    content: "";
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.2rem;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+    background: var(--swatch);
+}
+
+.debug-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.debug-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.debug-table th,
+.debug-table td {
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+}
+
+.debug-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    cursor: help;
+}
+
+.debug-table th:first-child,
+.debug-table td.debug-name {
+    text-align: left;
+}
+
+.debug-table td.debug-name {
+    border-left: 3px solid transparent;
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-table td.debug-warn {
+    color: var(--warn);
+    cursor: help;
+}
+
+.debug-empty {
+    text-align: center !important;
+    color: var(--text-muted);
+}
+
+.debug-hint {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    max-width: 60rem;
+}
+
+.layout-body {
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+    background: #000;
+}
+
+    .layout-body.idle {
+        cursor: none;
+    }
+
+.layout-grid {
+    position: fixed;
+    inset: 0;
+}
+
+.layout-tile {
+    position: absolute;
+    overflow: hidden;
+    border-radius: 4px;
+    background: var(--bg);
+    transition: left 0.2s cubic-bezier(0.2, 0, 0, 1), top 0.2s cubic-bezier(0.2, 0, 0, 1), width 0.2s cubic-bezier(0.2, 0, 0, 1), height 0.2s cubic-bezier(0.2, 0, 0, 1);
+    animation: card-enter 0.22s cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+.layout-resizing .layout-tile {
+    transition: none;
+}
+
+.layout-fill .layout-tile {
+    border-radius: 0;
+}
+
+.layout-tile-feed {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.layout-fill .layout-tile-feed {
+    object-fit: cover;
+}
+
+.layout-tile-name {
+    position: absolute;
+    left: 0.5rem;
+    bottom: 0.5rem;
+    max-width: calc(100% - 1rem);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    background: rgba(13, 17, 23, 0.7);
+    color: var(--text);
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+}
+
+    .layout-tile-name:empty {
+        display: none;
+    }
+
+.layout-body.idle .layout-tile-name,
+.layout-fullscreen .layout-tile-name {
+    opacity: 1;
+}
+
+.layout-chrome {
+    transition: opacity 0.3s ease-out;
+}
+
+.layout-body.idle .layout-chrome {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.layout-fullscreen .layout-chrome {
+    display: none;
+}
+
+.layout-tile-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 1rem 0.5rem 0.5rem;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+}
+
+.layout-picker {
+    flex: 1;
+    min-width: 0;
+    text-overflow: ellipsis;
+}
+
+.layout-tile-btn {
+    flex-shrink: 0;
+}
+
+.layout-tile-btn.active,
+.layout-toolbar .btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.layout-toolbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    margin: 0;
+    padding: 0.75rem 1rem 1.75rem;
+    border-bottom: none;
+    background: linear-gradient(rgba(13, 17, 23, 0.95), transparent);
+}
+
+.layout-status {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+.layout-empty {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    pointer-events: none;
+}
+
+@media (max-width: 600px) {
+    .layout-toolbar .btn span {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .layout-tile {
+        transition: none;
+        animation: none;
     }
 }

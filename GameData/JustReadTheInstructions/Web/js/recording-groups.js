@@ -87,11 +87,9 @@ export class RecordingGroups {
     #toggleGroup(i) {
         const members = [...this.#getCards().values()].filter(c => this.#groupId(c.id) === i);
         const anyActive = members.some(c => c.recorder?.isActive);
-        if (anyActive) {
-            members.forEach(c => { if (c.recorder?.isActive) c.recorder.stop(); });
-        } else {
-            members.forEach(c => { if (!c.destroyed) c.startRecording(); });
-        }
-        setTimeout(() => this.refresh(), 50);
+        const pending = anyActive
+            ? members.filter(c => c.recorder?.isActive).map(c => c.recorder.stop())
+            : members.filter(c => !c.destroyed).map(c => c.startRecording());
+        Promise.allSettled(pending).then(() => this.refresh());
     }
 }

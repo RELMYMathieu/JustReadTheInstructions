@@ -7,8 +7,14 @@ import {
 import { copyToClipboard } from './clipboard.js';
 import { checkStatus } from './api.js';
 import { CameraRecorder, isRecordingSupported } from './stream-recorder.js';
+import { GameRecorder } from './game-recorder.js';
+import { usesGameRecorder } from './recorder-settings.js';
 import { CameraSnapshot } from './camera-snapshot.js';
 import { CameraRecordingUI } from './camera-recording-ui.js';
+import { StreamHub } from './stream-hub.js';
+import { FeedCanvas } from './feed-canvas.js';
+
+const previewHub = new StreamHub({ preview: true });
 
 function makeButton({ label, className = 'btn', role, title, onClick }) {
     const btn = document.createElement('button');
@@ -85,13 +91,14 @@ export class CameraCard {
         this.recorder = null;
         this.destroyed = false;
         this._viewerCount = 0;
-        this._livePreviewEl = null;
+        this._livePreview = null;
+        this._startingRecording = false;
 
         this.el = this._buildDom();
 
         this._snapshot = new CameraSnapshot(this.snapshotBaseUrl, this.el, {
             getRecorder: () => this.recorder,
-            isLivePreviewActive: () => !!this._livePreviewEl,
+            isLivePreviewActive: () => !!this._livePreview,
         });
 
         this._recordingUI = new CameraRecordingUI(this.el, {
@@ -99,12 +106,9 @@ export class CameraCard {
             getSnapshotImg: () => this._getSnapshotImg(),
             onIdle: (statusEl) => {
                 this._stopLivenessPolling();
-                if (this._viewerCount > 0) {
-                    statusEl.textContent = 'Watching';
-                    this._startLivePreview();
-                } else {
-                    this._snapshot.refresh();
-                }
+                if (this._viewerCount > 0) statusEl.textContent = 'Watching';
+                this._updateLivePreview();
+                this._snapshot.refresh();
             },
         });
 
@@ -115,6 +119,7 @@ export class CameraCard {
             this._viewerCount = initialViewerCount;
             this._onViewerCountChange();
         }
+        this._syncGameRecording(cam.recording);
     }
 
     update(cam) {
@@ -132,6 +137,7 @@ export class CameraCard {
             this._viewerCount = newViewerCount;
             this._onViewerCountChange();
         }
+        this._syncGameRecording(cam.recording);
     }
 
     dispose() {
@@ -159,6 +165,7 @@ export class CameraCard {
 
     markDestroyed() {
         this.destroyed = true;
+        if (this.recorder?.inGame) this.recorder.sync(null);
         this._stopLivePreview();
         this._snapshot.stop();
         this.el.classList.add('offline', 'destroyed');
@@ -192,7 +199,7 @@ export class CameraCard {
     }
 
     startRecording() {
-        this._startRecording();
+        return this._startRecording();
     }
 
     _buildPreview() {
@@ -295,12 +302,57 @@ export class CameraCard {
         this._startRecording();
     }
 
-    _startRecording() {
-        if (this.recorder && this.recorder.state !== 'idle') {
-            const old = this.recorder;
-            this.recorder = null;
-            old.abandon();
+    async _startRecording() {
+        if (this._startingRecording) return;
+        this._startingRecording = true;
+        try {
+            if (this.recorder && this.recorder.state !== 'idle') {
+                const old = this.recorder;
+                this.recorder = null;
+                old.abandon();
+            }
+            if (usesGameRecorder() && await this._tryStartGameRecording()) return;
+            this._startBrowserRecording();
+        } finally {
+            this._startingRecording = false;
         }
+    }
+
+    _createGameRecorder() {
+        return new GameRecorder({
+            cameraId: this.id,
+            onStateChange: (s) => this._recordingUI.onStateChange(s),
+        });
+    }
+
+    async _tryStartGameRecording() {
+        const recorder = this._createGameRecorder();
+        try {
+            await recorder.start();
+        } catch (err) {
+            console.warn('[JRTI] in-game recording unavailable, recording in the browser instead', err);
+            return false;
+        }
+        this.recorder = recorder;
+        this._updateLivePreview();
+        this._startLivenessPolling();
+        return true;
+    }
+
+    _syncGameRecording(info) {
+        if (this.recorder?.isActive) {
+            if (this.recorder.inGame) this.recorder.sync(info);
+            return;
+        }
+        if (!info || this.recorder?.state === 'finalizing') return;
+        if (this.recorder?.inGame && this.recorder.filename === info.file) return;
+        this.recorder = this._createGameRecorder();
+        this.recorder.adopt(info);
+        this._updateLivePreview();
+        this._startLivenessPolling();
+    }
+
+    _startBrowserRecording() {
         this._stopLivePreview();
 
         const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
@@ -336,36 +388,39 @@ export class CameraCard {
 
     _onViewerCountChange() {
         const recActive = this.recorder?.isActive;
-        if (this._viewerCount > 0 && !recActive) {
-            this._startLivePreview();
-        } else if (this._viewerCount === 0) {
-            this._stopLivePreview();
-        }
+        this._updateLivePreview();
         if (!recActive) {
             const statusEl = this.el.querySelector('[data-role="rec-status"]');
             if (statusEl) statusEl.textContent = this._viewerCount > 0 ? 'Watching' : 'Idle';
         }
     }
 
+    _updateLivePreview() {
+        const active = this.recorder?.isActive;
+        const browserRecording = active && !this.recorder.inGame;
+        if (!browserRecording && (this._viewerCount > 0 || active)) this._startLivePreview();
+        else this._stopLivePreview();
+    }
+
     _startLivePreview() {
-        if (this._livePreviewEl) return;
-        const img = document.createElement('img');
-        img.className = 'live-preview-feed';
-        img.draggable = false;
-        img.src = `/camera/${this.id}/preview`;
+        if (this._livePreview) return;
+        const feed = new FeedCanvas('live-preview-feed');
         const snapshotImg = this._getSnapshotImg();
         const preview = snapshotImg.closest('.preview');
         snapshotImg.hidden = true;
         preview.querySelector('.offline-overlay').style.display = 'none';
-        preview.appendChild(img);
-        this._livePreviewEl = img;
+        preview.appendChild(feed.el);
+        this._livePreview = {
+            el: feed.el,
+            unsubscribe: previewHub.subscribe(this.id, (frame) => feed.push(frame)),
+        };
     }
 
     _stopLivePreview() {
-        if (!this._livePreviewEl) return;
-        this._livePreviewEl.src = '';
-        this._livePreviewEl.remove();
-        this._livePreviewEl = null;
+        if (!this._livePreview) return;
+        this._livePreview.unsubscribe();
+        this._livePreview.el.remove();
+        this._livePreview = null;
         const snapshotImg = this._getSnapshotImg();
         snapshotImg.hidden = false;
         const preview = snapshotImg.closest('.preview');

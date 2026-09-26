@@ -12,6 +12,8 @@
         <h1>Just Read The Instructions</h1>
         <div id="groups-bar" class="groups-bar"></div>
         <div class="global-actions">
+            <a class="btn" href="/layout.html" target="_blank" rel="noopener" title="Camera layout"><i class="fa-solid fa-table-cells-large"></i></a>
+            <a class="btn" href="/debug.html" target="_blank" rel="noopener" title="Diagnostics"><i class="fa-solid fa-gauge-high"></i></a>
             <button type="button" class="btn" id="settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
         </div>
     </header>
@@ -41,6 +43,11 @@
         <div class="modal">
             <div class="modal-title">Recorder Settings</div>
 
+            <div class="settings-row" id="settings-recorder-row" hidden>
+                <label for="settings-recorder">Record with</label>
+                <select id="settings-recorder"></select>
+            </div>
+
             <div class="settings-row">
                 <label for="settings-los">On signal loss while recording</label>
                 <select id="settings-los"></select>
@@ -49,8 +56,9 @@
             <div class="settings-hint">
                 Recordings are saved on the KSP host inside
                 <code>GameData/JustReadTheInstructions/Web/recordings/</code>.
-                Uploads are chunked, so everything up to the last received chunk is preserved
-                even if the browser is closed unexpectedly.
+                Recording in the game encodes H.264 MP4 on the graphics card and keeps going
+                if this page is closed. The legacy browser recorder is only used when in-game
+                recording is unavailable or picked above, and will be removed in v3.0.0.
             </div>
 
             <div class="modal-actions">
