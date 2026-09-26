@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JRTI Diagnostics</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>JRTI Diagnostics</h1>
+        <div class="global-actions">
+            <span class="debug-updated" id="debug-updated"></span>
+            <a class="btn" href="/">Cameras</a>
+        </div>
+    </header>
+
+    <p class="status-line error" id="debug-status"></p>
+
+    <section id="debug-content" hidden>
+        <div class="debug-tiles" id="debug-tiles"></div>
+
+        <div class="debug-charts">
+            <figure class="debug-chart">
+                <figcaption class="section-label">Frame time (ms)</figcaption>
+                <canvas id="chart-frame"></canvas>
+                <div class="debug-legend" id="legend-frame"></div>
+            </figure>
+            <figure class="debug-chart">
+                <figcaption class="section-label">Stream FPS per camera</figcaption>
+                <canvas id="chart-fps"></canvas>
+                <div class="debug-legend" id="legend-fps"></div>
+            </figure>
+        </div>
+
+        <h2 class="section-label">Cameras</h2>
+        <div class="debug-table-wrap">
+            <table class="debug-table" id="debug-table"></table>
+        </div>
+
+        <p class="debug-hint">
+            Timings are CPU time on the game's main thread and do not include GPU time.
+            Readback latency is the best hint of a GPU backlog. Highlighted values need attention:
+            hover them for why.
+        </p>
+    </section>
+
+    <script type="module" src="js/debug.js"></script>
+</body>
+</html>
