@@ -69,6 +69,7 @@ o7 and have fun :D
 * Record camera feeds as MP4 inside the game with the graphics card's encoder, then play or download the recordings from the web UI
 * Grab the raw MJPEG feed URL for OBS or other external tools
 * Adjust brightness, contrast, gamma, and FOV per camera from the web viewer - applied server-side so all viewers on the local network see the same image
+* Hear the game from a camera's position (experimental): **Sound** (`M`) in the web viewer, or add `&audio=1` to the viewer URL in an OBS browser source and tick "Control audio via OBS"
 * Name cameras and assign a stable numeric ID from the part's right-click menu in the editor - kept in the craft file, so the stream URL stays the same across relaunches
 
 ## Controls & Settings

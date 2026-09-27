@@ -33,6 +33,7 @@ export const API = Object.freeze({
     cameras: '/cameras',
     snapshot: (id) => `/camera/${id}/snapshot?t=${Date.now()}`,
     stream: (id) => `/camera/${id}/stream`,
+    audio: (id) => `/camera/${id}/audio`,
     streams: (ids, preview) => `/streams?ids=${ids.join(',')}${preview ? '&preview=1' : ''}`,
     status: (id) => `/camera/${id}/status`,
     settings: (id) => `/camera/${id}/settings`,

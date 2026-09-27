@@ -369,6 +369,9 @@ namespace JustReadTheInstructions
 
         public bool HasWindow(int stableId) => _windows.ContainsKey(stableId);
 
+        public Transform GetViewTransform(int stableId)
+            => _renderers.TryGetValue(stableId, out var renderer) ? renderer.ViewTransform : null;
+
         public void UpdateAllCameraVisualEffects()
         {
             foreach (var renderer in _renderers.Values)

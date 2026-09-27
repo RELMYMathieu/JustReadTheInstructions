@@ -53,6 +53,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Compile Include="CameraAudio.cs" />
+		<Compile Include="CameraAudioMixer.cs" />
 		<Compile Include="CameraLookup.cs" />
 		<Compile Include="CameraSynchronizer.cs" />
 		<Compile Include="CameraTelemetry.cs" />
@@ -88,6 +90,7 @@
 		<Compile Include="MediaFoundationEncoder.cs" />
 		<Compile Include="Ffmpeg.cs" />
 		<Compile Include="FfmpegEncoder.cs" />
+		<Compile Include="JRTIStreamServer.Audio.cs" />
 		<Compile Include="JRTIStreamServer.Http.cs" />
 		<Compile Include="JRTIStreamServer.Recording.cs" />
 		<Compile Include="JRTIStreamServer.RecordingFiles.cs" />

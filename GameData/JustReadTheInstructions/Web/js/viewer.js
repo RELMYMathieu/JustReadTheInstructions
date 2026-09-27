@@ -3,6 +3,7 @@ import { fetchCameras, gameRecording } from './api.js';
 import { initControls, isControlsOpen } from './camera-controls.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
+import { CameraAudio } from './camera-audio.js';
 import { copyWithToast, formatTimecode, isTyping, toast } from './ui.js';
 import { getSession } from './session.js';
 import { setInGameRecordingAvailable, selectedGameCodec } from './recorder-settings.js';
@@ -156,8 +157,21 @@ function main() {
     const fullscreenBtn = document.getElementById('viewer-fullscreen');
     fullscreenBtn.hidden = !document.fullscreenEnabled;
     fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    const audio = new CameraAudio(cameraId);
+    const soundBtn = document.getElementById('viewer-sound');
+    const toggleSound = () => {
+        audio.toggle();
+        soundBtn.setAttribute('aria-pressed', String(audio.playing));
+    };
+    soundBtn.addEventListener('click', toggleSound);
+    if (new URLSearchParams(location.search).get('audio') === '1') toggleSound();
+
     document.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'f' && !isTyping(e) && !e.ctrlKey && !e.metaKey && !e.altKey) toggleFullscreen();
+        if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+        const key = e.key.toLowerCase();
+        if (key === 'f') toggleFullscreen();
+        if (key === 'm') toggleSound();
     });
 }
 

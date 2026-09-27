@@ -13,6 +13,8 @@ const PORT = Number(process.env.PORT || 8099);
 const FPS = 30;
 const LOOP_FRAMES = 90;
 const BOUNDARY = 'jrtiboundary';
+const AUDIO_RATE = 48000;
+const AUDIO_TICK_MS = 20;
 
 const FEEDS = [
     [10, 'screenshot-3.png', 'crop=2320:1305:160:100'],
@@ -147,6 +149,48 @@ function stream(req, res, ids, preview) {
     req.on('close', done);
 }
 
+function wavStreamHeader() {
+    const header = Buffer.alloc(44);
+    header.write('RIFF', 0);
+    header.writeUInt32LE(0xffffffff, 4);
+    header.write('WAVEfmt ', 8);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(2, 22);
+    header.writeUInt32LE(AUDIO_RATE, 24);
+    header.writeUInt32LE(AUDIO_RATE * 4, 28);
+    header.writeUInt16LE(4, 32);
+    header.writeUInt16LE(16, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(0xffffffff, 40);
+    return header;
+}
+
+function audio(req, res, cam) {
+    res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-cache' });
+    res.write(wavStreamHeader());
+    const pitch = 40 + (cam.id % 5) * 12;
+    const startedAt = performance.now();
+    let frame = 0;
+    let rumble = 0;
+    const timer = setInterval(() => {
+        const due = Math.floor((performance.now() - startedAt) * AUDIO_RATE / 1000);
+        const frames = due - frame;
+        if (frames <= 0) return;
+        const block = Buffer.alloc(frames * 4);
+        for (let i = 0; i < frames; i++, frame++) {
+            const t = frame / AUDIO_RATE;
+            rumble = rumble * 0.985 + (Math.random() * 2 - 1) * 0.015;
+            const sample = Math.sin(2 * Math.PI * pitch * t) * 0.15 + rumble * 2;
+            const pan = Math.sin(2 * Math.PI * 0.1 * t);
+            block.writeInt16LE(Math.round(sample * (1 - pan) * 0.5 * 32767), i * 4);
+            block.writeInt16LE(Math.round(sample * (1 + pan) * 0.5 * 32767), i * 4 + 2);
+        }
+        res.write(block);
+    }, AUDIO_TICK_MS);
+    req.on('close', () => clearInterval(timer));
+}
+
 function sample() {
     const cams = [...cameras.values()].filter((c) => c.online);
     return {
@@ -274,6 +318,7 @@ const server = http.createServer(async (req, res) => {
                 case 'snapshot': { const jpeg = frameFor(cam.id); res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': jpeg.length }); return res.end(jpeg); }
                 case 'stream': return stream(req, res, [cam.id], false);
                 case 'preview': return stream(req, res, [cam.id], true);
+                case 'audio': return audio(req, res, cam);
                 case 'status': return text(res, 200, 'ok');
                 case 'settings':
                     if (req.method === 'POST') { Object.assign(cam.settings, JSON.parse(await readBody(req))); res.writeHead(200); return res.end(); }

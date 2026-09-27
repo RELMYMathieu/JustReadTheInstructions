@@ -105,6 +105,7 @@ namespace JustReadTheInstructions
                 case "snapshot": ServeSnapshot(ctx, state); break;
                 case "stream": ServeMjpeg(ctx, state); break;
                 case "preview": ServePreviewMjpeg(ctx, state); break;
+                case "audio": ServeCameraAudio(ctx, cameraId); break;
                 case "status": ServeText(ctx, "ok", "text/plain"); break;
                 case "settings": ServeOrUpdateSettings(ctx, cameraId, state); break;
                 case "recording": HandleGameRecording(ctx, cameraId, state, parts.Length > 3 ? parts[3] : ""); break;

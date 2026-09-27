@@ -22,6 +22,9 @@ namespace JustReadTheInstructions
         public bool IsActive { get; private set; }
         public int InstanceId { get; }
 
+        public Transform ViewTransform
+            => _cameras[NearCameraIndex] != null ? _cameras[NearCameraIndex].transform : null;
+
         private const int NearCameraIndex = 0;
         private const int FarPqsCameraIndex = 1;
         private const int ScaledCameraIndex = 2;
