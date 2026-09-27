@@ -1075,6 +1075,15 @@ kbd {
             background: var(--live);
         }
 
+    .tally-chip.is-paused {
+        border-color: var(--hold);
+        color: var(--hold);
+    }
+
+        .tally-chip.is-paused .lamp {
+            background: var(--hold);
+        }
+
     .tally-chip.is-rec {
         border-color: var(--rec);
         background: var(--rec);
@@ -1119,6 +1128,13 @@ kbd {
     .overlay-btn:hover {
         border-color: rgba(255, 255, 255, 0.34);
         background: rgba(0, 0, 0, 0.85);
+    }
+
+    .overlay-btn.btn-rec.active,
+    .overlay-btn.btn-rec.active:hover {
+        border-color: var(--rec);
+        background: var(--rec);
+        color: var(--ink);
     }
 
 .controls-panel {
