@@ -155,7 +155,7 @@ Open **Settings** in the web UI and choose a **Video codec**. Only codecs that w
 
 ### In-game recorder (default)
 
-Every recording is an MP4 at the camera's render resolution, at a constant frame rate (Max FPS), with a keyframe every 2 seconds and a bitrate of 0.2 bits per pixel per frame (about 12 Mbps at 1080p 30 FPS). JRTI picks the first encoder that works, trying graphics card encoders before CPU encoders:
+Every recording is an MP4 at the camera's render resolution, at a constant frame rate (Max FPS), with a keyframe every 2 seconds and a bitrate of 0.2 bits per pixel per frame (about 12 Mbps at 1080p 30 FPS). It also holds the camera's sound, as heard from where the camera is (AAC, 48 kHz stereo). JRTI picks the first encoder that works, trying graphics card encoders before CPU encoders:
 
 | Codec | Windows | Linux | macOS |
 | --- | --- | --- | --- |

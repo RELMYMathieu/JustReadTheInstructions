@@ -64,6 +64,7 @@ namespace JustReadTheInstructions
                             () => VideoEncoders.Create(codec, path, width, height, fps),
                             message => Debug.LogWarning($"[JRTI-Stream]: {message}"));
                         state.SetRecorder(recorder);
+                        CameraAudio.Instance?.Subscribe(cameraId, recorder);
                         Debug.Log($"[JRTI-Stream]: In-game recording started with {recorder.EncoderDescription}: {path}");
                     }
                     catch (Exception ex)

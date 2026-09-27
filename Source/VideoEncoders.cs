@@ -6,10 +6,16 @@ namespace JustReadTheInstructions
     internal interface IVideoEncoder : IDisposable
     {
         string Description { get; }
+        IAudioEncoder Audio { get; }
         object CopyFrame(byte[] bottomUpRgba);
         void Encode(object frame, long frameIndex);
         void ReleaseFrame(object frame);
         void Finish();
+    }
+
+    internal interface IAudioEncoder
+    {
+        void EncodeAudio(byte[] pcm, int offset, int frames, long firstFrame);
     }
 
     internal enum VideoCodec
@@ -21,6 +27,7 @@ namespace JustReadTheInstructions
     internal static class VideoEncoders
     {
         public const int GopSeconds = 2;
+        public const int AudioBitsPerSecond = 192_000;
         private const double BitsPerPixelPerFrame = 0.2;
 
         private static bool IsWindows => Environment.OSVersion.Platform == PlatformID.Win32NT;

@@ -84,11 +84,13 @@
 		<Compile Include="MediaFoundation.cs" />
 		<Compile Include="Mp4Recorder.cs" />
 		<Compile Include="Mp4Remuxer.cs" />
+		<Compile Include="RecordingAudioTrack.cs" />
 		<Compile Include="ConstantRateClock.cs" />
 		<Compile Include="FrameSchedule.cs" />
 		<Compile Include="VideoEncoders.cs" />
 		<Compile Include="MediaFoundationEncoder.cs" />
 		<Compile Include="Ffmpeg.cs" />
+		<Compile Include="FfmpegAudioInput.cs" />
 		<Compile Include="FfmpegEncoder.cs" />
 		<Compile Include="JRTIStreamServer.Audio.cs" />
 		<Compile Include="JRTIStreamServer.Http.cs" />

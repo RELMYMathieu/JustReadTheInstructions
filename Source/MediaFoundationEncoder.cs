@@ -2,20 +2,25 @@ using System;
 
 namespace JustReadTheInstructions
 {
-    internal sealed class MediaFoundationEncoder : IVideoEncoder
+    internal sealed class MediaFoundationEncoder : IVideoEncoder, IAudioEncoder
     {
         private const uint HighProfile = 100;
         private const uint UnconstrainedVbr = 2;
         private const int BytesPerPixel = 4;
+        private const long HundredNanosecondsPerSecond = 10_000_000L;
 
         private readonly int _frameBytes;
         private readonly long _frameDuration;
         private IntPtr _writer;
         private IntPtr _deviceManager;
         private uint _stream;
+        private uint _audioStream;
+        private bool _hasAudio;
         private bool _threadStarted;
 
         public string Description { get; }
+
+        public IAudioEncoder Audio => _hasAudio ? this : null;
 
         public MediaFoundationEncoder(string path, int width, int height, int fps)
         {
@@ -26,10 +31,21 @@ namespace JustReadTheInstructions
                 MediaFoundation.StartThread();
                 _threadStarted = true;
                 _deviceManager = TryCreateDeviceManager();
+                string sound;
+                try
+                {
+                    _writer = CreateWriter(path, width, height, fps, withAudio: true);
+                    _hasAudio = true;
+                    sound = "with sound";
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _writer = CreateWriter(path, width, height, fps, withAudio: false);
+                    sound = $"no sound ({ex.Message})";
+                }
                 Description = _deviceManager != IntPtr.Zero
-                    ? "Windows Media Foundation, GPU color conversion"
-                    : "Windows Media Foundation";
-                _writer = CreateWriter(path, width, height, fps);
+                    ? $"Windows Media Foundation, GPU color conversion, {sound}"
+                    : $"Windows Media Foundation, {sound}";
             }
             catch
             {
@@ -49,6 +65,25 @@ namespace JustReadTheInstructions
 
         public void ReleaseFrame(object frame) => MediaFoundation.Release((IntPtr)frame);
 
+        public void EncodeAudio(byte[] pcm, int offset, int frames, long firstFrame)
+        {
+            var buffer = MediaFoundation.CreateBuffer(pcm, offset, frames * CameraAudioMixer.BytesPerFrame);
+            var sample = IntPtr.Zero;
+            try
+            {
+                long time = AudioTime(firstFrame);
+                sample = MediaFoundation.CreateSample(buffer, time, AudioTime(firstFrame + frames) - time);
+                MediaFoundation.WriteSample(_writer, _audioStream, sample);
+            }
+            finally
+            {
+                MediaFoundation.Release(sample);
+                MediaFoundation.Release(buffer);
+            }
+        }
+
+        private static long AudioTime(long frame) => frame * HundredNanosecondsPerSecond / CameraAudioMixer.SampleRate;
+
         public void Finish() => MediaFoundation.FinalizeWriter(_writer);
 
         public void Dispose()
@@ -67,7 +102,7 @@ namespace JustReadTheInstructions
             catch (Exception) { return IntPtr.Zero; }
         }
 
-        private IntPtr CreateWriter(string path, int width, int height, int fps)
+        private IntPtr CreateWriter(string path, int width, int height, int fps, bool withAudio)
         {
             var attributes = IntPtr.Zero;
             var outputType = IntPtr.Zero;
@@ -76,8 +111,9 @@ namespace JustReadTheInstructions
             var writer = IntPtr.Zero;
             try
             {
-                attributes = MediaFoundation.CreateAttributes(3);
+                attributes = MediaFoundation.CreateAttributes(4);
                 MediaFoundation.SetUInt32(attributes, MediaFoundation.EnableHardwareTransforms, 1);
+                MediaFoundation.SetUInt32(attributes, MediaFoundation.SinkWriterDisableThrottling, 1);
                 MediaFoundation.SetGuid(attributes, MediaFoundation.ContainerType, MediaFoundation.ContainerFragmentedMpeg4);
                 if (_deviceManager != IntPtr.Zero)
                     MediaFoundation.SetUnknown(attributes, MediaFoundation.SinkWriterDeviceManager, _deviceManager);
@@ -101,6 +137,7 @@ namespace JustReadTheInstructions
                 if (MediaFoundation.TrySetInputType(writer, _stream, inputType, encoderSettings) < 0)
                     MediaFoundation.Check(MediaFoundation.TrySetInputType(writer, _stream, inputType, IntPtr.Zero), "SetInputMediaType");
 
+                if (withAudio) _audioStream = AddAudioStream(writer);
                 MediaFoundation.BeginWriting(writer);
                 var ready = writer;
                 writer = IntPtr.Zero;
@@ -113,6 +150,29 @@ namespace JustReadTheInstructions
                 MediaFoundation.Release(inputType);
                 MediaFoundation.Release(encoderSettings);
                 MediaFoundation.Release(writer);
+            }
+        }
+
+        private static uint AddAudioStream(IntPtr writer)
+        {
+            var outputType = IntPtr.Zero;
+            var inputType = IntPtr.Zero;
+            try
+            {
+                const int rate = CameraAudioMixer.SampleRate;
+                const int channels = CameraAudioMixer.Channels;
+                outputType = MediaFoundation.CreateAudioType(MediaFoundation.AudioFormatAac, rate, channels, VideoEncoders.AudioBitsPerSecond / 8);
+                uint stream = MediaFoundation.AddStream(writer, outputType);
+
+                inputType = MediaFoundation.CreateAudioType(MediaFoundation.AudioFormatPcm, rate, channels, rate * CameraAudioMixer.BytesPerFrame);
+                MediaFoundation.SetUInt32(inputType, MediaFoundation.AudioBlockAlignment, CameraAudioMixer.BytesPerFrame);
+                MediaFoundation.Check(MediaFoundation.TrySetInputType(writer, stream, inputType, IntPtr.Zero), "SetInputMediaType (sound)");
+                return stream;
+            }
+            finally
+            {
+                MediaFoundation.Release(outputType);
+                MediaFoundation.Release(inputType);
             }
         }
     }

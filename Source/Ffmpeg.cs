@@ -15,6 +15,7 @@ namespace JustReadTheInstructions
         private const int ProbeWidth = 256;
         private const int ProbeHeight = 144;
         private const int ProbeFps = 30;
+        private const string RawInputOptions = "-probesize 32 -analyzeduration 0 -thread_queue_size 64";
 
         internal sealed class Encoder
         {
@@ -54,7 +55,17 @@ namespace JustReadTheInstructions
         {
             var encoder = Selected(codec);
             if (encoder == null) throw new InvalidOperationException($"ffmpeg has no working {codec} encoder");
-            return new FfmpegEncoder(_executable, EncodeArguments(encoder, path, width, height, fps), $"{encoder.Name} (ffmpeg)", width * height * 4);
+            var audio = new FfmpegAudioInput();
+            try
+            {
+                return new FfmpegEncoder(_executable, EncodeArguments(encoder, path, width, height, fps, audio.Url),
+                    $"{encoder.Name} (ffmpeg), with sound", width * height * 4, fps, audio);
+            }
+            catch
+            {
+                audio.Dispose();
+                throw;
+            }
         }
 
         private static void Probe()
@@ -126,8 +137,12 @@ namespace JustReadTheInstructions
             return nodes;
         }
 
-        private static string EncodeArguments(Encoder encoder, string path, int width, int height, int fps)
-            => Arguments(encoder, $"-f rawvideo -pix_fmt rgba -video_size {width}x{height} -framerate {fps} -i pipe:0", width, height, fps,
+        private static string EncodeArguments(Encoder encoder, string path, int width, int height, int fps, string audioUrl)
+            => Arguments(encoder,
+                         $"{RawInputOptions} -f rawvideo -pix_fmt rgba -video_size {width}x{height} -framerate {fps} -i pipe:0 " +
+                         $"{RawInputOptions} -f s16le -ar {CameraAudioMixer.SampleRate} -ac {CameraAudioMixer.Channels} -i {audioUrl}",
+                         width, height, fps,
+                         $"-map 0:v -map 1:a -c:a aac -b:a {VideoEncoders.AudioBitsPerSecond} " +
                          $"-movflags +frag_keyframe+empty_moov+default_base_moof -f mp4 -y \"{path}\"");
 
         private static string ProbeArguments(Encoder encoder)

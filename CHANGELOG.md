@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Sound per camera in the camera viewer (M) - hear the game from where that camera is, with its own distance and left/right placement. `viewer.html?id=<id>&audio=1` starts it on load, so an OBS browser source ("Control audio via OBS") gets that camera's sound. What you hear in the game does not change
+- Sound in in-game recordings - every recording holds its camera's sound (AAC, 48 kHz stereo), in sync with the picture, on Windows as well as Linux and macOS. Pausing cuts both, and a camera with nothing to hear records silence
 
 
 ## v2.4.1.3 - 2026-09-27

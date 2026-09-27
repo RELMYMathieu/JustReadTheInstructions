@@ -28,11 +28,20 @@ namespace JustReadTheInstructions
         public static readonly Guid ContainerMpeg4 = new Guid("dc6cd05d-b9d0-40ef-bd35-fa622c1ab28a");
         public static readonly Guid ContainerFragmentedMpeg4 = new Guid("9ba876f1-419f-4b77-a1e0-35959d9d4004");
         public static readonly Guid MediaTypeVideo = new Guid("73646976-0000-0010-8000-00aa00389b71");
+        public static readonly Guid MediaTypeAudio = new Guid("73647561-0000-0010-8000-00aa00389b71");
+        public static readonly Guid AudioFormatPcm = new Guid("00000001-0000-0010-8000-00aa00389b71");
+        public static readonly Guid AudioFormatAac = new Guid("00001610-0000-0010-8000-00aa00389b71");
+        public static readonly Guid AudioChannels = new Guid("37e48bf5-645e-4c5b-89de-ada9e29b696a");
+        public static readonly Guid AudioSamplesPerSecond = new Guid("5faeeae7-0290-4c31-9e8a-c534f68d9dba");
+        public static readonly Guid AudioAverageBytesPerSecond = new Guid("1aab75c8-cfef-451c-ab95-ac034b8e1731");
+        public static readonly Guid AudioBlockAlignment = new Guid("322de230-9eeb-43bd-ab7a-ff412251541d");
+        public static readonly Guid AudioBitsPerSample = new Guid("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
         public static readonly Guid VideoFormatH264 = new Guid("34363248-0000-0010-8000-00aa00389b71");
         public static readonly Guid VideoFormatAbgr32 = new Guid("00000020-0000-0010-8000-00aa00389b71");
         public static readonly Guid EncoderRateControlMode = new Guid("1c0608e9-370c-4710-8a58-cb6181c42423");
         public static readonly Guid EncoderMeanBitrate = new Guid("f7222374-2144-4815-b550-a37f8e12ee52");
         public static readonly Guid EncoderGopSize = new Guid("95f31b26-95a4-41aa-9303-246a7fc6eef1");
+        public static readonly Guid SinkWriterDisableThrottling = new Guid("08b845d8-2b74-4afe-9d53-be16d2d5ae4f");
         public static readonly Guid SinkWriterDeviceManager = new Guid("ec822da2-e1e9-4b29-a0d8-563c719f5269");
         private static readonly Guid D3DMultithreadInterface = new Guid("9b7e4e00-342c-4106-a19f-4f2704f689f0");
 
@@ -145,6 +154,18 @@ namespace JustReadTheInstructions
             return mediaType;
         }
 
+        public static IntPtr CreateAudioType(Guid subtype, int sampleRate, int channels, int bytesPerSecond)
+        {
+            Check(MFCreateMediaType(out var mediaType), "MFCreateMediaType");
+            SetGuid(mediaType, MajorType, MediaTypeAudio);
+            SetGuid(mediaType, Subtype, subtype);
+            SetUInt32(mediaType, AudioBitsPerSample, 16);
+            SetUInt32(mediaType, AudioSamplesPerSecond, (uint)sampleRate);
+            SetUInt32(mediaType, AudioChannels, (uint)channels);
+            SetUInt32(mediaType, AudioAverageBytesPerSecond, (uint)bytesPerSecond);
+            return mediaType;
+        }
+
         public static IntPtr CreateGpuDeviceManager()
         {
             Check(D3D11CreateDevice(IntPtr.Zero, D3DDriverHardware, IntPtr.Zero, D3DDeviceFlags,
@@ -196,13 +217,15 @@ namespace JustReadTheInstructions
         public static void FinalizeWriter(IntPtr writer)
             => Check(Method<NoArgumentFn>(writer, FinalizeSlot)(writer), "Finalize");
 
-        public static IntPtr CreateBuffer(byte[] data, int length)
+        public static IntPtr CreateBuffer(byte[] data, int length) => CreateBuffer(data, 0, length);
+
+        public static IntPtr CreateBuffer(byte[] data, int offset, int length)
         {
             Check(MFCreateMemoryBuffer((uint)length, out var buffer), "MFCreateMemoryBuffer");
             try
             {
                 Check(Method<LockFn>(buffer, LockSlot)(buffer, out var destination, IntPtr.Zero, IntPtr.Zero), "Lock");
-                Marshal.Copy(data, 0, destination, length);
+                Marshal.Copy(data, offset, destination, length);
                 Check(Method<NoArgumentFn>(buffer, UnlockSlot)(buffer), "Unlock");
                 Check(Method<SetLengthFn>(buffer, SetCurrentLengthSlot)(buffer, (uint)length), "SetCurrentLength");
                 return buffer;
