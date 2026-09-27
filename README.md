@@ -63,12 +63,31 @@ o7 and have fun :D
 
 ## Features
 
-* View **Hullcam VDS** camera feeds in a web browser
+* View **Hullcam VDS** camera feeds in a web browser, on the KSP computer or any device on your network
 * Externalize in-game camera views outside the main game window
-* Record camera feeds from the web UI (locally on the KSP host, or Save-As on remote clients)
+* Build multi-camera layouts (grid, spotlight, edge to edge split screens) by dragging cameras onto the screen, and save them in the game so every device and OBS source shows the same layout
+* Record camera feeds as MP4 inside the game with the graphics card's encoder, then play or download the recordings from the web UI
 * Grab the raw MJPEG feed URL for OBS or other external tools
 * Adjust brightness, contrast, gamma, and FOV per camera from the web viewer - applied server-side so all viewers on the local network see the same image
 * Name cameras and assign a stable numeric ID from the part's right-click menu in the editor - kept in the craft file, so the stream URL stays the same across relaunches
+
+## Controls & Settings
+
+| Shortcut (in flight) | Opens |
+| --- | --- |
+| `Ctrl` + `Alt` + `F7` | JRTI's main window (camera list, open, stream) |
+| `Ctrl` + `Alt` + `F8` or `F9` | Settings & integrations |
+| `Ctrl` + `Alt` + `F6` | Performance overlay |
+
+The web UI lives at `http://localhost:8080/` (or the port set in the settings). Settings are saved in `GameData/JustReadTheInstructions/PluginData/settings.cfg`, which mod updates never overwrite.
+
+## Camera Layouts
+
+The **Layout** button in the web UI opens `layout.html`: several cameras in one window, sized to fill it. Open **Cameras** to drag cameras onto the screen, drag a tile onto another to swap them, double-click a tile (or press `1` to `9`) to spotlight it, and use **Fill** for edge to edge split screens.
+
+The menu next to the layout's name saves it **in the game** under a name. `http://localhost:8080/layout.html?layout=Launch` then shows that layout on any device and in OBS, and follows every change made to it from another screen, so a phone can rearrange what an OBS browser source shows while you fly.
+
+For live shows, point one OBS browser source at the **clean feed**, `http://localhost:8080/layout.html?program`. It never shows controls and displays whichever saved layout is **on air**. On the layout page, press **Take on air** or `Shift` + `1` to `9` (the first nine saved layouts, in the order the menu lists them) and the clean feed switches at once, with cameras gliding to their new places. A Stream Deck or any tool that can open a URL can switch too: `http://localhost:8080/program/take/Launch`, or `/program/clear` for a black feed.
 
 ## Camera Naming & IDs
 
@@ -124,14 +143,14 @@ GameData/JustReadTheInstructions/Web/images/los.png
 
 ## Recording & Codecs
 
-Recordings are started from the web UI and saved on the machine running KSP, in `GameData/JustReadTheInstructions/Web/recordings/`. Live feeds and the stream URLs you give OBS are always MJPEG: the codecs below only apply to recordings.
+Recordings are started from the web UI and saved on the machine running KSP, in `GameData/JustReadTheInstructions/Web/recordings/`. The **Recordings** panel in the web UI lists them, so any device on your network can play or download them. Live feeds and the stream URLs you give OBS are always MJPEG: the codecs below only apply to recordings.
 
 > [!WARNING]
 > Keep **H.264** unless you know your tools handle something else. H.264 opens in every editor, player, phone and OBS setup. Other codecs are for people who have checked that their whole workflow supports them.
 
 ### Picking a codec
 
-Open **Settings** (gear icon) in the web UI and choose a **Video codec**. Only codecs that work on the machine running KSP are listed, and the choice is remembered per browser. JRTI's in-game settings window shows which encoders were found.
+Open **Settings** in the web UI and choose a **Video codec**. Only codecs that work on the machine running KSP are listed, and the choice is remembered per browser. JRTI's in-game settings window shows which encoders were found.
 
 ### In-game recorder (default)
 
