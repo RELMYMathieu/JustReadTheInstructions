@@ -74,7 +74,9 @@ window, resized to fill it. Open Cameras (or press C) and click a camera to
 add it, drag it onto a tile to replace that feed, or use "Add all". Drag a
 tile onto another to swap them. Spotlight (double-click a tile, or press 1
 to 9) makes one tile large with the others beside it, Fullscreen shows only
-the cameras, and Names picks whether camera names show on the tiles.
+the cameras, Names picks whether camera names show on the tiles, and
+Columns (L) fixes how many tiles sit side by side instead of letting the
+page pick the biggest tiles.
 Removing or swapping tiles offers an Undo button, and Ctrl+Z undoes any
 change. Press ? for every shortcut. The controls fade out on their own.
 

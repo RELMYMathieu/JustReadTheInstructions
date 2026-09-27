@@ -12,21 +12,26 @@ function visibleArea(rects, aspect) {
     return rects.reduce((sum, rect) => sum + rect.width * rect.height * keptFraction(rect, aspect), 0);
 }
 
-function bestGrid(count, width, height, gap, aspect) {
+function columnChoices(count, columns) {
+    const all = Array.from({ length: count }, (_, i) => i + 1);
+    return columns ? [Math.min(columns, count)] : all;
+}
+
+function bestGrid(count, width, height, gap, aspect, columns) {
     let best = { cols: 1, rows: count, tileWidth: 0 };
-    for (let cols = 1; cols <= count; cols++) {
+    for (const cols of columnChoices(count, columns)) {
         const rows = Math.ceil(count / cols);
         const tileWidth = Math.min(
             (width - gap * (cols - 1)) / cols,
             ((height - gap * (rows - 1)) / rows) * aspect,
         );
-        if (tileWidth > best.tileWidth) best = { cols, rows, tileWidth };
+        if (tileWidth > best.tileWidth || best.tileWidth === 0) best = { cols, rows, tileWidth };
     }
     return { ...best, tileHeight: best.tileWidth / aspect };
 }
 
-function fitRects(count, box, { gap, aspect }) {
-    const { cols, rows, tileWidth, tileHeight } = bestGrid(count, box.width, box.height, gap, aspect);
+function fitRects(count, box, { gap, aspect, columns }) {
+    const { cols, rows, tileWidth, tileHeight } = bestGrid(count, box.width, box.height, gap, aspect, columns);
     const top = box.y + (box.height - rows * tileHeight - (rows - 1) * gap) / 2;
 
     return Array.from({ length: count }, (_, i) => {
@@ -63,9 +68,9 @@ function fillRectsWithColumns(count, cols, box) {
     });
 }
 
-function fillRects(count, box, { aspect }) {
-    const candidates = Array.from({ length: count }, (_, i) => {
-        const rects = fillRectsWithColumns(count, i + 1, box);
+function fillRects(count, box, { aspect, columns }) {
+    const candidates = columnChoices(count, columns).map((cols) => {
+        const rects = fillRectsWithColumns(count, cols, box);
         return { rects, score: visibleArea(rects, aspect) };
     });
     const bestScore = Math.max(...candidates.map((c) => c.score));
@@ -98,7 +103,8 @@ function stripLayout(side, stripTiles, box, options, arrange) {
     return { side, mainRect, strip, score: visibleArea([mainRect], options.aspect) };
 }
 
-function spotlightRects(count, spotlightIndex, box, options, arrange) {
+function spotlightRects(count, spotlightIndex, box, gridOptions, arrange) {
+    const options = { ...gridOptions, columns: null };
     const kept = stripLayout(options.stripSide, count - 1, box, options, arrange);
     const other = stripLayout(options.stripSide === 'right' ? 'bottom' : 'right', count - 1, box, options, arrange);
     const chosen = other.score > kept.score * STRIP_SWITCH_GAIN ? other : kept;

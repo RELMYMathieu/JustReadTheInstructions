@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Columns option on the layout page (L) - keep cameras side by side (or stacked) instead of letting the page pick, for example two cameras side by side on a smaller screen
+
+
 ## v2.4.1.2 - 2026-09-27
 
 ### Added

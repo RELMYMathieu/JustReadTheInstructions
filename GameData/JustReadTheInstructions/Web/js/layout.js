@@ -4,7 +4,7 @@ import { StreamHub } from './stream-hub.js';
 import { layoutRects } from './layout-grid.js';
 import { LayoutTile } from './layout-tile.js';
 import { CameraTray } from './layout-tray.js';
-import { storeForLocation, savedLayoutStore, saveLayoutAs, LABEL_MODES } from './layout-store.js';
+import { storeForLocation, savedLayoutStore, saveLayoutAs, LABEL_MODES, COLUMN_CHOICES } from './layout-store.js';
 import { beginDrag, isDragging } from './layout-drag.js';
 import { onServerEvent } from './events.js';
 import { h, button } from './dom.js';
@@ -21,7 +21,7 @@ const SHORTCUT_LAYOUTS = 9;
 const LAYOUT_NAME_PATTERN = /^[\p{L}\p{N} _-]{1,64}$/u;
 const DIGIT_CODE = /^(?:Digit|Numpad)([0-9])$/;
 const LABEL_TEXT = { auto: 'Names: when idle', always: 'Names: on', never: 'Names: off' };
-const EMPTY_LAYOUT = Object.freeze({ tiles: [], spotlight: null, fill: false, labels: 'auto' });
+const EMPTY_LAYOUT = Object.freeze({ tiles: [], spotlight: null, fill: false, labels: 'auto', columns: null });
 const SAVE_STATES = {
     missing: { text: 'New saved layout: your first change creates it' },
     saving: { text: 'Saving...' },
@@ -36,6 +36,7 @@ const SHORTCUTS = [
     ['T', 'Add an empty tile'],
     ['G', 'Fill the window edge to edge'],
     ['N', 'Camera names: when idle, on, off'],
+    ['L', 'Columns: auto, 1, 2, 3, 4'],
     ['F', 'Fullscreen'],
     ['Ctrl Z', 'Undo the last change'],
     ['?', 'This list'],
@@ -51,6 +52,7 @@ const emptyEl = document.getElementById('layout-empty');
 const statusEl = document.getElementById('layout-status');
 const fillBtn = document.getElementById('layout-fill');
 const labelsBtn = document.getElementById('layout-labels');
+const columnsBtn = document.getElementById('layout-columns');
 const fullscreenBtn = document.getElementById('layout-fullscreen');
 const switcherBtn = document.getElementById('layout-switcher');
 const takeBtn = document.getElementById('layout-take');
@@ -61,6 +63,7 @@ const tiles = [];
 let spotlightIndex = null;
 let fill = false;
 let labels = 'auto';
+let columns = null;
 let frameAspect = DEFAULT_FRAME_ASPECT;
 let stripSide = 'right';
 let cameras = [];
@@ -104,7 +107,7 @@ function setConnection(text, error = false) {
 }
 
 function currentLayout() {
-    return { tiles: tiles.map((tile) => tile.stored), spotlight: spotlightIndex, fill, labels };
+    return { tiles: tiles.map((tile) => tile.stored), spotlight: spotlightIndex, fill, labels, columns };
 }
 
 function persist() {
@@ -151,7 +154,7 @@ function applyProgramLayout(layout) {
 function layoutTiles() {
     const gap = fill ? 0 : TILE_GAP;
     const box = { x: gap, y: gap, width: grid.clientWidth - 2 * gap, height: grid.clientHeight - 2 * gap };
-    const placed = layoutRects(tiles.length, spotlightIndex, box, { gap, aspect: frameAspect, fill, stripSide });
+    const placed = layoutRects(tiles.length, spotlightIndex, box, { gap, aspect: frameAspect, fill, stripSide, columns });
     stripSide = placed.stripSide;
     placed.rects.forEach((rect, i) => tiles[i].place(rect));
     tiles.forEach((tile, i) => tile.setSpotlit(i === spotlightIndex));
@@ -235,8 +238,10 @@ function applyLayout(layout) {
     spotlightIndex = layout.spotlight;
     fill = layout.fill;
     labels = layout.labels;
+    columns = layout.columns ?? null;
     applyFill();
     applyLabels();
+    applyColumns();
     resolveTiles();
     layoutTiles();
 }
@@ -360,6 +365,22 @@ function applyLabels() {
     for (const mode of LABEL_MODES) document.body.classList.toggle(`labels-${mode}`, labels === mode);
     document.getElementById('layout-labels-text').textContent = LABEL_TEXT[labels];
     labelsBtn.setAttribute('aria-label', LABEL_TEXT[labels]);
+}
+
+function columnsText() {
+    return `Columns: ${columns ?? 'auto'}`;
+}
+
+function applyColumns() {
+    document.getElementById('layout-columns-text').textContent = columnsText();
+    columnsBtn.setAttribute('aria-label', columnsText());
+}
+
+function cycleColumns() {
+    change(() => {
+        columns = COLUMN_CHOICES[(COLUMN_CHOICES.indexOf(columns) + 1) % COLUMN_CHOICES.length];
+        applyColumns();
+    });
 }
 
 function cycleLabels() {
@@ -592,6 +613,7 @@ const KEY_ACTIONS = {
     t: () => addTile(),
     g: toggleFill,
     n: cycleLabels,
+    l: cycleColumns,
     f: toggleFullscreen,
     '?': () => helpMenu.open(),
 };
@@ -661,6 +683,7 @@ function wireControls() {
     takeBtn.addEventListener('click', () => { if (store.kind === 'saved' && onAirName !== store.name) takeOnAir(store.name); });
     fillBtn.addEventListener('click', toggleFill);
     labelsBtn.addEventListener('click', cycleLabels);
+    columnsBtn.addEventListener('click', cycleColumns);
     fullscreenBtn.hidden = !document.fullscreenEnabled;
     fullscreenBtn.addEventListener('click', toggleFullscreen);
     switcherBtn.addEventListener('pointerdown', refreshSavedNames);

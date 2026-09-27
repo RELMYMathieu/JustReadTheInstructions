@@ -4,6 +4,7 @@ import { onServerEvent, serverEventsConnected } from './events.js';
 
 const LOCAL_KEY = 'jrti-layout';
 export const LABEL_MODES = Object.freeze(['auto', 'always', 'never']);
+export const COLUMN_CHOICES = Object.freeze([null, 1, 2, 3, 4]);
 
 function parseWholeNumber(text) {
     const trimmed = text?.trim() ?? '';
@@ -25,6 +26,7 @@ export function normalizeLayout(raw) {
         spotlight: Number.isInteger(raw?.spotlight) && raw.spotlight >= 0 && raw.spotlight < tiles.length ? raw.spotlight : null,
         fill: raw?.fill === true,
         labels: LABEL_MODES.includes(raw?.labels) ? raw.labels : 'auto',
+        columns: COLUMN_CHOICES.includes(raw?.columns) ? raw.columns : null,
     };
 }
 
@@ -37,6 +39,7 @@ function layoutQuery(layout) {
     if (layout.spotlight !== null) query += `&spotlight=${layout.spotlight}`;
     if (layout.fill) query += '&fill=1';
     if (layout.labels !== 'auto') query += `&labels=${layout.labels}`;
+    if (layout.columns) query += `&cols=${layout.columns}`;
     return query;
 }
 
@@ -81,6 +84,7 @@ class UrlLayoutStore {
             spotlight: parseWholeNumber(this._params.get('spotlight')),
             fill: this._params.get('fill') === '1',
             labels: this._params.get('labels'),
+            columns: parseWholeNumber(this._params.get('cols')),
         });
     }
 
