@@ -1,83 +1,17 @@
-import {
-    SNAPSHOT_REFRESH_MS,
-    LOS_OVERLAY_HTML,
-    WAITING_OVERLAY_HTML,
-    API,
-} from './config.js';
-import { copyToClipboard } from './clipboard.js';
+import { SNAPSHOT_REFRESH_MS, WAITING_OVERLAY_HTML, API } from './config.js';
 import { checkStatus } from './api.js';
 import { CameraRecorder, isRecordingSupported } from './stream-recorder.js';
 import { GameRecorder } from './game-recorder.js';
-import { usesGameRecorder } from './recorder-settings.js';
+import { usesGameRecorder, isInGameRecordingAvailable } from './recorder-settings.js';
 import { CameraSnapshot } from './camera-snapshot.js';
 import { CameraRecordingUI } from './camera-recording-ui.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
+import { h, icon, button } from './dom.js';
+import { Menu, menuItem, menuSeparator, copyWithToast } from './ui.js';
+import { getSession, lanUrl } from './session.js';
 
 const previewHub = new StreamHub({ preview: true });
-
-function makeButton({ label, className = 'btn', role, title, onClick }) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = className;
-    btn.textContent = label;
-    if (role) btn.dataset.role = role;
-    if (title) btn.title = title;
-    if (onClick) btn.addEventListener('click', onClick);
-    return btn;
-}
-
-let _overflowCloseListenerAdded = false;
-
-function makeOverflowMenu(items) {
-    if (!_overflowCloseListenerAdded) {
-        _overflowCloseListenerAdded = true;
-        document.addEventListener('pointerdown', (e) => {
-            if (!e.target.closest('.overflow-wrapper') && !e.target.closest('.overflow-menu'))
-                document.querySelectorAll('.overflow-menu--open').forEach(m => m.classList.remove('overflow-menu--open'));
-        }, true);
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'overflow-wrapper';
-
-    const btn = makeButton({ label: '···', className: 'btn btn-overflow', title: 'More options' });
-
-    const menu = document.createElement('div');
-    menu.className = 'overflow-menu';
-    document.body.appendChild(menu);
-
-    const reposition = () => {
-        const r = btn.getBoundingClientRect();
-        menu.style.right = `${window.innerWidth - r.right}px`;
-        menu.style.bottom = `${window.innerHeight - r.top + 4}px`;
-    };
-
-    for (const { label, getText } of items) {
-        const item = document.createElement('button');
-        item.type = 'button';
-        item.className = 'overflow-item';
-        item.textContent = label;
-        item.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const ok = await copyToClipboard(getText());
-            item.textContent = ok ? '✓ Copied' : 'Manual Copy';
-            setTimeout(() => { item.textContent = label; menu.classList.remove('overflow-menu--open'); }, 1200);
-        });
-        menu.appendChild(item);
-    }
-
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        document.querySelectorAll('.overflow-menu--open').forEach(m => { if (m !== menu) m.classList.remove('overflow-menu--open'); });
-        const isOpen = menu.classList.contains('overflow-menu--open');
-        if (!isOpen) reposition();
-        menu.classList.toggle('overflow-menu--open');
-    });
-
-    wrapper.appendChild(btn);
-    return wrapper;
-}
 
 export class CameraCard {
     constructor(cam) {
@@ -86,6 +20,8 @@ export class CameraCard {
         this.streamUrl = cam.streamUrl;
         this.snapshotBaseUrl = cam.snapshotUrl;
         this.streaming = cam.streaming;
+        this.onCycleGroup = null;
+        this.onRecordingChange = null;
 
         this.livenessTimer = null;
         this.recorder = null;
@@ -104,9 +40,9 @@ export class CameraCard {
         this._recordingUI = new CameraRecordingUI(this.el, {
             getRecorder: () => this.recorder,
             getSnapshotImg: () => this._getSnapshotImg(),
-            onIdle: (statusEl) => {
+            onIdle: () => {
                 this._stopLivenessPolling();
-                if (this._viewerCount > 0) statusEl.textContent = 'Watching';
+                this._renderViewerState();
                 this._updateLivePreview();
                 this._snapshot.refresh();
             },
@@ -114,27 +50,27 @@ export class CameraCard {
 
         this._snapshot.start();
 
-        const initialViewerCount = cam.viewerCount ?? 0;
-        if (initialViewerCount > 0) {
-            this._viewerCount = initialViewerCount;
-            this._onViewerCountChange();
-        }
+        this._viewerCount = cam.viewerCount ?? 0;
+        this._onViewerCountChange();
         this._syncGameRecording(cam.recording);
+    }
+
+    get key() {
+        return this.name;
     }
 
     update(cam) {
         this.streaming = cam.streaming;
-        this.name = cam.name;
+        if (cam.name !== this.name) {
+            this.name = cam.name;
+            this._nameEl.textContent = this.name;
+            this._nameEl.title = this.name;
+            this.el.dataset.key = this.name;
+        }
 
-        const watchBtn = this.el.querySelector('[data-role="watch"]');
-        if (watchBtn) watchBtn.className = this.streaming ? 'btn watch' : 'btn watch-disabled';
-
-        const nameEl = this.el.querySelector('.camera-name');
-        if (nameEl) nameEl.textContent = this.name;
-
-        const newViewerCount = cam.viewerCount ?? 0;
-        if (newViewerCount !== this._viewerCount) {
-            this._viewerCount = newViewerCount;
+        const viewerCount = cam.viewerCount ?? 0;
+        if (viewerCount !== this._viewerCount) {
+            this._viewerCount = viewerCount;
             this._onViewerCountChange();
         }
         this._syncGameRecording(cam.recording);
@@ -144,8 +80,8 @@ export class CameraCard {
         this._snapshot.stop();
         this._stopLivePreview();
         this._recordingUI.dispose();
-        clearInterval(this.livenessTimer);
-        this.livenessTimer = null;
+        this._moreMenu.dispose();
+        this._stopLivenessPolling();
         const img = this._getSnapshotImg();
         if (img?.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
         this.recorder?.stop();
@@ -160,6 +96,7 @@ export class CameraCard {
         this.destroyed = false;
         this.el.classList.remove('destroyed');
         this.update(cam);
+        this._renderViewerState();
         this._snapshot.start();
     }
 
@@ -168,121 +105,94 @@ export class CameraCard {
         if (this.recorder?.inGame) this.recorder.sync(null);
         this._stopLivePreview();
         this._snapshot.stop();
-        this.el.classList.add('offline', 'destroyed');
-        const overlay = this.el.querySelector('.offline-overlay');
-        if (overlay) overlay.innerHTML = LOS_OVERLAY_HTML;
-        const watchBtn = this.el.querySelector('[data-role="watch"]');
-        if (watchBtn) watchBtn.className = 'btn watch';
+        this._viewerCount = 0;
+        this.el.classList.add('destroyed');
+        this._renderViewerState();
+        this._snapshot.showLost();
     }
 
-    _buildDom() {
-        const card = document.createElement('div');
-        card.className = 'camera-card offline';
-        card.dataset.id = this.id;
-
-        this.groupStripEl = document.createElement('div');
-        this.groupStripEl.className = 'group-strip';
-        this.groupStripEl.title = 'Click to assign recording group (cycles G1 → G2 → G3 → G4 → none)';
-
-        card.append(this.groupStripEl, this._buildPreview(), this._buildInfo(), this._buildFooter());
-        return card;
-    }
-
-    setGroupStrip(groupId, color) {
-        this.groupStripEl.style.background = color ?? '';
-        this.groupStripEl.classList.toggle('group-strip--assigned', groupId !== null);
-
-        const label = groupId !== null ? `G${groupId + 1}` : 'Grp';
-        this.groupBtnEl.textContent = label;
-        this.groupBtnEl.style.borderColor = color ?? '';
-        this.groupBtnEl.style.color = color ?? '';
+    setGroup(label) {
+        this._groupBtn.classList.toggle('assigned', label != null);
+        this._groupBtn.querySelector('span').textContent = label ?? 'Group';
     }
 
     startRecording() {
         return this._startRecording();
     }
 
-    _buildPreview() {
-        const preview = document.createElement('div');
-        preview.className = 'preview';
+    _buildDom() {
+        this._nameEl = h('span', { class: 'camera-name', title: this.name }, this.name);
+        this._stateEl = h('span', { dataset: { role: 'rec-status' } }, 'Idle');
 
-        const img = document.createElement('img');
-        img.alt = this.name;
-        img.crossOrigin = 'anonymous';
-        img.draggable = false;
+        const preview = h('div', { class: 'preview' },
+            h('img', { alt: '', crossorigin: 'anonymous', draggable: 'false' }),
+            h('div', { class: 'offline-overlay' }),
+            h('div', { class: 'drag-handle', title: 'Drag to reorder' }, icon('grip')));
+        preview.querySelector('.offline-overlay').innerHTML = WAITING_OVERLAY_HTML;
 
-        const offlineOverlay = document.createElement('div');
-        offlineOverlay.className = 'offline-overlay';
-        offlineOverlay.innerHTML = WAITING_OVERLAY_HTML;
+        const watchBtn = h('a', {
+            class: 'btn',
+            href: this.streamUrl,
+            target: '_blank',
+            rel: 'noopener',
+            title: 'Open this camera full screen in a new tab',
+            dataset: { role: 'watch' },
+        }, h('span', { class: 'btn-text' }, 'Watch'));
 
-        const recBadge = document.createElement('div');
-        recBadge.className = 'rec-badge';
-        recBadge.innerHTML = '<span class="rec-dot"></span><span data-role="rec-label">REC</span>';
-
-        const dragHandle = document.createElement('div');
-        dragHandle.className = 'drag-handle';
-        dragHandle.title = 'Drag to reorder';
-        dragHandle.innerHTML = '<i class="fa-solid fa-hand"></i>';
-
-        preview.append(img, offlineOverlay, recBadge, dragHandle);
-        return preview;
-    }
-
-    _buildInfo() {
-        const info = document.createElement('div');
-        info.className = 'camera-info';
-
-        const name = document.createElement('span');
-        name.className = 'camera-name';
-        name.textContent = this.name;
-
-        const actions = document.createElement('div');
-        actions.className = 'camera-actions';
-
-        const watchBtn = document.createElement('a');
-        watchBtn.className = this.streaming ? 'btn watch' : 'btn watch-disabled';
-        watchBtn.href = this.streamUrl;
-        watchBtn.target = '_blank';
-        watchBtn.textContent = 'Watch';
-        watchBtn.dataset.role = 'watch';
-
-        const recBtn = makeButton({
-            label: '● Record',
-            className: 'btn rec',
-            role: 'record',
-            onClick: () => this._toggleRecording(),
-        });
-        if (!isRecordingSupported()) {
+        const recBtn = button({ label: 'Record', className: 'btn btn-rec', role: 'record', onClick: () => this._toggleRecording() });
+        if (!this._canRecord()) {
             recBtn.disabled = true;
-            recBtn.classList.add('btn-unsupported');
-            recBtn.title = 'Recording not supported in this browser';
+            recBtn.title = 'Recording is not available: in-game recording is off and this browser cannot record';
         }
 
-        const pauseBtn = makeButton({
-            label: '⏸ Pause',
-            role: 'pause',
-            onClick: () => this._togglePause(),
-        });
+        const pauseBtn = button({ label: 'Pause', role: 'pause', onClick: () => this._togglePause() });
         pauseBtn.hidden = true;
 
-        this.groupBtnEl = makeButton({ label: 'Grp', className: 'btn group-assign-btn', title: 'Click to assign a recording group (G1–G4). Cameras in the same group can be started/stopped together.' });
+        this._groupBtn = button({
+            label: 'Group',
+            className: 'btn btn-quiet group-assign-btn',
+            title: 'Assign a record group (G1 to G4). The group buttons in the status line start and stop a whole group at once.',
+            onClick: () => this.onCycleGroup?.(this),
+        });
 
-        const moreMenu = makeOverflowMenu([
-            { label: 'Copy Viewer URL', getText: () => location.origin + this.streamUrl },
-            { label: 'Copy Stream URL', getText: () => location.origin + API.stream(this.id) },
-        ]);
+        const moreBtn = button({ label: 'More', className: 'btn btn-quiet', title: 'Links and copy options' });
+        this._moreMenu = new Menu(moreBtn, () => this._moreItems());
 
-        actions.append(watchBtn, recBtn, pauseBtn, this.groupBtnEl, moreMenu);
-        info.append(name, actions);
-        return info;
+        return h('article', { class: 'camera-card offline', dataset: { id: this.id, key: this.name } },
+            h('div', { class: 'pane-title' }, h('span', { class: 'camera-id' }, String(this.id)), this._nameEl),
+            h('div', { class: 'pane-state' }, h('span', { class: 'lamp' }), this._stateEl),
+            preview,
+            h('div', { class: 'camera-actions' },
+                watchBtn, recBtn, pauseBtn,
+                h('div', { class: 'actions-end' }, this._groupBtn, moreBtn)),
+            h('div', { class: 'pane-foot', dataset: { role: 'rec-size' } }));
     }
 
-    _buildFooter() {
-        const footer = document.createElement('div');
-        footer.className = 'camera-footer';
-        footer.innerHTML = '<span class="rec-status" data-role="rec-status">Idle</span>' +
-            '<span class="rec-size" data-role="rec-size"></span>';
-        return footer;
+    _moreItems() {
+        const items = [
+            menuItem({ label: 'Open viewer', href: this.streamUrl, target: '_blank' }),
+            menuItem({ label: 'Open in a layout', href: `/layout.html?cams=${this.id}`, target: '_blank' }),
+            menuSeparator(),
+            menuItem({ label: 'Copy viewer link', onSelect: () => copyWithToast(location.origin + this.streamUrl) }),
+            menuItem({ label: 'Copy stream URL (OBS, VLC)', onSelect: () => copyWithToast(location.origin + API.stream(this.id), 'Stream URL') }),
+        ];
+        const lanItem = menuItem({ label: 'Copy stream URL for other devices', onSelect: async () => {
+            const url = lanUrl(await getSession(), API.stream(this.id));
+            if (url) copyWithToast(url, 'Network stream URL');
+        } });
+        lanItem.hidden = true;
+        getSession().then((session) => { lanItem.hidden = !lanUrl(session, '/'); });
+        items.push(lanItem);
+        return items;
+    }
+
+    _onRecordingState(state) {
+        this._recordingUI.onStateChange(state);
+        this.onRecordingChange?.(this);
+    }
+
+    _canRecord() {
+        return isInGameRecordingAvailable() || isRecordingSupported();
     }
 
     _getSnapshotImg() {
@@ -311,8 +221,9 @@ export class CameraCard {
                 this.recorder = null;
                 old.abandon();
             }
-            if (usesGameRecorder() && await this._tryStartGameRecording()) return;
-            this._startBrowserRecording();
+            const preferGame = usesGameRecorder() || !isRecordingSupported();
+            if (preferGame && await this._tryStartGameRecording()) return;
+            if (isRecordingSupported()) this._startBrowserRecording();
         } finally {
             this._startingRecording = false;
         }
@@ -321,7 +232,7 @@ export class CameraCard {
     _createGameRecorder() {
         return new GameRecorder({
             cameraId: this.id,
-            onStateChange: (s) => this._recordingUI.onStateChange(s),
+            onStateChange: (s) => this._onRecordingState(s),
         });
     }
 
@@ -334,6 +245,7 @@ export class CameraCard {
             return false;
         }
         this.recorder = recorder;
+        this.onRecordingChange?.(this);
         this._updateLivePreview();
         this._startLivenessPolling();
         return true;
@@ -360,9 +272,9 @@ export class CameraCard {
         this.recorder = new CameraRecorder({
             cameraId: this.id,
             cameraName: this.name,
-            streamUrl: `/camera/${this.id}/stream`,
+            streamUrl: API.stream(this.id),
             isLocal,
-            onStateChange: (s) => this._recordingUI.onStateChange(s),
+            onStateChange: (s) => this._onRecordingState(s),
             onCanvasReady: (canvas) => this._recordingUI.mountCanvas(canvas),
         });
 
@@ -387,29 +299,33 @@ export class CameraCard {
     }
 
     _onViewerCountChange() {
-        const recActive = this.recorder?.isActive;
         this._updateLivePreview();
-        if (!recActive) {
-            const statusEl = this.el.querySelector('[data-role="rec-status"]');
-            if (statusEl) statusEl.textContent = this._viewerCount > 0 ? 'Watching' : 'Idle';
-        }
+        this._renderViewerState();
+    }
+
+    _renderViewerState() {
+        const watched = this._viewerCount > 0;
+        this.el.classList.toggle('live', watched);
+        if (this.recorder?.isActive || this.recorder?.state === 'finalizing') return;
+        if (this.destroyed) this._stateEl.textContent = 'Offline';
+        else if (watched) this._stateEl.textContent = this._viewerCount === 1 ? 'Live · 1 viewer' : `Live · ${this._viewerCount} viewers`;
+        else this._stateEl.textContent = 'Idle';
     }
 
     _updateLivePreview() {
         const active = this.recorder?.isActive;
         const browserRecording = active && !this.recorder.inGame;
-        if (!browserRecording && (this._viewerCount > 0 || active)) this._startLivePreview();
+        if (!this.destroyed && !browserRecording && (this._viewerCount > 0 || active)) this._startLivePreview();
         else this._stopLivePreview();
     }
 
     _startLivePreview() {
         if (this._livePreview) return;
-        const feed = new FeedCanvas('live-preview-feed');
+        const feed = new FeedCanvas('live-preview-feed', { onDraw: () => this._snapshot.markOnline() });
         const snapshotImg = this._getSnapshotImg();
         const preview = snapshotImg.closest('.preview');
         snapshotImg.hidden = true;
-        preview.querySelector('.offline-overlay').style.display = 'none';
-        preview.appendChild(feed.el);
+        preview.insertBefore(feed.el, preview.querySelector('.offline-overlay'));
         this._livePreview = {
             el: feed.el,
             unsubscribe: previewHub.subscribe(this.id, (frame) => feed.push(frame)),
@@ -421,10 +337,7 @@ export class CameraCard {
         this._livePreview.unsubscribe();
         this._livePreview.el.remove();
         this._livePreview = null;
-        const snapshotImg = this._getSnapshotImg();
-        snapshotImg.hidden = false;
-        const preview = snapshotImg.closest('.preview');
-        preview.querySelector('.offline-overlay').style.display = '';
+        this._getSnapshotImg().hidden = false;
         this._snapshot.refresh();
     }
 }

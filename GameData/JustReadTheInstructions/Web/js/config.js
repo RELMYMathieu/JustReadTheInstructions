@@ -1,9 +1,11 @@
 export const SNAPSHOT_REFRESH_MS = 10000;
 export const CAMERA_SYNC_MS = 5000;
 export const LOS_DELAY_MS = 3000;
-export const VIEWER_STATUS_POLL_MS = 1000;
-export const VIEWER_RETRY_MS = 2000;
 export const VIEWER_LOS_DELAY_MS = 5000;
+
+export const STREAM_RETRY_MIN_MS = 1000;
+export const STREAM_RETRY_MAX_MS = 10000;
+export const STREAM_STALL_MS = 15000;
 
 export const RECORDER_CHUNK_MS = 2000;
 export const RECORDER_CAPTURE_FPS = 24;
@@ -11,6 +13,7 @@ export const RECORDER_VIDEO_BPS = 3_500_000;
 export const RECORDER_HEARTBEAT_MS = 5000;
 export const RECORDER_FINALIZE_TIMEOUT_MS = 15000;
 export const RECORDER_LOS_DELAY_MS = 5000;
+export const RECORDINGS_REFRESH_MS = 3000;
 
 export const DEBUG_POLL_MS = 1000;
 export const DEBUG_REQUEST_TIMEOUT_MS = 3000;
@@ -18,15 +21,15 @@ export const DEBUG_HISTORY_SAMPLES = 120;
 
 export const LAYOUT_SIGNAL_CHECK_MS = 1000;
 export const LAYOUT_CHROME_HIDE_MS = 3000;
+export const LAYOUT_REMOTE_POLL_MS = 2000;
+export const LAYOUT_SAVE_DELAY_MS = 400;
+export const LAYOUT_SAVE_RETRY_MS = 3000;
 
-export const LOS_IMAGE_URL = '/images/customlos.png';
-export const LOS_FALLBACK_IMAGE_URL = '/images/los.png';
-export const LOS_OVERLAY_HTML =
-    `<img src="${LOS_IMAGE_URL}" onerror="if(this.dataset.fallbackDone)return;this.dataset.fallbackDone='1';this.src='${LOS_FALLBACK_IMAGE_URL}';" alt="Loss of Signal" style="max-width:100%;max-height:100%;object-fit:contain;">`;
-export const WAITING_OVERLAY_HTML =
-    '<span style="font-size:1.8rem;line-height:1">&#x25CE;</span><span>Waiting for frames...</span>';
+export const LOS_OVERLAY_HTML = '<img src="/images/los.png" alt="Loss of signal">';
+export const WAITING_OVERLAY_HTML = '<span class="waiting">Waiting for frames</span>';
 
 export const API = Object.freeze({
+    session: '/session',
     cameras: '/cameras',
     snapshot: (id) => `/camera/${id}/snapshot?t=${Date.now()}`,
     stream: (id) => `/camera/${id}/stream`,
@@ -36,6 +39,14 @@ export const API = Object.freeze({
     gameRecording: (id, action, codec) => `/camera/${id}/recording/${action}${codec ? `?codec=${codec}` : ''}`,
     viewer: (id) => `/viewer.html?id=${id}`,
     debugStats: '/debug/stats',
+    events: '/events',
+    program: '/program',
+    programTake: (name) => `/program/take/${encodeURIComponent(name)}`,
+    programClear: '/program/clear',
+    layouts: '/layouts',
+    layout: (name) => `/layouts/${encodeURIComponent(name)}`,
+    recordings: '/recordings',
+    recording: (file, download) => `/recordings/${encodeURIComponent(file)}${download ? '?download=1' : ''}`,
     recordingAppend: (sessionId, filename) =>
         `/recordings/${sessionId}/append?name=${encodeURIComponent(filename)}`,
     recordingFinalize: (sessionId, filename) =>

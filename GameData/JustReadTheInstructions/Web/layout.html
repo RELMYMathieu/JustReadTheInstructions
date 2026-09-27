@@ -4,30 +4,67 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JRTI Layout</title>
+    <link rel="preload" href="/fonts/CommitMono-400-Regular.otf" as="font" type="font/otf" crossorigin>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 </head>
-<body class="layout-body">
-    <main id="layout-grid" class="layout-grid"></main>
+<body class="layout-body labels-auto">
+    <main id="layout-grid" class="layout-grid" aria-label="Camera tiles"></main>
 
-    <p class="layout-empty" id="layout-empty" hidden>No tiles yet. Add one to start watching cameras.</p>
+    <p class="program-hint" id="program-hint" hidden>Nothing on air. Open a saved layout on the layout page and press Take on air, or Shift + 1 to 9.</p>
+
+    <div class="layout-empty" id="layout-empty" hidden>
+        <section class="empty-state">
+            <p class="empty-title">Empty layout</p>
+            <p>Add every open camera at once, or open the camera list and drag cameras onto the screen. Tiles resize to fill the window.</p>
+            <div class="empty-actions">
+                <button type="button" class="btn btn-primary" id="layout-empty-all">Add all cameras</button>
+                <button type="button" class="btn" id="layout-empty-tray">Choose cameras <kbd>C</kbd></button>
+            </div>
+        </section>
+    </div>
 
     <header class="layout-toolbar layout-chrome">
-        <h1>Camera Layout</h1>
-        <span class="layout-status" id="layout-status"></span>
-        <div class="global-actions">
-            <button type="button" class="btn" id="layout-add"><i class="fa-solid fa-plus"></i><span>Add tile</span></button>
-            <button type="button" class="btn" id="layout-copy" title="Copy a link to this layout, for a bookmark or an OBS browser source"><i class="fa-solid fa-link"></i><span>Copy link</span></button>
-            <button type="button" class="btn" id="layout-fill" aria-pressed="false" title="Fill the window edge to edge: no gaps or black bars, feeds are cropped to fit"><i class="fa-solid fa-border-none"></i><span>Fill</span></button>
-            <button type="button" class="btn" id="layout-fullscreen" title="Show only the cameras (Esc to leave)"><i class="fa-solid fa-expand"></i><span>Fullscreen</span></button>
-            <a class="btn" href="/">Cameras</a>
+        <a class="btn btn-quiet brand" href="/" title="All cameras">JRTI</a>
+        <span class="toolbar-sep"></span>
+        <button type="button" class="btn btn-quiet layout-switcher" id="layout-switcher" title="Saved layouts">
+            <span class="kind" id="layout-kind">Layout</span>
+            <span id="layout-name">This browser</span>
+            <svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-chevron"></use></svg>
+        </button>
+        <button type="button" class="btn take-btn" id="layout-take" hidden>Take on air</button>
+        <span class="layout-status" id="layout-status" role="status"></span>
+        <div class="toolbar-group">
+            <button type="button" class="btn btn-quiet" id="layout-tray-btn" title="Camera list" aria-expanded="false">Cameras <kbd>C</kbd></button>
+            <button type="button" class="btn btn-quiet" id="layout-add" title="Add an empty tile">Add tile <kbd>T</kbd></button>
+            <span class="toolbar-sep"></span>
+            <button type="button" class="btn btn-quiet" id="layout-fill" aria-pressed="false" title="Fill the window edge to edge: no gaps or black bars, feeds are cropped to fit">Fill <kbd>G</kbd></button>
+            <button type="button" class="btn btn-quiet" id="layout-labels" title="Camera names on the tiles"><span id="layout-labels-text">Names: auto</span> <kbd>N</kbd></button>
+            <button type="button" class="btn btn-quiet" id="layout-fullscreen" title="Show only the cameras (Esc to leave)">Fullscreen <kbd>F</kbd></button>
+            <span class="toolbar-sep"></span>
+            <button type="button" class="btn btn-quiet" id="layout-copy" title="Copy a link to this layout, for a bookmark or an OBS browser source">Copy link</button>
+            <button type="button" class="btn btn-quiet" id="layout-help" title="Keyboard shortcuts">Keys <kbd>?</kbd></button>
         </div>
     </header>
 
-    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true">
+    <aside class="sheet sheet-left" id="layout-tray" aria-labelledby="tray-title">
+        <div class="sheet-head">
+            <h2 id="tray-title">Cameras</h2>
+            <button type="button" class="btn btn-quiet" data-close>Close <kbd>C</kbd></button>
+        </div>
+        <div class="sheet-body" tabindex="-1">
+            <p class="hint">Click a camera to put it in the first empty tile, or drag it onto a tile to replace that feed. Drop it on an empty spot to add a tile.</p>
+            <div class="tray-actions">
+                <button type="button" class="btn" id="tray-add-all">Add all</button>
+                <button type="button" class="btn btn-quiet" id="tray-clear">Clear layout</button>
+            </div>
+            <ul class="tray-list" id="tray-list"></ul>
+        </div>
+    </aside>
+
+    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-title">
         <div class="modal">
-            <div class="modal-title">Clipboard blocked. Press Ctrl+C / Cmd+C, then Enter or close.</div>
-            <input id="copy-input" type="text" readonly>
+            <div class="modal-title" id="copy-title">The browser blocked the clipboard. Press Ctrl+C (Cmd+C on a Mac), then close.</div>
+            <input id="copy-input" class="input" type="text" readonly>
             <div class="modal-actions">
                 <a id="copy-select-btn" class="btn" href="#">Select</a>
                 <a id="copy-close-btn" class="btn" href="#">Close</a>

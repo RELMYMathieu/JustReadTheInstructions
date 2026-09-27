@@ -1,29 +1,22 @@
 import { VIEWER_LOS_DELAY_MS, LOS_OVERLAY_HTML, WAITING_OVERLAY_HTML } from './config.js';
 import { FeedCanvas } from './feed-canvas.js';
+import { h, icon, button } from './dom.js';
 
 const OFFLINE_OPTION_VALUE = 'offline';
+const NARROW_TILE_PX = 300;
+const LEAVE_MS = 320;
 
 const SIGNAL_OVERLAYS = Object.freeze({
-    empty: '<span>No camera selected</span>',
+    empty: '<span class="waiting">No camera. Pick one below, or drag one here from Cameras.</span>',
     waiting: WAITING_OVERLAY_HTML,
     lost: LOS_OVERLAY_HTML,
 });
 
-function makeTileButton(icon, title, onClick) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn layout-tile-btn';
-    btn.title = title;
-    btn.setAttribute('aria-label', title);
-    btn.innerHTML = `<i class="fa-solid ${icon}"></i>`;
-    btn.addEventListener('click', onClick);
-    return btn;
-}
-
 export class LayoutTile {
-    constructor({ id = null, name = null }, { subscribe, onFrameSize, onPick, onSpotlight, onRemove }) {
+    constructor({ id = null, name = null }, { subscribe, onFrameSize, onPick, onSpotlight, onRemove, onGrab }) {
         this.id = id;
         this.name = name;
+        this.bound = false;
         this.camera = null;
 
         this._subscribe = subscribe;
@@ -39,8 +32,9 @@ export class LayoutTile {
             onDraw: () => this._onFrameDrawn(),
             onResize: onFrameSize,
         });
-        this.el = this._buildDom(onPick, onSpotlight, onRemove);
-        this._nameEl.textContent = this.label;
+        this.el = this._buildDom({ onPick, onSpotlight, onRemove, onGrab });
+        this.el.classList.add('entering');
+        this._renderLabel();
         this._setSignal('waiting');
     }
 
@@ -52,9 +46,14 @@ export class LayoutTile {
         return this.id !== null || this.name !== null;
     }
 
+    get stored() {
+        return { id: this.id, name: this.name };
+    }
+
     assign(camera) {
         this.id = camera?.id ?? null;
         this.name = camera?.name ?? null;
+        this.bound = camera != null;
         this._resetFeed();
         this.setCamera(camera);
     }
@@ -64,9 +63,13 @@ export class LayoutTile {
             this.id = camera.id;
             this._resetFeed();
         }
+        if (camera) {
+            this.bound = true;
+            this.name ??= camera.name;
+        }
         this.camera = camera;
         this._followCamera(camera?.id ?? null);
-        this._nameEl.textContent = this.label;
+        this._renderLabel();
         this._renderPicker();
         this.updateSignal(Date.now());
     }
@@ -77,19 +80,23 @@ export class LayoutTile {
     }
 
     setSpotlit(spotlit) {
-        this._spotlightBtn.classList.toggle('active', spotlit);
-        const title = spotlit ? 'Back to grid' : 'Spotlight';
+        this._spotlightBtn.setAttribute('aria-pressed', String(spotlit));
+        const title = spotlit ? 'Back to the grid' : 'Spotlight: make this tile large';
         this._spotlightBtn.title = title;
         this._spotlightBtn.setAttribute('aria-label', title);
     }
 
     place({ x, y, width, height }) {
+        this.el.classList.toggle('narrow', width < NARROW_TILE_PX);
         Object.assign(this.el.style, {
             left: `${x}px`,
             top: `${y}px`,
             width: `${width}px`,
             height: `${height}px`,
         });
+        if (!this.el.classList.contains('entering')) return;
+        void this.el.offsetWidth;
+        this.el.classList.remove('entering');
     }
 
     updateSignal(now) {
@@ -104,10 +111,10 @@ export class LayoutTile {
         }
     }
 
-    dispose() {
+    retire() {
         this._followCamera(null);
-        this._feed.clear();
-        this.el.remove();
+        this.el.classList.add('leaving');
+        setTimeout(() => this.el.remove(), LEAVE_MS);
     }
 
     _followCamera(cameraId) {
@@ -138,6 +145,11 @@ export class LayoutTile {
         this._overlay.innerHTML = SIGNAL_OVERLAYS[signal] ?? '';
     }
 
+    _renderLabel() {
+        this._nameText.textContent = this.label;
+        this._nameEl.hidden = !this.label;
+    }
+
     _renderPicker() {
         const cameras = this._cameras;
         const key = JSON.stringify([this.id, this.name, Boolean(this.camera), cameras.map((c) => [c.id, c.name])]);
@@ -151,42 +163,40 @@ export class LayoutTile {
             option.disabled = true;
             options.push(option);
         }
-        options.push(...cameras.map((c) => new Option(c.name, String(c.id))));
+        options.push(...cameras.map((c) => new Option(`${c.name}  #${c.id}`, String(c.id))));
 
         this._picker.replaceChildren(...options);
         this._picker.value = this.camera ? String(this.id) : offline ? OFFLINE_OPTION_VALUE : '';
     }
 
-    _buildDom(onPick, onSpotlight, onRemove) {
-        const tile = document.createElement('div');
-        tile.className = 'layout-tile';
-        tile.addEventListener('dblclick', (e) => {
-            if (!e.target.closest('.layout-chrome')) onSpotlight(this);
-        });
+    _buildDom({ onPick, onSpotlight, onRemove, onGrab }) {
+        this._overlay = h('div', { class: 'offline-overlay' });
+        this._nameText = h('span');
+        this._nameEl = h('div', { class: 'layout-tile-name' }, h('span', { class: 'lamp' }), this._nameText);
 
-        this._overlay = document.createElement('div');
-        this._overlay.className = 'offline-overlay';
-
-        this._nameEl = document.createElement('span');
-        this._nameEl.className = 'layout-tile-name';
-
-        this._picker = document.createElement('select');
-        this._picker.className = 'layout-picker';
-        this._picker.setAttribute('aria-label', 'Camera');
+        this._picker = h('select', { class: 'input layout-picker', 'aria-label': 'Camera for this tile' });
         this._picker.addEventListener('change', () => {
             const value = this._picker.value;
             this._picker.blur();
             onPick(this, value === '' ? null : Number(value));
         });
 
-        this._spotlightBtn = makeTileButton('fa-maximize', 'Spotlight', () => onSpotlight(this));
-        const removeBtn = makeTileButton('fa-xmark', 'Remove tile', () => onRemove(this));
+        const grip = h('span', { class: 'btn btn-quiet btn-icon tile-grip', title: 'Drag onto another tile to swap them' }, icon('grip'));
+        grip.addEventListener('pointerdown', (e) => onGrab(this, e));
 
-        const bar = document.createElement('div');
-        bar.className = 'layout-tile-bar layout-chrome';
-        bar.append(this._picker, this._spotlightBtn, removeBtn);
+        this._spotlightBtn = button({ icon: 'spotlight', className: 'btn overlay-btn', title: 'Spotlight: make this tile large', pressed: false, onClick: () => onSpotlight(this) });
+        const removeBtn = button({ icon: 'close', className: 'btn overlay-btn', title: 'Remove this tile', onClick: () => onRemove(this) });
 
-        tile.append(this._feed.el, this._overlay, this._nameEl, bar);
+        const bar = h('div', { class: 'layout-tile-bar layout-chrome' },
+            grip, this._picker, h('div', { class: 'tile-bar-end' }, this._spotlightBtn, removeBtn));
+
+        const tile = h('div', { class: 'layout-tile' }, this._feed.el, this._overlay, this._nameEl, bar);
+        tile.addEventListener('dblclick', (e) => {
+            if (!e.target.closest('.layout-tile-bar')) onSpotlight(this);
+        });
+        tile.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'mouse' && !e.target.closest('.layout-tile-bar')) onGrab(this, e);
+        });
         return tile;
     }
 }

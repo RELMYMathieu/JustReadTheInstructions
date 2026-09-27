@@ -4,43 +4,67 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>JRTI Stream</title>
+    <link rel="preload" href="/fonts/CommitMono-400-Regular.otf" as="font" type="font/otf" crossorigin>
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body class="viewer-body">
-    <img id="viewer-img" class="viewer-img" alt="Camera stream">
-    <div id="viewer-hud" class="viewer-hud">
-        <span class="viewer-hud-live"><span class="viewer-hud-dot"></span>LIVE</span>
-        <span class="viewer-hud-name" id="viewer-hud-name"></span>
+    <main class="viewer offline" id="viewer">
+        <div class="offline-overlay" id="viewer-overlay"></div>
+    </main>
+
+    <div class="viewer-hud viewer-chrome" id="viewer-hud">
+        <span class="tally-chip" id="viewer-tally"><span class="lamp"></span><span id="viewer-tally-text">Live</span></span>
+        <span class="viewer-hud-name" id="viewer-name"></span>
+        <span class="camera-id" id="viewer-id"></span>
     </div>
-    <div id="viewer-controls" class="viewer-controls">
-        <button id="controls-toggle" class="controls-toggle" title="Image controls">&#9881;</button>
+
+    <div class="viewer-tools viewer-chrome">
+        <div class="viewer-tool-row">
+            <a class="btn overlay-btn" href="/" title="All cameras">Cameras</a>
+            <button type="button" class="btn overlay-btn" id="viewer-copy" title="Copy the stream URL for OBS or VLC">Copy URL</button>
+            <button type="button" class="btn overlay-btn" id="viewer-fullscreen" title="Show only the camera (Esc to leave)">Fullscreen <kbd>F</kbd></button>
+            <button type="button" class="btn overlay-btn" id="controls-toggle" title="Brightness, contrast, gamma and field of view" aria-expanded="false">Adjust</button>
+        </div>
         <div id="controls-panel" class="controls-panel" hidden>
             <div class="ctrl-row">
-                <span class="ctrl-label">Brightness</span>
+                <label class="ctrl-label" for="ctrl-brightness">Brightness</label>
                 <input type="range" id="ctrl-brightness" class="ctrl-slider" min="-1" max="1" step="0.01" value="0">
                 <span class="ctrl-val" id="val-brightness">0.00</span>
-                <button class="ctrl-reset-btn" data-reset="brightness" data-default="0">&#8635;</button>
+                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="brightness" data-default="0" title="Reset brightness">Reset</button>
             </div>
             <div class="ctrl-row">
-                <span class="ctrl-label">Contrast</span>
+                <label class="ctrl-label" for="ctrl-contrast">Contrast</label>
                 <input type="range" id="ctrl-contrast" class="ctrl-slider" min="0" max="3" step="0.01" value="1">
                 <span class="ctrl-val" id="val-contrast">1.00</span>
-                <button class="ctrl-reset-btn" data-reset="contrast" data-default="1">&#8635;</button>
+                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="contrast" data-default="1" title="Reset contrast">Reset</button>
             </div>
             <div class="ctrl-row">
-                <span class="ctrl-label">Gamma</span>
+                <label class="ctrl-label" for="ctrl-gamma">Gamma</label>
                 <input type="range" id="ctrl-gamma" class="ctrl-slider" min="0.1" max="5" step="0.01" value="1">
                 <span class="ctrl-val" id="val-gamma">1.00</span>
-                <button class="ctrl-reset-btn" data-reset="gamma" data-default="1">&#8635;</button>
+                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="gamma" data-default="1" title="Reset gamma">Reset</button>
             </div>
             <div class="ctrl-row" id="fov-row" hidden>
-                <span class="ctrl-label">FOV</span>
+                <label class="ctrl-label" for="ctrl-fov">FOV</label>
                 <input type="range" id="ctrl-fov" class="ctrl-slider" min="1" max="180" step="1" value="60">
                 <span class="ctrl-val" id="val-fov">60°</span>
-                <button class="ctrl-reset-btn" data-reset="fov">&#8635;</button>
+                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="fov" title="Reset field of view">Reset</button>
+            </div>
+            <p class="hint">Changes apply in the game, so every viewer and recording of this camera sees them.</p>
+        </div>
+    </div>
+
+    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-title">
+        <div class="modal">
+            <div class="modal-title" id="copy-title">The browser blocked the clipboard. Press Ctrl+C (Cmd+C on a Mac), then close.</div>
+            <input id="copy-input" class="input" type="text" readonly>
+            <div class="modal-actions">
+                <a id="copy-select-btn" class="btn" href="#">Select</a>
+                <a id="copy-close-btn" class="btn" href="#">Close</a>
             </div>
         </div>
     </div>
+
     <script type="module" src="/js/viewer.js"></script>
 </body>
 </html>

@@ -1,41 +1,29 @@
-function formatBytes(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
-function formatDuration(ms) {
-    const s = Math.floor(ms / 1000);
-    const mm = String(Math.floor(s / 60)).padStart(2, '0');
-    const ss = String(s % 60).padStart(2, '0');
-    return `${mm}:${ss}`;
-}
+import { setButtonLabel } from './dom.js';
+import { formatBytes, formatTimecode } from './ui.js';
 
 const REC_STATES = {
     recording: {
-        cardClass: true,
-        statusClass: 'recording',
-        recBtn: { text: '■ Stop', active: true, disabled: false },
-        pauseBtn: { hidden: false, text: '⏸ Pause' },
+        cardClass: 'recording',
+        status: 'Recording',
+        recBtn: { label: 'Stop', active: true, disabled: false },
+        pauseBtn: { hidden: false, label: 'Pause' },
     },
     paused: {
-        cardClass: true,
-        statusClass: 'paused',
-        status: '⏸ Paused',
-        recBtn: { text: '■ Stop', active: true, disabled: false },
-        pauseBtn: { hidden: false, text: '▶ Resume' },
+        cardClass: 'paused',
+        status: 'Paused',
+        recBtn: { label: 'Stop', active: true, disabled: false },
+        pauseBtn: { hidden: false, label: 'Resume' },
     },
     finalizing: {
-        cardClass: false,
+        cardClass: null,
         status: 'Saving...',
-        recBtn: { text: 'Saving...', active: false, disabled: true },
+        recBtn: { label: 'Saving', active: false, disabled: true },
         pauseBtn: { hidden: true },
     },
     idle: {
-        cardClass: false,
+        cardClass: null,
         status: 'Idle',
-        recBtn: { text: '● Record', active: false, disabled: false },
+        recBtn: { label: 'Record', active: false, disabled: false },
         pauseBtn: { hidden: true },
     },
 };
@@ -47,42 +35,36 @@ export class CameraRecordingUI {
         this._getSnapshotImg = getSnapshotImg;
         this._onIdle = onIdle;
 
-        this._durationTimer = null;
+        this._clockTimer = null;
         this._lastBytes = 0;
+        this._recBtn = cardEl.querySelector('[data-role="record"]');
+        this._pauseBtn = cardEl.querySelector('[data-role="pause"]');
+        this._statusEl = cardEl.querySelector('[data-role="rec-status"]');
+        this._sizeEl = cardEl.querySelector('[data-role="rec-size"]');
     }
 
     onStateChange({ state, bytesUploaded, startedAt }) {
         const spec = REC_STATES[state] ?? REC_STATES.idle;
-        const recBtn = this._el.querySelector('[data-role="record"]');
-        const pauseBtn = this._el.querySelector('[data-role="pause"]');
-        const statusEl = this._el.querySelector('[data-role="rec-status"]');
-        const sizeEl = this._el.querySelector('[data-role="rec-size"]');
 
-        this._el.classList.toggle('recording', spec.cardClass);
-        statusEl?.classList.remove('recording', 'paused');
-        if (spec.statusClass) statusEl?.classList.add(spec.statusClass);
+        this._el.classList.toggle('recording', spec.cardClass === 'recording');
+        this._el.classList.toggle('paused', spec.cardClass === 'paused');
 
-        recBtn.textContent = spec.recBtn.text;
-        recBtn.classList.toggle('active', spec.recBtn.active);
-        recBtn.disabled = spec.recBtn.disabled;
+        setButtonLabel(this._recBtn, spec.recBtn.label);
+        this._recBtn.classList.toggle('active', spec.recBtn.active);
+        this._recBtn.disabled = spec.recBtn.disabled;
 
-        pauseBtn.hidden = spec.pauseBtn.hidden;
-        if (!spec.pauseBtn.hidden) pauseBtn.textContent = spec.pauseBtn.text;
+        this._pauseBtn.hidden = spec.pauseBtn.hidden;
+        if (!spec.pauseBtn.hidden) setButtonLabel(this._pauseBtn, spec.pauseBtn.label);
 
-        if (state === 'recording') {
-            statusEl.textContent = `● Recording ${formatDuration(Date.now() - startedAt)}`;
-            this._ensureDurationTimer(startedAt);
-        } else {
-            statusEl.textContent = spec.status;
-            this._clearDurationTimer();
-        }
+        if (state === 'recording') this._startClock(startedAt);
+        else this._stopClock(spec.status);
 
         if (state === 'idle') {
             this._unmountCanvas();
-            this._onIdle(statusEl);
+            this._onIdle(this._statusEl);
         }
 
-        this._updateSizeDisplay(sizeEl, state, bytesUploaded);
+        this._updateSize(state, bytesUploaded);
     }
 
     mountCanvas(canvas) {
@@ -91,11 +73,11 @@ export class CameraRecordingUI {
         const preview = snapshotImg.closest('.preview');
         preview.querySelector('.offline-overlay').style.display = 'none';
         snapshotImg.hidden = true;
-        preview.appendChild(canvas);
+        preview.insertBefore(canvas, preview.querySelector('.offline-overlay'));
     }
 
     dispose() {
-        this._clearDurationTimer();
+        this._stopClock(null);
     }
 
     _unmountCanvas() {
@@ -103,32 +85,32 @@ export class CameraRecordingUI {
         if (!canvas) return;
         canvas.remove();
         const snapshotImg = this._getSnapshotImg();
-        const preview = snapshotImg.closest('.preview');
-        preview.querySelector('.offline-overlay').style.display = '';
+        snapshotImg.closest('.preview').querySelector('.offline-overlay').style.display = '';
         snapshotImg.hidden = false;
     }
 
-    _updateSizeDisplay(sizeEl, state, bytesUploaded) {
-        if (!sizeEl) return;
+    _updateSize(state, bytes) {
         const active = state === 'recording' || state === 'paused' || state === 'finalizing';
-        if (active) this._lastBytes = bytesUploaded;
-        const bytes = active ? bytesUploaded : this._lastBytes;
-        sizeEl.textContent = bytes > 0 ? `LAST RECORDING SIZE = ${formatBytes(bytes)}` : '';
+        if (active) this._lastBytes = bytes;
+        const shown = active ? bytes : this._lastBytes;
+        this._sizeEl.textContent = shown > 0 ? (active ? formatBytes(shown) : `Last ${formatBytes(shown)}`) : '';
     }
 
-    _ensureDurationTimer(startedAt) {
-        if (this._durationTimer) return;
-        this._durationTimer = setInterval(() => {
-            const recorder = this._getRecorder();
-            if (!recorder?.isActive || recorder.state !== 'recording') return;
-            const statusEl = this._el.querySelector('[data-role="rec-status"]');
-            if (statusEl) statusEl.textContent = `● Recording ${formatDuration(Date.now() - startedAt)}`;
-        }, 1000);
+    _startClock(startedAt) {
+        this._startedAt = startedAt;
+        this._tickClock();
+        if (!this._clockTimer) this._clockTimer = setInterval(() => this._tickClock(), 500);
     }
 
-    _clearDurationTimer() {
-        if (!this._durationTimer) return;
-        clearInterval(this._durationTimer);
-        this._durationTimer = null;
+    _tickClock() {
+        const recorder = this._getRecorder();
+        if (recorder && recorder.state !== 'recording') return;
+        this._statusEl.textContent = `REC ${formatTimecode(Date.now() - this._startedAt)}`;
+    }
+
+    _stopClock(label) {
+        clearInterval(this._clockTimer);
+        this._clockTimer = null;
+        if (label) this._statusEl.textContent = label;
     }
 }

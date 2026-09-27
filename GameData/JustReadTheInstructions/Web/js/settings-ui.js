@@ -7,11 +7,12 @@ import {
     getGameCodecs,
     selectedGameCodec,
 } from './recorder-settings.js';
+import { Sheet } from './ui.js';
 
 const LOS_LABELS = {
-    [LOS_BEHAVIORS.AUTO_SAVE]: 'Auto-save recording',
-    [LOS_BEHAVIORS.PAUSE]: 'Pause until signal returns',
-    [LOS_BEHAVIORS.DISCARD]: 'Discard recording',
+    [LOS_BEHAVIORS.AUTO_SAVE]: 'Save what was recorded so far',
+    [LOS_BEHAVIORS.PAUSE]: 'Pause until the signal returns',
+    [LOS_BEHAVIORS.DISCARD]: 'Discard the recording',
 };
 
 const RECORDER_LABELS = {
@@ -31,26 +32,12 @@ const CODEC_WARNING =
     'the CPU does the work and recordings may drop frames.\n\n' +
     'Switch anyway?';
 
-function show() {
-    document.getElementById('settings-modal')?.classList.add('visible');
-}
-
-function hide() {
-    const el = document.getElementById('settings-modal');
-    if (!el) return;
-    el.classList.add('modal-backdrop--closing');
-    setTimeout(() => el.classList.remove('visible', 'modal-backdrop--closing'), 180);
-}
-
 function renderOptions(select, labels, selected) {
-    select.innerHTML = '';
-    for (const [value, label] of Object.entries(labels)) {
-        const opt = document.createElement('option');
-        opt.value = value;
-        opt.textContent = label;
-        if (value === selected) opt.selected = true;
-        select.appendChild(opt);
-    }
+    select.replaceChildren(...Object.entries(labels).map(([value, label]) => {
+        const opt = new Option(label, value);
+        opt.selected = value === selected;
+        return opt;
+    }));
 }
 
 function availableCodecLabels() {
@@ -70,22 +57,19 @@ function render(controls) {
 
 export function mountSettingsUI() {
     const openBtn = document.getElementById('settings-btn');
-    const modal = document.getElementById('settings-modal');
-    const closeBtn = document.getElementById('settings-close');
+    const sheetEl = document.getElementById('settings-sheet');
     const controls = {
         los: document.getElementById('settings-los'),
         recorder: document.getElementById('settings-recorder'),
         codec: document.getElementById('settings-codec'),
     };
 
-    if (!openBtn || !modal || !closeBtn || Object.values(controls).some((el) => !el)) return;
+    if (!openBtn || !sheetEl || Object.values(controls).some((el) => !el)) return;
 
+    const sheet = new Sheet(sheetEl, { onOpen: () => render(controls) });
     render(controls);
 
-    openBtn.addEventListener('click', () => { render(controls); show(); });
-    closeBtn.addEventListener('click', hide);
-
-    modal.addEventListener('click', (e) => { if (e.target === modal) hide(); });
+    openBtn.addEventListener('click', () => sheet.toggle(openBtn));
 
     controls.los.addEventListener('change', () => {
         updateSettings({ losBehavior: controls.los.value });
@@ -104,9 +88,5 @@ export function mountSettingsUI() {
         }
         updateSettings({ codec });
         render(controls);
-    });
-
-    document.addEventListener('keydown', (e) => {
-        if (modal.classList.contains('visible') && e.key === 'Escape') hide();
     });
 }

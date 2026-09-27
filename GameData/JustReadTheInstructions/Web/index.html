@@ -4,75 +4,106 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Just Read The Instructions</title>
+    <link rel="preload" href="/fonts/CommitMono-400-Regular.otf" as="font" type="font/otf" crossorigin>
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
 </head>
 <body>
-    <header>
-        <h1>Just Read The Instructions</h1>
-        <div id="groups-bar" class="groups-bar"></div>
-        <div class="global-actions">
-            <a class="btn" href="/layout.html" target="_blank" rel="noopener" title="Camera layout"><i class="fa-solid fa-table-cells-large"></i></a>
-            <a class="btn" href="/debug.html" target="_blank" rel="noopener" title="Diagnostics"><i class="fa-solid fa-gauge-high"></i></a>
-            <button type="button" class="btn" id="settings-btn" title="Settings"><i class="fa-solid fa-gear"></i></button>
-        </div>
+    <header class="topbar">
+        <a class="brand" href="/" title="Just Read The Instructions">JRTI</a>
+        <nav class="tabs" aria-label="Pages">
+            <a class="btn btn-quiet" href="/" aria-current="page">Cameras</a>
+            <a class="btn btn-quiet" href="/layout.html" target="_blank" rel="noopener" title="Several cameras in one window (opens a new tab)">
+                Layout<svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-external"></use></svg>
+            </a>
+            <button type="button" class="btn btn-quiet" id="recordings-btn" aria-expanded="false" title="Recordings saved on the KSP computer">Recordings</button>
+            <a class="btn btn-quiet" href="/debug.html" target="_blank" rel="noopener" title="Frame times and per-camera stats (opens a new tab)">
+                Diagnostics<svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-external"></use></svg>
+            </a>
+            <button type="button" class="btn btn-quiet" id="settings-btn" aria-expanded="false" title="Recorder settings">Settings</button>
+        </nav>
     </header>
 
-    <p class="status-line error" id="error"></p>
-    <p class="status-line empty" id="empty"></p>
+    <main class="page">
+        <p class="status-line error" id="error" role="alert"></p>
 
-    <div id="cameras-live"></div>
+        <section class="empty-state" id="empty">
+            <p class="empty-title">No cameras open yet</p>
+            <p>Open or stream a hull camera in KSP: right-click a camera part, or use the JRTI window (<kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>F7</kbd>). Cameras appear here on their own.</p>
+        </section>
 
-    <section id="cameras-offline-section" hidden>
-        <h2 class="section-label">Offline</h2>
-        <div id="cameras-offline"></div>
-    </section>
+        <div id="cameras-live" class="wall"></div>
 
-    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true">
+        <section id="cameras-offline-section" hidden>
+            <h2 class="section-label">Offline</h2>
+            <div id="cameras-offline" class="wall"></div>
+        </section>
+    </main>
+
+    <footer class="statusline">
+        <span class="link-status" id="link-status" data-state="connecting" role="status">
+            <span class="lamp"></span><span id="link-status-text">Connecting to KSP</span>
+        </span>
+        <button type="button" class="lan-chip" id="lan-chip" title="Copy the address other devices on your network can open" hidden>
+            <span class="label">Network</span><span id="lan-chip-text"></span>
+        </button>
+        <div id="groups-bar" class="groups-bar" hidden></div>
+        <span class="statusline-spacer"></span>
+        <span class="version" id="version"></span>
+    </footer>
+
+    <aside class="sheet" id="settings-sheet" aria-labelledby="settings-title">
+        <div class="sheet-head">
+            <h2 id="settings-title">Recorder settings</h2>
+            <button type="button" class="btn btn-quiet" data-close>Close <kbd>Esc</kbd></button>
+        </div>
+        <div class="sheet-body" tabindex="-1">
+            <div class="field" id="settings-recorder-row" hidden>
+                <label for="settings-recorder">Record with</label>
+                <select id="settings-recorder" class="input"></select>
+            </div>
+
+            <div class="field" id="settings-codec-row" hidden>
+                <label for="settings-codec">Video codec</label>
+                <select id="settings-codec" class="input"></select>
+                <p class="hint hint-warning" id="settings-codec-warning" hidden>
+                    You are not recording in H.264. Check that your editor, player or OBS setup opens these
+                    files before relying on them.
+                </p>
+            </div>
+
+            <div class="field">
+                <label for="settings-los">On signal loss while recording</label>
+                <select id="settings-los" class="input"></select>
+            </div>
+
+            <p class="hint note">
+                Recordings are saved on the KSP computer in
+                <code>GameData/JustReadTheInstructions/Web/recordings/</code> and listed under Recordings.
+                Recording in the game encodes an MP4 on the graphics card (H.264 unless you pick another codec)
+                and keeps going if this page is closed. The legacy browser recorder is only used when in-game
+                recording is unavailable or picked above, and will be removed in v3.0.0.
+            </p>
+        </div>
+    </aside>
+
+    <aside class="sheet" id="recordings-sheet" aria-labelledby="recordings-title">
+        <div class="sheet-head">
+            <h2 id="recordings-title">Recordings</h2>
+            <button type="button" class="btn btn-quiet" data-close>Close <kbd>Esc</kbd></button>
+        </div>
+        <div class="sheet-body" tabindex="-1">
+            <p class="hint">Saved on the KSP computer, newest first. Play opens a file in a new tab; Download saves a copy to this device.</p>
+            <ul class="recordings-list" id="recordings-list"></ul>
+        </div>
+    </aside>
+
+    <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-title">
         <div class="modal">
-            <div class="modal-title">Clipboard blocked. Press Ctrl+C / Cmd+C, then Enter or close.</div>
-            <input id="copy-input" type="text" readonly>
+            <div class="modal-title" id="copy-title">The browser blocked the clipboard. Press Ctrl+C (Cmd+C on a Mac), then close.</div>
+            <input id="copy-input" class="input" type="text" readonly>
             <div class="modal-actions">
                 <a id="copy-select-btn" class="btn" href="#">Select</a>
                 <a id="copy-close-btn" class="btn" href="#">Close</a>
-            </div>
-        </div>
-    </div>
-
-    <div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true">
-        <div class="modal">
-            <div class="modal-title">Recorder Settings</div>
-
-            <div class="settings-row" id="settings-recorder-row" hidden>
-                <label for="settings-recorder">Record with</label>
-                <select id="settings-recorder"></select>
-            </div>
-
-            <div class="settings-row" id="settings-codec-row" hidden>
-                <label for="settings-codec">Video codec</label>
-                <select id="settings-codec"></select>
-            </div>
-
-            <div class="settings-hint settings-warning" id="settings-codec-warning" hidden>
-                You are not recording in H.264. Check that your editor, player or OBS setup opens these
-                files before relying on them.
-            </div>
-
-            <div class="settings-row">
-                <label for="settings-los">On signal loss while recording</label>
-                <select id="settings-los"></select>
-            </div>
-
-            <div class="settings-hint">
-                Recordings are saved on the KSP host inside
-                <code>GameData/JustReadTheInstructions/Web/recordings/</code>.
-                Recording in the game encodes an MP4 on the graphics card (H.264 unless you pick
-                another codec) and keeps going if this page is closed. The legacy browser recorder is only used when in-game
-                recording is unavailable or picked above, and will be removed in v3.0.0.
-            </div>
-
-            <div class="modal-actions">
-                <button type="button" id="settings-close" class="btn">Close</button>
             </div>
         </div>
     </div>

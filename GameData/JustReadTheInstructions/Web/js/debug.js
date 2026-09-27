@@ -1,10 +1,10 @@
 import { API, DEBUG_POLL_MS, DEBUG_HISTORY_SAMPLES, DEBUG_REQUEST_TIMEOUT_MS } from './config.js';
 
-const CAMERA_COLORS = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#39c5cf', '#ff9bce', '#e3b341'];
+const CAMERA_COLORS = ['#d9dcdf', '#8fb8de', '#c9a2e0', '#7cc6b0', '#e08f8f', '#b8c47a', '#d8b07a', '#9aa0a6'];
 const FRAME_SERIES = [
-    { label: 'Frame avg', key: 'frame_ms_avg', color: '#58a6ff' },
-    { label: 'Frame max', key: 'frame_ms_max', color: '#6e7681' },
-    { label: 'JRTI main thread avg', key: 'jrti_ms_avg', color: '#d29922' },
+    { label: 'Frame avg', key: 'frame_ms_avg', color: '#d9dcdf' },
+    { label: 'Frame max', key: 'frame_ms_max', color: '#7c8288' },
+    { label: 'JRTI main thread avg', key: 'jrti_ms_avg', color: '#e5a43b' },
 ];
 
 const fmt = (value, digits = 1) => Number(value).toFixed(digits);
@@ -155,7 +155,9 @@ function renderTable(s) {
             markWarning(td, column.warn?.(c, s));
             row.append(td);
         }
-        row.firstChild.style.borderLeftColor = cameraColor(c.camera_id);
+        const swatch = el('span', 'debug-swatch');
+        swatch.style.setProperty('--swatch', cameraColor(c.camera_id));
+        row.firstChild.prepend(swatch);
         return row;
     });
 
@@ -200,23 +202,23 @@ function drawChart(canvas, series, reference) {
     const y = v => pad.top + plotH - (v / yMax) * plotH;
 
     const styles = getComputedStyle(document.documentElement);
-    ctx.font = '10px ui-monospace, Consolas, monospace';
+    ctx.font = `11px ${styles.getPropertyValue('--font')}`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 1;
     for (const tick of [0, yMax / 2, yMax]) {
-        ctx.strokeStyle = styles.getPropertyValue('--border');
+        ctx.strokeStyle = styles.getPropertyValue('--line');
         ctx.beginPath();
         ctx.moveTo(pad.left, y(tick));
         ctx.lineTo(width - pad.right, y(tick));
         ctx.stroke();
-        ctx.fillStyle = styles.getPropertyValue('--text-muted');
+        ctx.fillStyle = styles.getPropertyValue('--text-3');
         ctx.fillText(String(Math.round(tick * 10) / 10), pad.left - 4, y(tick));
     }
 
     if (reference != null) {
         ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = styles.getPropertyValue('--text-dim');
+        ctx.strokeStyle = styles.getPropertyValue('--text-2');
         ctx.beginPath();
         ctx.moveTo(pad.left, y(reference));
         ctx.lineTo(width - pad.right, y(reference));
@@ -270,7 +272,7 @@ function renderCharts() {
 
     const fpsSeries = cameraSeries();
     drawChart(document.getElementById('chart-fps'), fpsSeries, latest.max_fps);
-    renderLegend('legend-fps', [...fpsSeries, { label: 'Max FPS', color: 'var(--text-dim)' }]);
+    renderLegend('legend-fps', [...fpsSeries, { label: 'Max FPS', color: 'var(--text-2)' }]);
 }
 
 function render(s) {
@@ -283,7 +285,7 @@ function render(s) {
     renderTiles(s);
     renderTable(s);
     renderCharts();
-    document.getElementById('debug-updated').textContent = `Updated ${new Date(s.utc).toLocaleTimeString()}`;
+    document.getElementById('debug-updated').textContent = new Date(s.utc).toLocaleTimeString();
 }
 
 async function poll() {

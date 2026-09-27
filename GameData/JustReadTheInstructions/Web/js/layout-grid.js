@@ -1,4 +1,6 @@
-const STRIP_FRACTION = 0.2;
+const STRIP_FRACTION_MIN = 0.2;
+const STRIP_FRACTION_MAX = 1 / 3;
+const STRIP_SWITCH_GAIN = 1.25;
 const FILL_TIE_TOLERANCE = 0.01;
 
 function keptFraction(rect, aspect) {
@@ -71,39 +73,47 @@ function fillRects(count, box, { aspect }) {
     return closeEnough[closeEnough.length - 1].rects;
 }
 
-function splitOffStrip(box, gap, stripOnRight) {
+function stripFraction(stripTiles) {
+    return Math.min(STRIP_FRACTION_MAX, Math.max(STRIP_FRACTION_MIN, 1 / (stripTiles + 1)));
+}
+
+function splitOffStrip(box, gap, stripOnRight, fraction) {
     if (stripOnRight) {
-        const stripWidth = Math.round(box.width * STRIP_FRACTION);
+        const stripWidth = Math.round(box.width * fraction);
         return {
             main: { ...box, width: box.width - stripWidth - gap },
             strip: { ...box, x: box.x + box.width - stripWidth, width: stripWidth },
         };
     }
-    const stripHeight = Math.round(box.height * STRIP_FRACTION);
+    const stripHeight = Math.round(box.height * fraction);
     return {
         main: { ...box, height: box.height - stripHeight - gap },
         strip: { ...box, y: box.y + box.height - stripHeight, height: stripHeight },
     };
 }
 
+function stripLayout(side, stripTiles, box, options, arrange) {
+    const { main, strip } = splitOffStrip(box, options.gap, side === 'right', stripFraction(stripTiles));
+    const mainRect = arrange(1, main, options)[0];
+    return { side, mainRect, strip, score: visibleArea([mainRect], options.aspect) };
+}
+
 function spotlightRects(count, spotlightIndex, box, options, arrange) {
-    const [bottom, right] = [false, true].map((stripOnRight) => {
-        const { main, strip } = splitOffStrip(box, options.gap, stripOnRight);
-        const mainRect = arrange(1, main, options)[0];
-        return { mainRect, strip, score: visibleArea([mainRect], options.aspect) };
-    });
-    const chosen = right.score > bottom.score ? right : bottom;
+    const kept = stripLayout(options.stripSide, count - 1, box, options, arrange);
+    const other = stripLayout(options.stripSide === 'right' ? 'bottom' : 'right', count - 1, box, options, arrange);
+    const chosen = other.score > kept.score * STRIP_SWITCH_GAIN ? other : kept;
     const stripRects = arrange(count - 1, chosen.strip, options);
 
-    return Array.from({ length: count }, (_, i) => {
+    const rects = Array.from({ length: count }, (_, i) => {
         if (i === spotlightIndex) return chosen.mainRect;
         return stripRects[i < spotlightIndex ? i : i - 1];
     });
+    return { rects, stripSide: chosen.side };
 }
 
 export function layoutRects(count, spotlightIndex, box, options) {
-    if (count === 0) return [];
     const arrange = options.fill ? fillRects : fitRects;
-    if (spotlightIndex === null || count === 1) return arrange(count, box, options);
+    if (count === 0) return { rects: [], stripSide: options.stripSide };
+    if (spotlightIndex === null || count === 1) return { rects: arrange(count, box, options), stripSide: options.stripSide };
     return spotlightRects(count, spotlightIndex, box, options, arrange);
 }

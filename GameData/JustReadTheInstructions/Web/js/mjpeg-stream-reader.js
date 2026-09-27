@@ -1,4 +1,5 @@
-const RETRY_MS = 1000;
+import { STREAM_RETRY_MIN_MS, STREAM_RETRY_MAX_MS, STREAM_STALL_MS } from './config.js';
+
 const headerDecoder = new TextDecoder();
 
 function withCacheBuster(url) {
@@ -37,6 +38,8 @@ export class MjpegStreamReader {
         this._onFrame = onFrame;
         this._fetchAbort = null;
         this._retryTimer = null;
+        this._stallTimer = null;
+        this._retryMs = STREAM_RETRY_MIN_MS;
         this._stopped = false;
     }
 
@@ -50,30 +53,38 @@ export class MjpegStreamReader {
         this._fetchAbort?.abort();
         this._fetchAbort = null;
         clearTimeout(this._retryTimer);
+        clearTimeout(this._stallTimer);
         this._retryTimer = null;
     }
 
     async _pump() {
-        this._fetchAbort = new AbortController();
+        const controller = new AbortController();
+        this._fetchAbort = controller;
         try {
-            const response = await fetch(withCacheBuster(this._streamUrl), {
-                signal: this._fetchAbort.signal,
-            });
+            this._armStallWatchdog(controller);
+            const response = await fetch(withCacheBuster(this._streamUrl), { signal: controller.signal, cache: 'no-store' });
             if (!response.ok) throw new Error(`stream request failed: ${response.status}`);
-            await this._readParts(response.body.getReader());
-        } catch (e) {
-            if (e.name === 'AbortError') return;
-        }
-        if (!this._stopped) this._retryTimer = setTimeout(() => this._pump(), RETRY_MS);
+            await this._readParts(response.body.getReader(), controller);
+        } catch { }
+        clearTimeout(this._stallTimer);
+        if (this._stopped || this._fetchAbort !== controller) return;
+        this._retryTimer = setTimeout(() => this._pump(), this._retryMs);
+        this._retryMs = Math.min(this._retryMs * 2, STREAM_RETRY_MAX_MS);
     }
 
-    async _readParts(reader) {
+    _armStallWatchdog(controller) {
+        clearTimeout(this._stallTimer);
+        this._stallTimer = setTimeout(() => controller.abort(), STREAM_STALL_MS);
+    }
+
+    async _readParts(reader, controller) {
         let buf = new Uint8Array(0);
         let part = null;
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) return;
+            this._armStallWatchdog(controller);
             buf = concat(buf, value);
 
             while (true) {
@@ -89,6 +100,7 @@ export class MjpegStreamReader {
                 const { cameraId } = part;
                 buf = buf.subarray(part.length);
                 part = null;
+                this._retryMs = STREAM_RETRY_MIN_MS;
 
                 const shouldContinue = await this._onFrame(frame, cameraId);
                 if (shouldContinue === false) break;
