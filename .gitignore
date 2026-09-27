@@ -382,3 +382,6 @@ GameData/JustReadTheInstructions/Web/recordings/
 # Local, untracked notes
 TODO.local.md
 *.local.md
+
+GameData/JustReadTheInstructions/PluginData/
+Tools/.mock/

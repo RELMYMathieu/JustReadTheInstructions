@@ -63,7 +63,7 @@ namespace JustReadTheInstructions
             bool hotkey =
                 (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) &&
                 (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) &&
-                Input.GetKey(KeyCode.F7);
+                Input.GetKey(KeyCode.F6);
 
             if (hotkey && !_lastHotkeyState) ToggleOverlay();
             _lastHotkeyState = hotkey;
@@ -80,7 +80,7 @@ namespace JustReadTheInstructions
         {
             if (!_overlayVisible) return;
             if (_labelStyle == null) InitStyles();
-            _windowRect = GUILayout.Window(WindowId, _windowRect, DrawOverlay, "JRTI Performance  (Ctrl+Alt+F7)");
+            _windowRect = GUILayout.Window(WindowId, _windowRect, DrawOverlay, "JRTI Performance  (Ctrl+Alt+F6)");
         }
 
         public void ToggleOverlay()

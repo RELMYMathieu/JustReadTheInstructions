@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using UnityEngine;
 
 namespace JustReadTheInstructions
@@ -7,7 +8,9 @@ namespace JustReadTheInstructions
     [KSPAddon(KSPAddon.Startup.Instantly, true)]
     public class JRTISettings : MonoBehaviour
     {
-        private const string ConfigUrl = "GameData/JustReadTheInstructions/settings.cfg";
+        private static readonly string ModRoot = KSPUtil.ApplicationRootPath + "GameData/JustReadTheInstructions/";
+        private static readonly string ConfigPath = ModRoot + "PluginData/settings.cfg";
+        private static readonly string LegacyConfigPath = ModRoot + "settings.cfg";
 
         public static int RenderWidth { get; internal set; } = 1280;
         public static int RenderHeight { get; internal set; } = 720;
@@ -84,7 +87,10 @@ namespace JustReadTheInstructions
             {
                 Debug.Log("[JRTI]: Loading configuration...");
 
-                ConfigNode fileNode = ConfigNode.Load(ConfigUrl);
+                bool legacy = !File.Exists(ConfigPath) && File.Exists(LegacyConfigPath);
+                ConfigNode fileNode = legacy || File.Exists(ConfigPath)
+                    ? ConfigNode.Load(legacy ? LegacyConfigPath : ConfigPath)
+                    : null;
                 if (fileNode == null || !fileNode.HasNode("Settings"))
                 {
                     Debug.Log("[JRTI]: No config found, using defaults");
@@ -120,6 +126,7 @@ namespace JustReadTheInstructions
                 EnableHullcamFilter = ParseBool(settings, "EnableHullcamFilter", EnableHullcamFilter);
 
                 Sanitize();
+                if (legacy) MoveLegacyConfig();
 
                 Debug.Log($"[JRTI]: Config loaded - {RenderWidth}x{RenderHeight}");
                 Debug.Log($"[JRTI]: Stream config - port:{StreamPort}, quality:{StreamJpegQuality}, maxFps:{StreamMaxFps}");
@@ -130,7 +137,21 @@ namespace JustReadTheInstructions
             }
         }
 
-        public static void Save()
+        private static void MoveLegacyConfig()
+        {
+            if (!Save()) return;
+            try
+            {
+                File.Delete(LegacyConfigPath);
+                Debug.Log($"[JRTI]: Settings moved to {ConfigPath} so mod updates no longer reset them");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[JRTI]: Could not delete the old settings file {LegacyConfigPath}: {ex.Message}");
+            }
+        }
+
+        public static bool Save()
         {
             try
             {
@@ -165,12 +186,15 @@ namespace JustReadTheInstructions
                 settings.AddValue("EnableScatterer", EnableScatterer);
                 settings.AddValue("EnableHullcamFilter", EnableHullcamFilter);
 
-                root.Save(KSPUtil.ApplicationRootPath + ConfigUrl);
+                Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath));
+                root.Save(ConfigPath);
                 Debug.Log("[JRTI]: Settings saved");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[JRTI]: Failed to save config: {ex.Message}");
+                return false;
             }
         }
 

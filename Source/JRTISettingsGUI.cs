@@ -9,7 +9,7 @@ namespace JustReadTheInstructions
     {
         public static JRTISettingsGUI Instance { get; private set; }
 
-        private static readonly string ModVersion =
+        internal static readonly string ModVersion =
             System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
 
         private bool _isVisible;
@@ -376,7 +376,7 @@ namespace JustReadTheInstructions
             if (JRTIPerfMonitor.Instance != null)
             {
                 GUILayout.Space(4);
-                if (GUILayout.Button("Performance Overlay  (Ctrl+Alt+F7)", _buttonStyle))
+                if (GUILayout.Button("Performance Overlay  (Ctrl+Alt+F6)", _buttonStyle))
                     JRTIPerfMonitor.Instance.ToggleOverlay();
             }
 
