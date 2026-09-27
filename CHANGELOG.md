@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Saved layouts - save a layout under a name from the layout page's menu and open it anywhere with `layout.html?layout=Name`. Every screen showing it, OBS included, follows changes made from another device
+- Clean feed for OBS (`layout.html?program`) - one browser source that shows the layout currently on air, with no controls. Switch with Take on air or Shift+1 to 9, and cameras glide into place. Stream Deck buttons can switch it through `/program/take/<layout name>`
+- Camera list on the layout page (C) - click a camera to add it, or drag it onto a tile. Tiles can be dragged onto each other to swap them
+- Undo on the layout page - an Undo button after removing or swapping tiles, and Ctrl+Z for any change
+- Recordings panel - lists recordings saved on the KSP computer, with Play and Download from any device on the network
+- Record, pause and stop from the camera viewer (Watch), not only from the main page
+- The web UI shows the address other devices on your network can open
+
+### Changed
+
+- New web UI look: overall more readable style with a bundled font, words instead of icons, and color only for recording, paused and watched
+- The web UI no longer loads anything from the internet, so it works on a LAN without internet access
+- The camera viewer shows the camera's name and recording state, and reconnects on its own
+- Spotlight sizes the small tiles to match the big one, and they no longer jump to the bottom in fullscreen
+- Settings are saved in `PluginData/settings.cfg` so updates no longer reset them. Your current settings move there automatically (CKAN users may need to set them once more)
+- Performance overlay moved to Ctrl+Alt+F6 (Ctrl+Alt+F7 also opened the main window)
+
+### Fixed
+
+- The Record button no longer stays disabled in browsers that cannot record on their own
+- Camera cards no longer request snapshots while the page is in a background tab
+- Card order and record groups are kept after a game restart
+
+
 ## v2.4.1.1 - 2026-09-26
 
 ### Added
