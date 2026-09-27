@@ -51,7 +51,7 @@ namespace JustReadTheInstructions
                 var bytes = File.ReadAllBytes(candidate);
                 ctx.Response.ContentType = GetContentType(candidate);
                 ctx.Response.ContentLength64 = bytes.Length;
-                ctx.Response.Headers.Add("Cache-Control", "no-cache");
+                ctx.Response.Headers.Add("Cache-Control", IsFont(candidate) ? "max-age=604800" : "no-cache");
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
                 ctx.Response.Close();
             }
@@ -326,6 +326,9 @@ namespace JustReadTheInstructions
             ServeText(ctx, message, "text/plain");
         }
 
+        private static bool IsFont(string path)
+            => GetContentType(path).StartsWith("font/", StringComparison.Ordinal);
+
         private static bool PathsEqual(string a, string b)
             => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), PathComparison);
 
@@ -345,6 +348,9 @@ namespace JustReadTheInstructions
                 case ".jpg": case ".jpeg": return "image/jpeg";
                 case ".gif": return "image/gif";
                 case ".svg": return "image/svg+xml";
+                case ".otf": return "font/otf";
+                case ".ttf": return "font/ttf";
+                case ".woff2": return "font/woff2";
                 case ".ico": return "image/x-icon";
                 case ".webm": return "video/webm";
                 case ".mp4": return "video/mp4";

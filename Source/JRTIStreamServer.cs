@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -39,6 +42,8 @@ namespace JustReadTheInstructions
 
         public static string PortWarning { get; private set; }
         private volatile bool _portWarningPending;
+        private bool _boundToAllInterfaces;
+        private string[] _lanUrls;
 
         private static long _recordedBytesTotal;
         internal static long RecordedBytesTotal => Interlocked.Read(ref _recordedBytesTotal);
@@ -226,8 +231,8 @@ namespace JustReadTheInstructions
             _listener = new HttpListener();
             int port = JRTISettings.StreamPort;
 
-            bool started = TryBind($"http://*:{port}/")
-                        || TryBind($"http://localhost:{port}/");
+            _boundToAllInterfaces = TryBind($"http://*:{port}/");
+            bool started = _boundToAllInterfaces || TryBind($"http://localhost:{port}/");
 
             if (!started)
             {
@@ -237,6 +242,7 @@ namespace JustReadTheInstructions
             }
 
             PortWarning = null;
+            LoadProgram();
             new Thread(() => VerifyPortOwnership(port)) { IsBackground = true, Name = "JRTI-PortCheck" }.Start();
             VideoEncoders.Prepare();
 
@@ -314,6 +320,7 @@ namespace JustReadTheInstructions
         private void StopServer()
         {
             _running = false;
+            CloseEventClients();
             try { _listener?.Stop(); } catch { }
             _listenerThread?.Join(2000);
             _watchdogThread?.Join(2000);
@@ -405,8 +412,36 @@ namespace JustReadTheInstructions
 
         private void ServeSession(HttpListenerContext ctx)
         {
-            string inGameRecording = InGameRecordingAvailable ? "true" : "false";
-            ServeText(ctx, $"{{\"launchId\":\"{LaunchId}\",\"inGameRecording\":{inGameRecording},\"codecs\":{CodecsJson()}}}", "application/json");
+            var json = new StringBuilder("{");
+            json.Append($"\"launchId\":\"{LaunchId}\",");
+            json.Append($"\"version\":\"{JRTISettingsGUI.ModVersion}\",");
+            json.Append($"\"inGameRecording\":{(InGameRecordingAvailable ? "true" : "false")},");
+            json.Append($"\"codecs\":{CodecsJson()},");
+            json.Append($"\"lanUrls\":[{string.Join(",", LanUrls().Select(url => $"\"{url}\""))}]");
+            json.Append('}');
+            ServeText(ctx, json.ToString(), "application/json");
+        }
+
+        private string[] LanUrls()
+        {
+            if (_lanUrls != null) return _lanUrls;
+            if (!_boundToAllInterfaces) return _lanUrls = new string[0];
+            try
+            {
+                _lanUrls = Dns.GetHostAddresses(Dns.GetHostName())
+                    .Where(address => address.AddressFamily == AddressFamily.InterNetwork
+                                      && !IPAddress.IsLoopback(address)
+                                      && !address.ToString().StartsWith("169.254.", StringComparison.Ordinal))
+                    .Select(address => $"http://{address}:{JRTISettings.StreamPort}/")
+                    .Distinct()
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[JRTI-Stream]: Could not list this computer's network addresses: {ex.Message}");
+                _lanUrls = new string[0];
+            }
+            return _lanUrls;
         }
 
         private void HandleRequest(HttpListenerContext ctx)
@@ -421,6 +456,10 @@ namespace JustReadTheInstructions
                 if (trimmed == "/streams") { ServeMultiStream(ctx); return; }
                 if (trimmed == "/session") { ServeSession(ctx); return; }
                 if (trimmed == "/debug/stats") { ServeDebugStats(ctx); return; }
+                if (trimmed == "/events") { ServeEvents(ctx); return; }
+                if (trimmed == "/program" || trimmed.StartsWith("/program/")) { HandleProgram(ctx, trimmed); return; }
+                if (trimmed == "/layouts" || trimmed.StartsWith("/layouts/")) { HandleLayouts(ctx, trimmed); return; }
+                if (trimmed == "/recordings") { ServeRecordingList(ctx); return; }
                 if (trimmed.StartsWith("/recordings/")) { HandleRecordingEndpoint(ctx, trimmed); return; }
                 if (trimmed.StartsWith("/camera/")) { ServeCameraEndpoint(ctx, trimmed); return; }
 

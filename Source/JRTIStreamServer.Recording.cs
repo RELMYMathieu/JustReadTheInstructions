@@ -11,6 +11,12 @@ namespace JustReadTheInstructions
         private void HandleRecordingEndpoint(HttpListenerContext ctx, string path)
         {
             var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2 && ctx.Request.HttpMethod == "GET")
+            {
+                ServeRecordingFile(ctx, parts[1]);
+                return;
+            }
+
             if (parts.Length != 3)
             {
                 ServeError(ctx, 400, "Expected /recordings/<sessionId>/<action>");

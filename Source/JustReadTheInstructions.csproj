@@ -90,6 +90,9 @@
 		<Compile Include="FfmpegEncoder.cs" />
 		<Compile Include="JRTIStreamServer.Http.cs" />
 		<Compile Include="JRTIStreamServer.Recording.cs" />
+		<Compile Include="JRTIStreamServer.RecordingFiles.cs" />
+		<Compile Include="JRTIStreamServer.Layouts.cs" />
+		<Compile Include="JRTIStreamServer.Program.cs" />
 		<Compile Include="JRTIStreamServer.Mp4.cs" />
 		<Compile Include="JRTIStreamServer.Webm.cs" />
 		<Compile Include="JRTIStreamServer.Types.cs" />
