@@ -21,7 +21,7 @@
 ---
 
 > [!NOTE]
-> **JRTI is a tech demo as much as it is a mod - an experiment to see how far KSP can be pushed.**
+> **JRTI is in a stable state, but you may encounter bugs due to the experimental nature of this mod.**
 >
 > The mod is stable, but expect a few quirks. You may still encounter bugs or performance issues, but nothing that should hold you back from using the mod. If you do, please report them in the Issues tab with your log file attached. Prefixing the title with `Bug:` helps with triage.
 
