@@ -558,7 +558,7 @@ const switcherMenu = new Menu(switcherBtn, (menu) => {
     items.push(menuSeparator(), menuHeading('Clean feed for OBS (shows the layout on air)'));
     items.push(menuItem({ label: 'Open the clean feed', href: pageLink('program'), target: '_blank' }));
     items.push(menuItem({ label: 'Copy clean feed link', onSelect: () => copyWithToast(pageLink('program'), 'Clean feed link') }));
-    items.push(lanMenuItem('Copy clean feed link for other devices', 'Network clean feed link', (origin) => pageLink('program', origin)));
+    items.push(lanMenuItem('Copy clean feed link for other devices on this network', 'Network clean feed link', (origin) => pageLink('program', origin)));
     if (onAirName) items.push(menuItem({ label: `Take ${onAirName} off air`, onSelect: takeOffAir }));
     items.push(menuSeparator(), menuHeading('This layout'));
     items.push(menuItem({
@@ -567,7 +567,7 @@ const switcherMenu = new Menu(switcherBtn, (menu) => {
         className: store.kind === 'local' ? 'current' : '',
     }));
     items.push(menuItem({ label: 'Copy link', onSelect: () => copyWithToast(shareLink()) }));
-    items.push(lanMenuItem('Copy link for other devices', 'Network link', (origin) => shareLink(origin)));
+    items.push(lanMenuItem('Copy link for other devices on this network', 'Network link', (origin) => shareLink(origin)));
     if (store.kind === 'saved') items.push(menuItem({ label: 'Delete this saved layout', className: 'danger', onSelect: deleteCurrentLayout }));
     return items;
 });

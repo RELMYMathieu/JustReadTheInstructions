@@ -176,7 +176,7 @@ export class CameraCard {
             menuItem({ label: 'Copy viewer link', onSelect: () => copyWithToast(location.origin + this.streamUrl) }),
             menuItem({ label: 'Copy stream URL (OBS, VLC)', onSelect: () => copyWithToast(location.origin + API.stream(this.id), 'Stream URL') }),
         ];
-        const lanItem = menuItem({ label: 'Copy stream URL for other devices', onSelect: async () => {
+        const lanItem = menuItem({ label: 'Copy stream URL for other devices on this network', onSelect: async () => {
             const url = lanUrl(await getSession(), API.stream(this.id));
             if (url) copyWithToast(url, 'Network stream URL');
         } });
