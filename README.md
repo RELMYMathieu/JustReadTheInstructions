@@ -203,8 +203,16 @@ If you hit something not listed here, please open an issue with your log file at
 
 * Visual Studio 2022 (Windows), or the .NET SDK with your editor of choice
 * Kerbal Space Program `1.12.x`
+* HullcamVDS-Continued installed in that KSP install (see below)
 
-HullcamVDS is declared as a dependency in the project and will be installed automatically via CKAN when you restore packages. If you already have HullcamVDS in your KSP `GameData`, it will be picked up from there without CKAN.
+#### Getting HullcamVDS
+
+HullcamVDS is declared as a dependency in the project, and the build compiles against the copy in your KSP `GameData`.
+
+* **Linux / macOS:** if the [CKAN](https://github.com/KSP-CKAN/CKAN) command-line tool (`ckan`) is on your `PATH`, the build installs HullcamVDS into your KSP install for you.
+* **Windows:** automatic install is turned off, because KSPBuildTools' CKAN step doesn't work under `cmd.exe` (it silently does nothing). Install HullcamVDS yourself first, through the CKAN app or manually.
+
+If HullcamVDS is already in your `GameData`, it is used as-is on every platform.
 
 ### Setup
 
@@ -245,9 +253,9 @@ Create a `JustReadTheInstructions.csproj.user` file next to the `.csproj` and po
 dotnet build -c Release
 ```
 
-The compiled DLL is written directly to `GameData/JustReadTheInstructions/Plugins/`.
+The compiled DLL is written directly to `GameData/JustReadTheInstructions/Plugins/` (`Debug` builds also copy the `.pdb`).
 
-> Using `Debug` instead of `Release` will also copy a bunch of Unity and system DLLs into that folder - they're harmless since KSP ignores them, but Release keeps it clean.
+The mod version lives in the `<Version>` property of `Source/JustReadTheInstructions.csproj`; the `create-release` workflow bumps it automatically. Building also regenerates `GameData/JustReadTheInstructions/JustReadTheInstructions.version` (the KSP-AVC version file) from it, so don't edit that file by hand.
 
 To install, symlink or copy `GameData/JustReadTheInstructions/` into your KSP `GameData/`.
 

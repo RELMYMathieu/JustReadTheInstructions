@@ -62,21 +62,31 @@ jobs:
           while [ "$(echo "$ASSEMBLY_VERSION" | tr -cd '.' | wc -c)" -lt 3 ]; do
             ASSEMBLY_VERSION="$ASSEMBLY_VERSION.0"
           done
-          sed -i -E "s/(Assembly(File)?Version\(\")[0-9.]+/\1$ASSEMBLY_VERSION/" Source/Properties/AssemblyInfo.cs
-          git add Source/Properties/AssemblyInfo.cs
+          sed -i -E "s#<Version>[^<]*</Version>#<Version>$ASSEMBLY_VERSION</Version>#" Source/JustReadTheInstructions.csproj
+          grep -q "<Version>$ASSEMBLY_VERSION</Version>" Source/JustReadTheInstructions.csproj
+          git add Source/JustReadTheInstructions.csproj
 
-      - name: Commit and tag
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git commit --allow-empty -m "bump version to $VERSION_TAG"
-          git tag -f -a "$VERSION_TAG" -m "$VERSION_TAG"
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
 
       - name: Setup CKAN
         uses: KSPModdingLibs/KSPBuildTools/.github/actions/setup-ckan@1.1.1
 
       - name: Compile
         uses: KSPModdingLibs/KSPBuildTools/.github/actions/compile@1.1.1
+
+      # Compiling regenerates the .version file with the new version, so commit after it
+      - name: Commit and tag
+        run: |
+          VERSION_FILE=GameData/JustReadTheInstructions/JustReadTheInstructions.version
+          grep -q "\"VERSION\": \"$(sed -n -E 's#.*<Version>([^<]*)</Version>.*#\1#p' Source/JustReadTheInstructions.csproj)\"" "$VERSION_FILE"
+          git add "$VERSION_FILE"
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git commit --allow-empty -m "bump version to $VERSION_TAG"
+          git tag -f -a "$VERSION_TAG" -m "$VERSION_TAG"
 
       - name: Assemble ZIP
         run: |
