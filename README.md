@@ -48,9 +48,9 @@ It is **not** abandoned, though. I'll still come back for:
 * **Quality-of-life tweaks** I get reminded of along the way
 * **Security fixes** and important patches (we never know what could happen!)
 
-Realistically, expect minor patches and QoL roughly every few weeks *if* suggestions keep rolling in, and otherwise I'll drop by now and then as the mood strikes, just less often when there's no feedback to ponder on. University starts for me in a few months as of this README commit, so my time will be a lot more limited too.
+Realistically, expect minor patches and QoL roughly every few weeks *if* suggestions keep rolling in, and otherwise I'll drop by now and then as the mood strikes, just less often when there's no feedback to ponder on. University has started as of this README commit, so my time will be a more limited towards working on the mod.
 
-For anything **major**, pull requests are always welcome and I'm very open-minded, as long as a change fits the mod's vision, I'd love to see it.
+For anything improvement suggestions, pull requests are always welcome and I'm very open-minded, as long as a change fits the mod's vision, I'd love to see it.
 I will **gladly** read any issues or PRs that may come up at any time.
 
 Thank you to everyone who has downloaded the mod, gave feedback, or contributed... This has been a wonderful thing to build.
