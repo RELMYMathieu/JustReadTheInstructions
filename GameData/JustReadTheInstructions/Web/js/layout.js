@@ -544,7 +544,7 @@ function lanMenuItem(label, what, link) {
 }
 
 function savedLayoutItems() {
-    if (savedNames.length === 0) return [h('div', { class: 'menu-heading' }, 'None yet: save this one below.')];
+    if (savedNames.length === 0) return [h('div', { class: 'menu-heading' }, 'No layouts saved. You can save this layout below.')];
     return savedNames.map((name, i) => menuItem({
         label: name,
         detail: i < SHORTCUT_LAYOUTS ? `Shift ${i + 1}` : null,
