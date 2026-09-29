@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
-## Unreleased
+## v2.5.0 - 2026-09-29
 
 ### Added
 
 - Features from v2.4.1.1, v2.4.1.2 and v2.4.1.3 deemed stable, and now added to stable version
 - For a full changelog, see below (version 2.4.1.1 to 2.4.1.3)
+
 
 ## v2.4.1.3 - 2026-09-27
 
