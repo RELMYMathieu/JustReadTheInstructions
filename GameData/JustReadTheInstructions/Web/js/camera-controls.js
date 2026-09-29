@@ -1,7 +1,12 @@
 import { getCameraSettings, setCameraSettings } from './api.js';
 
-const DEFAULTS = { brightness: 0, contrast: 1, gamma: 1 };
+const DEFAULTS = { brightness: 0, contrast: 1, gamma: 1, soundGain: 0 };
 const POST_DELAY_MS = 300;
+const MIC_HINTS = {
+    game: 'What the player would hear standing where this camera is.',
+    external: 'Outside mic: sound crosses the air and arrives late from far away. Silent in vacuum, except its own vessel through the hull.',
+    onboard: 'Inside mic: its own vessel through the structure, other vessels muffled by the hull.',
+};
 
 let panel = null;
 
@@ -41,13 +46,20 @@ export function initControls(cameraId) {
         contrast: { slider: document.getElementById('ctrl-contrast'), display: document.getElementById('val-contrast'), fmt: v => (+v).toFixed(2) },
         gamma: { slider: document.getElementById('ctrl-gamma'), display: document.getElementById('val-gamma'), fmt: v => (+v).toFixed(2) },
         fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), fmt: v => `${Math.round(+v)}°` },
+        soundGain: { slider: document.getElementById('ctrl-sound-gain'), display: document.getElementById('val-sound-gain'), fmt: v => `${+v > 0 ? '+' : ''}${Math.round(+v)} dB` },
     };
+    const mic = document.getElementById('ctrl-mic');
 
     let debounce;
     const schedulePost = () => {
         clearTimeout(debounce);
         debounce = setTimeout(() => postSettings(cameraId, controls), POST_DELAY_MS);
     };
+
+    mic?.addEventListener('change', () => {
+        showMicHint(mic.value);
+        schedulePost();
+    });
 
     for (const ctrl of Object.values(controls)) {
         if (!ctrl.slider) continue;
@@ -71,15 +83,35 @@ export function initControls(cameraId) {
         });
     });
 
-    loadSettings(cameraId, controls);
+    loadSettings(cameraId, controls, mic);
 }
 
-async function loadSettings(cameraId, controls) {
+function showMicHint(value) {
+    const hint = document.getElementById('mic-hint');
+    if (hint) hint.textContent = MIC_HINTS[value] ?? '';
+}
+
+function showSoundRows(visible) {
+    for (const id of ['mic-row', 'mic-hint', 'sound-gain-row']) {
+        const row = document.getElementById(id);
+        if (row) row.hidden = !visible;
+    }
+}
+
+async function loadSettings(cameraId, controls, mic) {
     try {
         const s = await getCameraSettings(cameraId);
         setSlider(controls.brightness, s.brightness ?? 0);
         setSlider(controls.contrast, s.contrast ?? 1);
         setSlider(controls.gamma, s.gamma ?? 1);
+
+        const hasSound = typeof s.mic === 'string' && mic != null;
+        showSoundRows(hasSound);
+        if (hasSound) {
+            mic.value = s.mic;
+            showMicHint(s.mic);
+            setSlider(controls.soundGain, s.soundGain ?? 0);
+        }
 
         const fovRow = document.getElementById('fov-row');
         if (s.fov != null && s.fovMax > s.fovMin) {
@@ -114,6 +146,10 @@ async function postSettings(cameraId, controls) {
         const fovRow = document.getElementById('fov-row');
         if (!fovRow?.hidden && controls.fov?.slider)
             payload.fov = +controls.fov.slider.value;
+        if (!document.getElementById('mic-row')?.hidden) {
+            payload.mic = document.getElementById('ctrl-mic').value;
+            payload.soundGain = +controls.soundGain.slider.value;
+        }
         await setCameraSettings(cameraId, payload);
     } catch { }
 }

@@ -6,7 +6,7 @@ namespace JustReadTheInstructions
     {
         private static readonly byte[] AudioStreamHeader = CameraAudioMixer.WavStreamHeader();
 
-        private static void ServeCameraAudio(HttpListenerContext ctx, int cameraId)
+        private void ServeCameraAudio(HttpListenerContext ctx, int cameraId, CameraStreamState state)
         {
             var audio = CameraAudio.Instance;
             if (audio == null)
@@ -27,7 +27,7 @@ namespace JustReadTheInstructions
                 var output = ctx.Response.OutputStream;
                 output.Write(AudioStreamHeader, 0, AudioStreamHeader.Length);
                 AudioBlock block;
-                while ((block = client.Take(StreamIdleTimeoutMs)) != null)
+                while ((block = client.Take(StreamIdleTimeoutMs)) != null && IsOpenCamera(cameraId, state))
                 {
                     output.Write(block.Pcm, 0, block.Pcm.Length);
                     output.Flush();
@@ -40,5 +40,8 @@ namespace JustReadTheInstructions
                 try { ctx.Response.Close(); } catch { }
             }
         }
+
+        private bool IsOpenCamera(int cameraId, CameraStreamState state)
+            => _states.TryGetValue(cameraId, out var current) && current == state;
     }
 }

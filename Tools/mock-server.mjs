@@ -47,7 +47,7 @@ const cameras = new Map([
     [13, { name: 'Kerbal X.Booster Sep' }],
     [14, { name: 'Kerbal X.Docking Port Cam with a rather long name for overflow' }],
 ]);
-for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90 } });
+for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, mic: 'game', soundGain: 0 }, audioClients: 0 });
 
 const launchId = 'mock' + Date.now().toString(16);
 const layouts = new Map();
@@ -169,6 +169,7 @@ function wavStreamHeader() {
 function audio(req, res, cam) {
     res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-cache' });
     res.write(wavStreamHeader());
+    cam.audioClients++;
     const pitch = 40 + (cam.id % 5) * 12;
     const startedAt = performance.now();
     let frame = 0;
@@ -188,7 +189,10 @@ function audio(req, res, cam) {
         }
         res.write(block);
     }, AUDIO_TICK_MS);
-    req.on('close', () => clearInterval(timer));
+    req.on('close', () => {
+        clearInterval(timer);
+        cam.audioClients--;
+    });
 }
 
 function sample() {
@@ -199,6 +203,8 @@ function sample() {
         pool_busy: 3, pool_min: 12, pool_io_busy: 1, stream_clients: cams.reduce((s, c) => s + c.streamClients, 0),
         preview_clients: cams.reduce((s, c) => s + c.previewClients, 0), recordings: cams.filter((c) => c.recording).length,
         recording_kbps: 0, spread: 1, max_fps: FPS, camera_count: cams.length,
+        audio_cameras: cams.filter((c) => c.audioClients > 0).length, audio_voices: 14, audio_main_ms_avg: 0.12 + Math.random() * 0.05,
+        audio_mix_ms_avg: 0.6 + Math.random() * 0.2, audio_mix_ms_max: 1.5 + Math.random(), audio_skipped_sounds: 0,
         cameras: cams.map((c) => ({
             camera_id: c.id, camera: c.name, mode: c.id % 2 ? 'window' : 'stream', renders_per_s: 29.5 + Math.random(), render_ms_avg: 3 + Math.random() * 2, render_ms_max: 7 + Math.random() * 4,
             stream_fps: c.streamClients + c.previewClients > 0 ? 28 + Math.random() * 2 : 0, capture_ms_avg: 0.05, capture_ms_max: 0.1, readback_ms_avg: 21, readback_ms_max: 38,

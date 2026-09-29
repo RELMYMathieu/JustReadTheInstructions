@@ -105,7 +105,7 @@ namespace JustReadTheInstructions
                 case "snapshot": ServeSnapshot(ctx, state); break;
                 case "stream": ServeMjpeg(ctx, state); break;
                 case "preview": ServePreviewMjpeg(ctx, state); break;
-                case "audio": ServeCameraAudio(ctx, cameraId); break;
+                case "audio": ServeCameraAudio(ctx, cameraId, state); break;
                 case "status": ServeText(ctx, "ok", "text/plain"); break;
                 case "settings": ServeOrUpdateSettings(ctx, cameraId, state); break;
                 case "recording": HandleGameRecording(ctx, cameraId, state, parts.Length > 3 ? parts[3] : ""); break;
@@ -272,6 +272,10 @@ namespace JustReadTheInstructions
                     state.Gamma = UnityEngine.Mathf.Clamp(g, 0.1f, 5f);
                 if (TryParseJsonFloat(body, "fov", out var fov))
                     state.SetPendingFov(fov);
+                if (TryParseJsonString(body, "mic", out var mic) && CameraMics.TryParse(mic, out var parsedMic))
+                    state.Mic = parsedMic;
+                if (TryParseJsonFloat(body, "soundGain", out var soundGain))
+                    state.SoundGainDb = UnityEngine.Mathf.Clamp(soundGain, -24f, 24f);
 
                 ctx.Response.StatusCode = 200;
                 ctx.Response.Close();
@@ -282,7 +286,9 @@ namespace JustReadTheInstructions
             var sb = new StringBuilder("{");
             sb.Append($"\"brightness\":{state.Brightness.ToString("F2", ic)},");
             sb.Append($"\"contrast\":{state.Contrast.ToString("F2", ic)},");
-            sb.Append($"\"gamma\":{state.Gamma.ToString("F2", ic)}");
+            sb.Append($"\"gamma\":{state.Gamma.ToString("F2", ic)},");
+            sb.Append($"\"mic\":\"{CameraMics.Id(state.Mic)}\",");
+            sb.Append($"\"soundGain\":{state.SoundGainDb.ToString("F1", ic)}");
 
             if (state.HasFov)
             {
@@ -310,6 +316,21 @@ namespace JustReadTheInstructions
                 System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture,
                 out value);
+        }
+
+        private static bool TryParseJsonString(string json, string key, out string value)
+        {
+            value = null;
+            var pattern = $"\"{key}\"";
+            int idx = json.IndexOf(pattern, StringComparison.Ordinal);
+            if (idx < 0) return false;
+            idx += pattern.Length;
+            while (idx < json.Length && (json[idx] == ' ' || json[idx] == ':')) idx++;
+            if (idx >= json.Length || json[idx] != '"') return false;
+            int end = json.IndexOf('"', idx + 1);
+            if (end < 0) return false;
+            value = json.Substring(idx + 1, end - idx - 1);
+            return true;
         }
 
         private static void ServeText(HttpListenerContext ctx, string text, string contentType)

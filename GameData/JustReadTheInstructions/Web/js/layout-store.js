@@ -11,6 +11,10 @@ function parseWholeNumber(text) {
     return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
 }
 
+function tileIndex(value, tiles) {
+    return Number.isInteger(value) && value >= 0 && value < tiles.length ? value : null;
+}
+
 function normalizeTile(tile) {
     if (typeof tile === 'string') return { id: null, name: tile };
     return {
@@ -23,7 +27,8 @@ export function normalizeLayout(raw) {
     const tiles = Array.isArray(raw?.tiles) ? raw.tiles.map(normalizeTile) : [];
     return {
         tiles,
-        spotlight: Number.isInteger(raw?.spotlight) && raw.spotlight >= 0 && raw.spotlight < tiles.length ? raw.spotlight : null,
+        spotlight: tileIndex(raw?.spotlight, tiles),
+        sound: tileIndex(raw?.sound, tiles),
         fill: raw?.fill === true,
         labels: LABEL_MODES.includes(raw?.labels) ? raw.labels : 'auto',
         columns: COLUMN_CHOICES.includes(raw?.columns) ? raw.columns : null,
@@ -40,6 +45,7 @@ function layoutQuery(layout) {
     if (layout.fill) query += '&fill=1';
     if (layout.labels !== 'auto') query += `&labels=${layout.labels}`;
     if (layout.columns) query += `&cols=${layout.columns}`;
+    if (layout.sound !== null) query += `&sound=${layout.sound}`;
     return query;
 }
 
@@ -85,6 +91,7 @@ class UrlLayoutStore {
             fill: this._params.get('fill') === '1',
             labels: this._params.get('labels'),
             columns: parseWholeNumber(this._params.get('cols')),
+            sound: parseWholeNumber(this._params.get('sound')),
         });
     }
 

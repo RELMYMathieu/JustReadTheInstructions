@@ -1191,6 +1191,14 @@ kbd {
         background: var(--text);
     }
 
+.ctrl-select {
+    grid-column: 2 / -1;
+}
+
+.ctrl-note {
+    margin: 0 0 6px;
+}
+
 .ctrl-reset-btn {
     height: 24px;
     padding: 0 6px;

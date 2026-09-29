@@ -69,7 +69,7 @@ o7 and have fun :D
 * Record camera feeds as MP4 inside the game with the graphics card's encoder, then play or download the recordings from the web UI
 * Grab the raw MJPEG feed URL for OBS or other external tools
 * Adjust brightness, contrast, gamma, and FOV per camera from the web viewer - applied server-side so all viewers on the local network see the same image
-* Hear the game from a camera's position (experimental): **Sound** (`M`) in the web viewer, or add `&audio=1` to the viewer URL in an OBS browser source and tick "Control audio via OBS"
+* Hear the game from each camera's position, with a mic per camera (game mix, external or onboard), in the browser, on the clean feed for OBS and in recordings - see [Camera Sound](#camera-sound)
 * Name cameras and assign a stable numeric ID from the part's right-click menu in the editor - kept in the craft file, so the stream URL stays the same across relaunches
 
 ## Controls & Settings
@@ -89,6 +89,22 @@ The **Layout** button in the web UI opens `layout.html`: several cameras in one 
 The menu next to the layout's name saves it **in the game** under a name. `http://localhost:8080/layout.html?layout=Launch` then shows that layout on any device and in OBS, and follows every change made to it from another screen, so a phone can rearrange what an OBS browser source shows while you fly.
 
 For live shows, point one OBS browser source at the **clean feed**, `http://localhost:8080/layout.html?program`. It never shows controls and displays whichever saved layout is **on air**. On the layout page, press **Take on air** or `Shift` + `1` to `9` (the first nine saved layouts, in the order the menu lists them) and the clean feed switches at once, with cameras gliding to their new places. A Stream Deck or any tool that can open a URL can switch too: `http://localhost:8080/program/take/Launch`, or `/program/clear` for a black feed.
+
+## Camera Sound
+
+Every camera has its own sound: the game's sounds as heard from where the camera is, mixed inside the game without changing what you hear. Turn it on with **Sound** (`M`) in the camera viewer or on the layout page. The layout page plays the spotlight tile, or the tile picked with its speaker button, and saves that choice with the layout.
+
+For OBS, add `&audio=1` to a viewer or clean feed URL (`http://localhost:8080/layout.html?program&audio=1`) and tick "Control audio via OBS" on the browser source. The clean feed plays the sound of the layout on air and crossfades on Take. In-game recordings always include the camera's sound.
+
+**Adjust** in the viewer sets each camera's **Mic** and **Sound gain**, for every viewer and recording:
+
+| Mic | What it hears |
+| --- | --- |
+| Game mix (default) | What the player would hear standing where the camera is |
+| External | Sound crossing the air: it arrives late from far away, changes pitch as things fly past, gets duller, hollower (ground echo) and grittier with distance and thinner air, and stops in vacuum except for the camera's own vessel through the hull |
+| Onboard | Its own vessel through the structure and the cabin, other vessels muffled by the hull |
+
+Works with **Rocket Sound Enhancement**: its engine layers play on cameras without the player camera's Doppler, and when **Harmony** is installed (RSE requires it) its ignition, flameout and decoupler sounds are heard too. Sonic booms use RSE's sounds: when a vessel flies past Mach 1 in air, the vessel stays a faint rumble on each camera until its shock reaches that camera, then the boom hits, like on a ground camera; cameras riding on that vessel never hear their own boom. A few sounds built into KSP, such as explosions, are kept compressed by Unity and cannot be read yet; they are listed in `KSP.log` and counted on the Diagnostics page.
 
 ## Camera Naming & IDs
 

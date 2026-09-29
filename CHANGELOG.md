@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Sound per camera in the camera viewer (M) - hear the game from where that camera is, with its own distance and left/right placement. `viewer.html?id=<id>&audio=1` starts it on load, so an OBS browser source ("Control audio via OBS") gets that camera's sound. What you hear in the game does not change
 - Sound in in-game recordings - every recording holds its camera's sound (AAC, 48 kHz stereo), in sync with the picture, on Windows as well as Linux and macOS. Pausing cuts both, and a camera with nothing to hear records silence
+- Mic per camera (Adjust in the camera viewer) - Game mix, External or Onboard, plus a sound gain, applied in the game for every viewer and recording. External sound arrives late from far away, changes pitch as things fly past, picks up a ground echo and grit with distance, and stops in vacuum except for the camera's own vessel
+- Sound on the layout page (M) - hear the spotlight tile, or pick a tile with its speaker button; the choice is saved with the layout. `layout.html?program&audio=1` plays the layout on air in OBS and crossfades on Take
+- Rocket Sound Enhancement support - its enhancements play on cameras with Harmony installed; its ignition, flameout and decoupler sounds are heard too, and a supersonic vessel stays a faint rumble on each camera until its shock arrives with RSE's sonic boom
+- Camera sound on the Diagnostics page - cameras listened, sounds playing and mixer time, with a warning when a sound cannot be read
 
 
 ## v2.4.1.3 - 2026-09-27

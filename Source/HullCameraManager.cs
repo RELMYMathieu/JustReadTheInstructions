@@ -369,8 +369,15 @@ namespace JustReadTheInstructions
 
         public bool HasWindow(int stableId) => _windows.ContainsKey(stableId);
 
-        public Transform GetViewTransform(int stableId)
-            => _renderers.TryGetValue(stableId, out var renderer) ? renderer.ViewTransform : null;
+        public bool TryGetListener(int stableId, out Transform view, out Vessel vessel)
+        {
+            view = null;
+            vessel = null;
+            if (!_renderers.TryGetValue(stableId, out var renderer)) return false;
+            view = renderer.ViewTransform;
+            vessel = renderer.Vessel;
+            return view != null;
+        }
 
         public void UpdateAllCameraVisualEffects()
         {

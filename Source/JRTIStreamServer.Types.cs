@@ -118,6 +118,8 @@ namespace JustReadTheInstructions
             public float Brightness;
             public float Contrast = 1f;
             public float Gamma = 1f;
+            public volatile CameraMic Mic = CameraMic.Game;
+            public float SoundGainDb;
 
             private byte[] _lut;
             private float _lutBrightness;

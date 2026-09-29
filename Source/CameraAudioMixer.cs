@@ -14,7 +14,8 @@ namespace JustReadTheInstructions
         public const int Channels = 2;
         private const int BytesPerSample = 2;
         public const int BytesPerFrame = Channels * BytesPerSample;
-        private const int BlockFrames = SampleRate / 50;
+        public const int BlockFrames = SampleRate / 50;
+        public const float MaxDelaySeconds = 8f;
         private const int MaxLagFrames = SampleRate / 4;
         private const int IdleSleepMs = 50;
         private const int TickSleepMs = 5;
@@ -23,11 +24,11 @@ namespace JustReadTheInstructions
             = new ConcurrentDictionary<int, ConcurrentDictionary<IAudioSink, bool>>();
         private readonly Dictionary<int, MixVoice> _voices = new Dictionary<int, MixVoice>();
         private readonly Dictionary<int, MixBus> _buses = new Dictionary<int, MixBus>();
-        private readonly List<int> _finishedVoices = new List<int>();
-        private readonly float[] _voiceBuffer = new float[BlockFrames];
+        private readonly List<int> _expiredVoices = new List<int>();
 
         private AudioSnapshot _latest;
         private AudioSnapshot _applied;
+        private long _nextFrame;
         private Thread _thread;
         private volatile bool _running;
 
@@ -100,7 +101,9 @@ namespace JustReadTheInstructions
                     if (due - framesMixed > MaxLagFrames) framesMixed = due - BlockFrames;
                     while (framesMixed + BlockFrames <= due)
                     {
-                        MixBlock(startTicks + framesMixed * Stopwatch.Frequency / SampleRate);
+                        long mixStart = Stopwatch.GetTimestamp();
+                        MixBlock(framesMixed, startTicks + framesMixed * Stopwatch.Frequency / SampleRate);
+                        AudioPerf.RecordMix(mixStart);
                         framesMixed += BlockFrames;
                     }
                     Thread.Sleep(TickSleepMs);
@@ -122,25 +125,29 @@ namespace JustReadTheInstructions
             _applied = null;
         }
 
-        private void MixBlock(long blockTicks)
+        private void MixBlock(long blockStart, long blockTicks)
         {
+            if (blockStart != _nextFrame)
+                foreach (var voice in _voices.Values) voice.ClearHistory();
+            _nextFrame = blockStart + BlockFrames;
+
             ApplyLatestSnapshot();
             SyncBuses();
 
             foreach (var bus in _buses.Values)
-                bus.Clear();
+                bus.Begin(_applied?.CameraFor(bus.CameraId) ?? CameraMix.Default(bus.CameraId));
 
-            _finishedVoices.Clear();
+            _expiredVoices.Clear();
             foreach (var kv in _voices)
             {
                 var voice = kv.Value;
-                bool playing = voice.Render(_voiceBuffer);
+                voice.Render(blockStart);
                 foreach (var bus in _buses.Values)
-                    bus.Add(kv.Key, voice.TargetFor(bus.CameraId), _voiceBuffer);
-                if (!playing || voice.Ending) _finishedVoices.Add(kv.Key);
+                    bus.Add(kv.Key, voice, voice.PathFor(bus.CameraId), blockStart);
+                if (voice.HasExpired(_nextFrame)) _expiredVoices.Add(kv.Key);
             }
 
-            foreach (int id in _finishedVoices)
+            foreach (int id in _expiredVoices)
             {
                 _voices.Remove(id);
                 foreach (var bus in _buses.Values)
@@ -150,7 +157,7 @@ namespace JustReadTheInstructions
             foreach (var bus in _buses.Values)
             {
                 if (!_sinks.TryGetValue(bus.CameraId, out var sinks)) continue;
-                var block = new AudioBlock(bus.ToPcm16(), blockTicks);
+                var block = new AudioBlock(bus.Finish(), blockTicks);
                 foreach (var sink in sinks.Keys)
                 {
                     if (sink.IsOpen) sink.Push(block);
@@ -168,12 +175,12 @@ namespace JustReadTheInstructions
             double elapsedSeconds = (Stopwatch.GetTimestamp() - snapshot.Ticks) / (double)Stopwatch.Frequency;
 
             foreach (var voice in _voices.Values)
-                voice.Ending = true;
+                voice.MarkEnding();
 
             foreach (var state in snapshot.Voices)
             {
                 if (!_voices.TryGetValue(state.SourceId, out var voice) || voice.Clip != state.Clip)
-                    _voices[state.SourceId] = voice = new MixVoice(state.Clip);
+                    _voices[state.SourceId] = voice = new MixVoice(state.Clip, _nextFrame - BlockFrames);
                 voice.Sync(state, snapshot.CameraIds, elapsedSeconds);
             }
         }
@@ -182,12 +189,16 @@ namespace JustReadTheInstructions
         {
             var listened = ListenedCameraIds();
             foreach (int id in listened)
-                if (!_buses.ContainsKey(id)) _buses[id] = new MixBus(id, BlockFrames);
+                if (!_buses.ContainsKey(id)) _buses[id] = new MixBus(id);
 
             if (_buses.Count == listened.Length) return;
             foreach (int id in _buses.Keys.Except(listened).ToArray())
                 _buses.Remove(id);
         }
+
+        private static double DelayFrames(VoicePath path) => Math.Min(path.DelaySeconds, MaxDelaySeconds) * SampleRate;
+
+        private static double EchoFrames(VoicePath path) => path.EchoDelaySeconds * SampleRate;
 
         private static void WriteAscii(byte[] buffer, int offset, string text)
         {
@@ -210,26 +221,90 @@ namespace JustReadTheInstructions
         private sealed class MixVoice
         {
             private const double ResyncSeconds = 0.1;
+            private const int InitialHistoryFrames = 4096;
 
             public readonly ClipPcm Clip;
-            public bool Ending;
             private double _cursor;
             private double _step;
             private bool _loop;
             private bool _synced;
-            private int[] _cameraIds;
-            private StereoGain[] _targets;
+            private bool _ending;
+            private bool _clipDone;
+            private float _level;
+            private long _written;
+            private long _silentFrom = -1;
+            private double _maxDelayFrames;
+            private int[] _cameraIds = new int[0];
+            private VoicePath[] _paths = new VoicePath[0];
+            private float[] _history = new float[InitialHistoryFrames];
 
-            public MixVoice(ClipPcm clip) => Clip = clip;
+            public MixVoice(ClipPcm clip, long startFrame)
+            {
+                Clip = clip;
+                _written = startFrame;
+            }
+
+            public void MarkEnding() => _ending = true;
 
             public void Sync(VoiceState state, int[] cameraIds, double elapsedSeconds)
             {
-                Ending = false;
+                _ending = false;
+                _silentFrom = -1;
                 _loop = state.Loop;
                 _step = Math.Max(0.0, state.ClipSamplesPerSecond / SampleRate);
                 _cameraIds = cameraIds;
-                _targets = state.Gains;
+                _paths = state.Paths;
 
+                _maxDelayFrames = 0;
+                foreach (var path in _paths)
+                    _maxDelayFrames = Math.Max(_maxDelayFrames, DelayFrames(path) + EchoFrames(path));
+                EnsureHistory((int)_maxDelayFrames + 2 * BlockFrames + 2);
+
+                SyncCursor(state, elapsedSeconds);
+            }
+
+            public VoicePath PathFor(int cameraId)
+            {
+                int slot = Array.IndexOf(_cameraIds, cameraId);
+                return slot >= 0 ? _paths[slot] : VoicePath.Silent;
+            }
+
+            public bool HasExpired(long now) => _silentFrom >= 0 && now - _silentFrom > _maxDelayFrames + BlockFrames;
+
+            public void ClearHistory() => Array.Clear(_history, 0, _history.Length);
+
+            public float Read(double frame)
+            {
+                long index = (long)Math.Floor(frame);
+                float fraction = (float)(frame - index);
+                int mask = _history.Length - 1;
+                float a = _history[index & mask];
+                return fraction == 0f ? a : a + (_history[(index + 1) & mask] - a) * fraction;
+            }
+
+            public void Render(long blockStart)
+            {
+                int mask = _history.Length - 1;
+                float from = _level;
+                float to = _ending || _clipDone ? 0f : 1f;
+
+                if (from == 0f && to == 0f)
+                {
+                    for (int i = 0; i < BlockFrames; i++) _history[(blockStart + i) & mask] = 0f;
+                    if (_silentFrom < 0) _silentFrom = blockStart;
+                }
+                else
+                {
+                    float step = 1f / BlockFrames;
+                    for (int i = 0; i < BlockFrames; i++)
+                        _history[(blockStart + i) & mask] = NextSample() * (from + (to - from) * i * step);
+                    _level = to;
+                }
+                _written = blockStart + BlockFrames;
+            }
+
+            private void SyncCursor(VoiceState state, double elapsedSeconds)
+            {
                 int length = Clip.Samples.Length;
                 double expected = state.TimeSamples + elapsedSeconds * state.ClipSamplesPerSecond;
                 if (_loop && length > 0) expected %= length;
@@ -242,77 +317,159 @@ namespace JustReadTheInstructions
                 }
 
                 if (!_synced || Math.Abs(drift) > ResyncSeconds * Clip.Frequency)
+                {
                     _cursor = expected;
+                    _clipDone = false;
+                }
                 _synced = true;
             }
 
-            public StereoGain TargetFor(int cameraId)
-            {
-                if (Ending) return default;
-                int slot = Array.IndexOf(_cameraIds, cameraId);
-                return slot >= 0 ? _targets[slot] : default;
-            }
-
-            public bool Render(float[] output)
+            private float NextSample()
             {
                 var samples = Clip.Samples;
                 int length = samples.Length;
-
-                for (int i = 0; i < output.Length; i++)
+                if (_clipDone) return 0f;
+                if (_cursor >= length)
                 {
-                    if (_cursor >= length)
+                    if (!_loop || length == 0)
                     {
-                        if (!_loop || length == 0)
-                        {
-                            Array.Clear(output, i, output.Length - i);
-                            return false;
-                        }
-                        _cursor %= length;
+                        _clipDone = true;
+                        return 0f;
                     }
-
-                    int index = (int)_cursor;
-                    int next = index + 1 < length ? index + 1 : _loop ? 0 : index;
-                    float fraction = (float)(_cursor - index);
-                    output[i] = samples[index] + (samples[next] - samples[index]) * fraction;
-                    _cursor += _step;
+                    _cursor %= length;
                 }
-                return true;
+
+                int index = (int)_cursor;
+                int next = index + 1 < length ? index + 1 : _loop ? 0 : index;
+                float fraction = (float)(_cursor - index);
+                _cursor += _step;
+                return (samples[index] + (samples[next] - samples[index]) * fraction) * ClipPcm.SampleScale;
             }
+
+            private void EnsureHistory(int frames)
+            {
+                if (frames <= _history.Length) return;
+
+                int size = _history.Length;
+                while (size < frames) size <<= 1;
+                var grown = new float[size];
+                int oldMask = _history.Length - 1;
+                int newMask = size - 1;
+                for (long frame = _written - _history.Length; frame < _written; frame++)
+                    grown[frame & newMask] = _history[frame & oldMask];
+                _history = grown;
+            }
+        }
+
+        private sealed class PathState
+        {
+            private const double MaxDelaySlewPerFrame = 0.5;
+            private const double SnapDelayFrames = SampleRate;
+            private const double CutoffSmoothing = 0.5;
+            private const float DistortionDrive = 3f;
+
+            private readonly Biquad _filter = new Biquad();
+            private float _left;
+            private float _right;
+            private float _cutoff;
+            private double _delay;
+            private double _echoDelay;
+            private float _echoMix;
+            private float _distortion;
+
+            public PathState(VoicePath initial)
+            {
+                _cutoff = initial.Cutoff;
+                _delay = DelayFrames(initial);
+                _echoDelay = EchoFrames(initial);
+            }
+
+            public void Mix(MixVoice voice, VoicePath target, long blockStart, float[] mix)
+            {
+                double targetDelay = DelayFrames(target);
+                if (Math.Abs(targetDelay - _delay) > SnapDelayFrames) _delay = targetDelay;
+                double slope = Math.Max(-MaxDelaySlewPerFrame, Math.Min(MaxDelaySlewPerFrame, (targetDelay - _delay) / BlockFrames));
+
+                double targetEcho = EchoFrames(target);
+                if (_left == 0f && _right == 0f && target.IsSilent)
+                {
+                    _delay += slope * BlockFrames;
+                    _cutoff = target.Cutoff;
+                    _echoDelay = targetEcho;
+                    _echoMix = target.EchoMix;
+                    _distortion = target.Distortion;
+                    _filter.Reset();
+                    return;
+                }
+
+                _cutoff = SmoothCutoff(_cutoff, target.Cutoff);
+                bool filtered = _cutoff < Biquad.BypassHz;
+                if (filtered) _filter.SetLowpass(_cutoff);
+
+                bool echoed = _echoMix > 0f || target.EchoMix > 0f;
+                bool distorted = _distortion > 0f || target.Distortion > 0f;
+                float step = 1f / BlockFrames;
+                for (int i = 0; i < BlockFrames; i++)
+                {
+                    float t = i * step;
+                    double read = blockStart + i - (_delay + slope * i);
+                    float x = voice.Read(read);
+                    if (echoed)
+                        x += voice.Read(read - (_echoDelay + (targetEcho - _echoDelay) * t)) * (_echoMix + (target.EchoMix - _echoMix) * t);
+
+                    float y = filtered ? _filter.Process(x) : _filter.Pass(x);
+                    if (distorted)
+                        y /= 1f + (_distortion + (target.Distortion - _distortion) * t) * DistortionDrive * Math.Abs(y);
+
+                    mix[i * 2] += y * (_left + (target.Left - _left) * t);
+                    mix[i * 2 + 1] += y * (_right + (target.Right - _right) * t);
+                }
+
+                _delay += slope * BlockFrames;
+                _left = target.Left;
+                _right = target.Right;
+                _echoDelay = targetEcho;
+                _echoMix = target.EchoMix;
+                _distortion = target.Distortion;
+            }
+
+            private static float SmoothCutoff(float current, float target)
+                => (float)Math.Exp(Math.Log(current) + (Math.Log(target) - Math.Log(current)) * CutoffSmoothing);
         }
 
         private sealed class MixBus
         {
             public readonly int CameraId;
-            private readonly float[] _mix;
-            private readonly Dictionary<int, StereoGain> _gains = new Dictionary<int, StereoGain>();
+            private readonly float[] _mix = new float[BlockFrames * Channels];
+            private readonly Dictionary<int, PathState> _paths = new Dictionary<int, PathState>();
+            private readonly Limiter _limiter = new Limiter();
+            private CameraMix _settings;
 
-            public MixBus(int cameraId, int frames)
+            public MixBus(int cameraId)
             {
                 CameraId = cameraId;
-                _mix = new float[frames * Channels];
+                _settings = CameraMix.Default(cameraId);
             }
 
-            public void Clear() => Array.Clear(_mix, 0, _mix.Length);
-
-            public void Forget(int voiceId) => _gains.Remove(voiceId);
-
-            public void Add(int voiceId, StereoGain target, float[] voice)
+            public void Begin(CameraMix settings)
             {
-                _gains.TryGetValue(voiceId, out var from);
-                _gains[voiceId] = target;
-                if (from.IsSilent && target.IsSilent) return;
-
-                float step = 1f / voice.Length;
-                for (int i = 0; i < voice.Length; i++)
-                {
-                    float t = i * step;
-                    _mix[i * 2] += voice[i] * (from.Left + (target.Left - from.Left) * t);
-                    _mix[i * 2 + 1] += voice[i] * (from.Right + (target.Right - from.Right) * t);
-                }
+                _settings = settings;
+                Array.Clear(_mix, 0, _mix.Length);
             }
 
-            public byte[] ToPcm16()
+            public void Forget(int voiceId) => _paths.Remove(voiceId);
+
+            public void Add(int voiceId, MixVoice voice, VoicePath target, long blockStart)
             {
+                if (!_paths.TryGetValue(voiceId, out var path))
+                    _paths[voiceId] = path = new PathState(target);
+                path.Mix(voice, target, blockStart, _mix);
+            }
+
+            public byte[] Finish()
+            {
+                _limiter.Process(_mix, _settings.Gain);
+
                 var pcm = new byte[_mix.Length * BytesPerSample];
                 for (int i = 0; i < _mix.Length; i++)
                 {
@@ -322,143 +479,6 @@ namespace JustReadTheInstructions
                     pcm[i * 2 + 1] = (byte)(sample >> 8);
                 }
                 return pcm;
-            }
-        }
-    }
-
-    internal sealed class ClipPcm
-    {
-        public readonly float[] Samples;
-        public readonly int Frequency;
-
-        private ClipPcm(float[] samples, int frequency)
-        {
-            Samples = samples;
-            Frequency = frequency;
-        }
-
-        public static ClipPcm Read(UnityEngine.AudioClip clip)
-        {
-            int channels = clip.channels;
-            var interleaved = new float[clip.samples * channels];
-            if (channels <= 0 || !clip.GetData(interleaved, 0)) return null;
-
-            var mono = new float[clip.samples];
-            for (int i = 0; i < mono.Length; i++)
-            {
-                float sum = 0f;
-                for (int c = 0; c < channels; c++)
-                    sum += interleaved[i * channels + c];
-                mono[i] = sum / channels;
-            }
-            return new ClipPcm(mono, clip.frequency);
-        }
-    }
-
-    internal readonly struct StereoGain
-    {
-        public readonly float Left;
-        public readonly float Right;
-
-        public StereoGain(float left, float right)
-        {
-            Left = left;
-            Right = right;
-        }
-
-        public bool IsSilent => Left == 0f && Right == 0f;
-    }
-
-    internal sealed class VoiceState
-    {
-        public readonly int SourceId;
-        public readonly ClipPcm Clip;
-        public readonly int TimeSamples;
-        public readonly double ClipSamplesPerSecond;
-        public readonly bool Loop;
-        public readonly StereoGain[] Gains;
-
-        public VoiceState(int sourceId, ClipPcm clip, int timeSamples, double clipSamplesPerSecond, bool loop, StereoGain[] gains)
-        {
-            SourceId = sourceId;
-            Clip = clip;
-            TimeSamples = timeSamples;
-            ClipSamplesPerSecond = clipSamplesPerSecond;
-            Loop = loop;
-            Gains = gains;
-        }
-    }
-
-    internal sealed class AudioSnapshot
-    {
-        public readonly long Ticks;
-        public readonly int[] CameraIds;
-        public readonly VoiceState[] Voices;
-
-        public AudioSnapshot(long ticks, int[] cameraIds, VoiceState[] voices)
-        {
-            Ticks = ticks;
-            CameraIds = cameraIds;
-            Voices = voices;
-        }
-    }
-
-    internal sealed class AudioBlock
-    {
-        public readonly byte[] Pcm;
-        public readonly long Ticks;
-
-        public AudioBlock(byte[] pcm, long ticks)
-        {
-            Pcm = pcm;
-            Ticks = ticks;
-        }
-    }
-
-    internal interface IAudioSink
-    {
-        bool IsOpen { get; }
-        void Push(AudioBlock block);
-    }
-
-    internal sealed class AudioClient : IAudioSink, IDisposable
-    {
-        private const int MaxQueuedBlocks = 25;
-
-        private readonly Queue<AudioBlock> _blocks = new Queue<AudioBlock>();
-        private volatile bool _disposed;
-
-        public bool IsOpen => !_disposed;
-
-        public void Push(AudioBlock block)
-        {
-            lock (_blocks)
-            {
-                if (_disposed) return;
-                if (_blocks.Count == MaxQueuedBlocks) _blocks.Dequeue();
-                _blocks.Enqueue(block);
-                Monitor.Pulse(_blocks);
-            }
-        }
-
-        public AudioBlock Take(int timeoutMs)
-        {
-            lock (_blocks)
-            {
-                while (_blocks.Count == 0)
-                {
-                    if (_disposed || !Monitor.Wait(_blocks, timeoutMs)) return null;
-                }
-                return _disposed ? null : _blocks.Dequeue();
-            }
-        }
-
-        public void Dispose()
-        {
-            lock (_blocks)
-            {
-                _disposed = true;
-                Monitor.PulseAll(_blocks);
             }
         }
     }

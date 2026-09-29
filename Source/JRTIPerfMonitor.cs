@@ -197,7 +197,8 @@ namespace JustReadTheInstructions
                 RecordingKbps = seconds > 0.0 ? (recordedBytes - _recordedBytesBaseline) / 1024.0 / seconds : 0.0,
                 SpreadCaptures = JRTISettings.SpreadCaptures,
                 MaxFps = JRTISettings.StreamMaxFps,
-                Cameras = cameras
+                Cameras = cameras,
+                Audio = AudioPerf.Take()
             };
         }
 

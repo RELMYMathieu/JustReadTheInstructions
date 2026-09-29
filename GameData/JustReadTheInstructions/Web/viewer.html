@@ -26,7 +26,7 @@
             <button type="button" class="btn overlay-btn" id="viewer-copy" title="Copy the stream URL for OBS or VLC">Copy URL</button>
             <button type="button" class="btn overlay-btn" id="viewer-sound" title="Hear the game from where this camera is" aria-pressed="false">Sound <kbd>M</kbd></button>
             <button type="button" class="btn overlay-btn" id="viewer-fullscreen" title="Show only the camera (Esc to leave)">Fullscreen <kbd>F</kbd></button>
-            <button type="button" class="btn overlay-btn" id="controls-toggle" title="Brightness, contrast, gamma and field of view" aria-expanded="false">Adjust</button>
+            <button type="button" class="btn overlay-btn" id="controls-toggle" title="Picture and sound of this camera" aria-expanded="false">Adjust</button>
         </div>
         <div id="controls-panel" class="controls-panel" hidden>
             <div class="ctrl-row">
@@ -53,7 +53,22 @@
                 <span class="ctrl-val" id="val-fov">60°</span>
                 <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="fov" title="Reset field of view">Reset</button>
             </div>
-            <p class="hint">Changes apply in the game, so every viewer and recording of this camera sees them.</p>
+            <div class="ctrl-row" id="mic-row" hidden>
+                <label class="ctrl-label" for="ctrl-mic">Mic</label>
+                <select id="ctrl-mic" class="input ctrl-select">
+                    <option value="game">Game mix</option>
+                    <option value="external">External</option>
+                    <option value="onboard">Onboard</option>
+                </select>
+            </div>
+            <p class="hint ctrl-note" id="mic-hint" hidden></p>
+            <div class="ctrl-row" id="sound-gain-row" hidden>
+                <label class="ctrl-label" for="ctrl-sound-gain">Sound gain</label>
+                <input type="range" id="ctrl-sound-gain" class="ctrl-slider" min="-24" max="24" step="1" value="0">
+                <span class="ctrl-val" id="val-sound-gain">0 dB</span>
+                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="soundGain" data-default="0" title="Reset sound gain">Reset</button>
+            </div>
+            <p class="hint">Changes apply in the game, so every viewer and recording of this camera gets them.</p>
         </div>
     </div>
 

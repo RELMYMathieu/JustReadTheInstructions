@@ -6,6 +6,7 @@ const BYTES_PER_FRAME = CHANNELS * 2;
 const WAV_HEADER_BYTES = 44;
 const TARGET_LATENCY_S = 0.15;
 const MAX_LATENCY_S = 0.6;
+const FADE_S = 0.08;
 
 function concat(a, b) {
     if (a.length === 0) return b;
@@ -16,31 +17,31 @@ function concat(a, b) {
 }
 
 export class CameraAudio {
-    constructor(cameraId) {
+    constructor(cameraId = null) {
         this._cameraId = cameraId;
         this._context = null;
-        this._abort = null;
+        this._stream = null;
         this._retry = null;
-        this._nextTime = 0;
+        this._on = false;
     }
 
     get playing() {
-        return this._abort !== null;
+        return this._on;
     }
 
     start() {
-        if (this._abort) return;
+        if (this._on) return;
+        this._on = true;
         this._context ??= new AudioContext();
         this._resumeWhenAllowed();
-        this._abort = new AbortController();
-        this._read(this._abort.signal);
+        this._connect();
     }
 
     stop() {
-        clearTimeout(this._retry);
-        this._abort?.abort();
-        this._abort = null;
-        this._context?.suspend();
+        if (!this._on) return;
+        this._on = false;
+        this._disconnect(0);
+        this._context.suspend();
     }
 
     toggle() {
@@ -48,15 +49,48 @@ export class CameraAudio {
         else this.start();
     }
 
+    setCamera(cameraId) {
+        if (cameraId === this._cameraId) return;
+        this._cameraId = cameraId;
+        if (!this._on) return;
+        this._disconnect(FADE_S);
+        this._connect();
+    }
+
     _resumeWhenAllowed() {
         this._context.resume();
         if (this._context.state !== 'suspended') return;
-        document.addEventListener('pointerdown', () => { if (this.playing) this._context.resume(); }, { once: true });
+        document.addEventListener('pointerdown', () => { if (this._on) this._context.resume(); }, { once: true });
     }
 
-    async _read(signal) {
+    _connect() {
+        if (this._cameraId === null) return;
+        const gain = this._context.createGain();
+        gain.gain.value = 0;
+        gain.connect(this._context.destination);
+        const stream = { abort: new AbortController(), gain, nextTime: 0, heard: false };
+        this._stream = stream;
+        this._read(this._cameraId, stream);
+    }
+
+    _disconnect(fadeSeconds) {
+        clearTimeout(this._retry);
+        const stream = this._stream;
+        this._stream = null;
+        if (!stream) return;
+
+        stream.abort.abort();
+        const level = stream.gain.gain;
+        const now = this._context.currentTime;
+        level.cancelScheduledValues(now);
+        level.setValueAtTime(level.value, now);
+        level.linearRampToValueAtTime(0, now + fadeSeconds);
+        setTimeout(() => stream.gain.disconnect(), (fadeSeconds + MAX_LATENCY_S) * 1000);
+    }
+
+    async _read(cameraId, stream) {
         try {
-            const res = await fetch(API.audio(this._cameraId), { signal, cache: 'no-store' });
+            const res = await fetch(API.audio(cameraId), { signal: stream.abort.signal, cache: 'no-store' });
             if (!res.ok || !res.body) throw new Error(`audio stream failed: ${res.status}`);
             const reader = res.body.getReader();
             let headerLeft = WAV_HEADER_BYTES;
@@ -71,20 +105,20 @@ export class CameraAudio {
 
                 const whole = pending.length - (pending.length % BYTES_PER_FRAME);
                 if (whole === 0) continue;
-                this._schedule(pending.subarray(0, whole));
+                this._schedule(stream, pending.subarray(0, whole));
                 pending = pending.slice(whole);
             }
         } catch {
-            if (signal.aborted) return;
+            if (stream.abort.signal.aborted) return;
         }
-        if (!signal.aborted) this._retry = setTimeout(() => this._read(signal), STREAM_RETRY_MIN_MS);
+        if (this._stream === stream) this._retry = setTimeout(() => this._read(cameraId, stream), STREAM_RETRY_MIN_MS);
     }
 
-    _schedule(bytes) {
+    _schedule(stream, bytes) {
         const context = this._context;
         const now = context.currentTime;
-        if (this._nextTime <= now) this._nextTime = now + TARGET_LATENCY_S;
-        if (this._nextTime > now + MAX_LATENCY_S) return;
+        if (stream.nextTime <= now) stream.nextTime = now + TARGET_LATENCY_S;
+        if (stream.nextTime > now + MAX_LATENCY_S) return;
 
         const frames = bytes.length / BYTES_PER_FRAME;
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
@@ -94,10 +128,16 @@ export class CameraAudio {
             for (let i = 0; i < frames; i++) data[i] = view.getInt16((i * CHANNELS + channel) * 2, true) / 32768;
         }
 
+        if (!stream.heard) {
+            stream.heard = true;
+            stream.gain.gain.setValueAtTime(0, stream.nextTime);
+            stream.gain.gain.linearRampToValueAtTime(1, stream.nextTime + FADE_S);
+        }
+
         const node = context.createBufferSource();
         node.buffer = buffer;
-        node.connect(context.destination);
-        node.start(this._nextTime);
-        this._nextTime += buffer.duration;
+        node.connect(stream.gain);
+        node.start(stream.nextTime);
+        stream.nextTime += buffer.duration;
     }
 }
