@@ -34,11 +34,11 @@ namespace JustReadTheInstructions
 
         private static bool EnsureInitialized()
         {
-            var scaledCamera = Camera.allCameras.FirstOrDefault(c => c.name == "Camera ScaledSpace");
-            if (_initialized && _mainScaledCamera == scaledCamera && IsAlive(_scattererInstance))
+            if (_initialized && _mainScaledCamera != null && _mainScaledCamera.isActiveAndEnabled && IsAlive(_scattererInstance))
                 return true;
 
-            return Initialize(scaledCamera);
+            var scaledCamera = CameraLookup.FindActive("Camera ScaledSpace");
+            return scaledCamera != null && Initialize(scaledCamera);
         }
 
         private static bool Initialize(Camera scaledCamera)

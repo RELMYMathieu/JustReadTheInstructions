@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JRTI Diagnostics</title>
+    <link rel="preload" href="/fonts/CommitMono-400-Regular.otf" as="font" type="font/otf" crossorigin>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/" title="Just Read The Instructions">JRTI</a>
+        <nav class="tabs" aria-label="Pages">
+            <a class="btn btn-quiet" href="/">Cameras</a>
+            <a class="btn btn-quiet" href="/layout.html">Layout</a>
+            <a class="btn btn-quiet" href="/debug.html" aria-current="page">Diagnostics</a>
+        </nav>
+        <span class="topbar-spacer"></span>
+        <span class="debug-updated" id="debug-updated"></span>
+    </header>
+
+    <main class="page">
+        <p class="status-line error" id="debug-status" role="status"></p>
+
+        <section id="debug-content" hidden>
+            <div class="debug-readouts" id="debug-tiles"></div>
+
+            <div class="debug-charts">
+                <figure class="debug-chart">
+                    <figcaption>Frame time (ms)</figcaption>
+                    <canvas id="chart-frame"></canvas>
+                    <div class="debug-legend" id="legend-frame"></div>
+                </figure>
+                <figure class="debug-chart">
+                    <figcaption>Stream FPS per camera</figcaption>
+                    <canvas id="chart-fps"></canvas>
+                    <div class="debug-legend" id="legend-fps"></div>
+                </figure>
+            </div>
+
+            <h2 class="section-title">Cameras</h2>
+            <div class="debug-table-wrap">
+                <table class="debug-table" id="debug-table"></table>
+            </div>
+
+            <p class="debug-hint">
+                Timings are CPU time on the game's main thread and do not include GPU time.
+                Readback latency is the best hint of a GPU backlog. Values in amber need attention:
+                hover them for why.
+            </p>
+        </section>
+    </main>
+
+    <script type="module" src="js/debug.js"></script>
+</body>
+</html>

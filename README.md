@@ -63,12 +63,31 @@ o7 and have fun :D
 
 ## Features
 
-* View **Hullcam VDS** camera feeds in a web browser
+* View **Hullcam VDS** camera feeds in a web browser, on the KSP computer or any device on your network
 * Externalize in-game camera views outside the main game window
-* Record camera feeds from the web UI (locally on the KSP host, or Save-As on remote clients)
+* Build multi-camera layouts (grid, spotlight, edge to edge split screens) by dragging cameras onto the screen, and save them in the game so every device and OBS source shows the same layout
+* Record camera feeds as MP4 inside the game with the graphics card's encoder, then play or download the recordings from the web UI
 * Grab the raw MJPEG feed URL for OBS or other external tools
 * Adjust brightness, contrast, gamma, and FOV per camera from the web viewer - applied server-side so all viewers on the local network see the same image
 * Name cameras and assign a stable numeric ID from the part's right-click menu in the editor - kept in the craft file, so the stream URL stays the same across relaunches
+
+## Controls & Settings
+
+| Shortcut (in flight) | Opens |
+| --- | --- |
+| `Ctrl` + `Alt` + `F7` | JRTI's main window (camera list, open, stream) |
+| `Ctrl` + `Alt` + `F8` or `F9` | Settings & integrations |
+| `Ctrl` + `Alt` + `F6` | Performance overlay |
+
+The web UI lives at `http://localhost:8080/` (or the port set in the settings). Settings are saved in `GameData/JustReadTheInstructions/PluginData/settings.cfg`, which mod updates never overwrite.
+
+## Camera Layouts
+
+The **Layout** button in the web UI opens `layout.html`: several cameras in one window, sized to fill it. Open **Cameras** to drag cameras onto the screen, drag a tile onto another to swap them, double-click a tile (or press `1` to `9`) to spotlight it, and use **Fill** for edge to edge split screens.
+
+The menu next to the layout's name saves it **in the game** under a name. `http://localhost:8080/layout.html?layout=Launch` then shows that layout on any device and in OBS, and follows every change made to it from another screen, so a phone can rearrange what an OBS browser source shows while you fly.
+
+For live shows, point one OBS browser source at the **clean feed**, `http://localhost:8080/layout.html?program`. It never shows controls and displays whichever saved layout is **on air**. On the layout page, press **Take on air** or `Shift` + `1` to `9` (the first nine saved layouts, in the order the menu lists them) and the clean feed switches at once, with cameras gliding to their new places. A Stream Deck or any tool that can open a URL can switch too: `http://localhost:8080/program/take/Launch`, or `/program/clear` for a black feed.
 
 ## Camera Naming & IDs
 
@@ -122,12 +141,56 @@ GameData/JustReadTheInstructions/Web/images/los.png
 > [!CAUTION]
 > Editing files in the `Web` folder is not supported and may break the mod's functionality.
 
+## Recording & Codecs
+
+Recordings are started from the web UI and saved on the machine running KSP, in `GameData/JustReadTheInstructions/Web/recordings/`. The **Recordings** panel in the web UI lists them, so any device on your network can play or download them. Live feeds and the stream URLs you give OBS are always MJPEG: the codecs below only apply to recordings.
+
+> [!WARNING]
+> Keep **H.264** unless you know your tools handle something else. H.264 opens in every editor, player, phone and OBS setup. Other codecs are for people who have checked that their whole workflow supports them.
+
+### Picking a codec
+
+Open **Settings** in the web UI and choose a **Video codec**. Only codecs that work on the machine running KSP are listed, and the choice is remembered per browser. JRTI's in-game settings window shows which encoders were found.
+
+### In-game recorder (default)
+
+Every recording is an MP4 at the camera's render resolution, at a constant frame rate (Max FPS), with a keyframe every 2 seconds and a bitrate of 0.2 bits per pixel per frame (about 12 Mbps at 1080p 30 FPS). JRTI picks the first encoder that works, trying graphics card encoders before CPU encoders:
+
+| Codec | Windows | Linux | macOS |
+| --- | --- | --- | --- |
+| **H.264** (default) | Media Foundation: graphics card, or Windows' own software encoder | `h264_nvenc` → `h264_vaapi` → `h264_qsv` → `libx264` → `libopenh264` | `h264_videotoolbox` → `libx264` → `libopenh264` |
+| **AV1** | Not available yet | `av1_nvenc` → `av1_vaapi` → `av1_qsv` → `libsvtav1` | `libsvtav1` (Apple chips have no AV1 encoder) |
+
+Linux and macOS record through [ffmpeg](https://ffmpeg.org/), which must be installed (for example `sudo apt install ffmpeg` or `brew install ffmpeg`). To see which encoders your ffmpeg build has:
+
+```bash
+ffmpeg -hide_banner -encoders | grep -E "264|av1"
+```
+
+| Encoder | Runs on |
+| --- | --- |
+| `*_nvenc` | NVIDIA graphics cards. AV1 needs an RTX 40 series or newer |
+| `*_vaapi` | AMD and Intel graphics cards through Mesa or Intel's media driver. AV1 needs an AMD RX 7000 series, Intel Arc, Intel Core Ultra or newer |
+| `*_qsv` | Intel graphics. AV1 needs Intel Arc, Intel Core Ultra or newer |
+| `h264_videotoolbox` | Macs |
+| `libx264`, `libopenh264`, `libsvtav1` | The CPU. Slower, and can drop frames at high resolutions while KSP is running |
+
+**About AV1:** JRTI gives AV1 the same bitrate as H.264, so files are about the same size but keep more detail. Recent VLC, mpv and web browsers play AV1, and Windows needs Microsoft's *AV1 Video Extension* to preview it. Check that your editor imports AV1 before recording anything important with it.
+
+### Legacy browser recorder
+
+Used when in-game recording is unavailable, or when **Record with** is set to *This browser*. The browser picks the first format it supports, and the **Video codec** setting does not apply:
+
+* **Chrome, Edge and other Chromium browsers:** H.264 MP4 → VP9 WebM → VP8 WebM
+* **Firefox:** VP9 WebM → VP8 WebM
+
+This recorder is deprecated and will be removed in v3.0.0.
+
 ## Known Issues
 
 A few known issues are tracked but not yet fixed:
 
 * **Firefox recording output is unreliable.** The recorded file may be corrupt or unplayable. Use Chrome or Edge for recording until this is resolved.
-* **Stale zero-byte buffer files** are sometimes left in the recordings folder after a session ends. They are safe to delete manually.
 * **macOS is not properly supported.** A GPU async API used internally by this Unity version is unavailable on macOS, a legacy quirk inherited from KSP's Unity build. A fix is being investigated.
 * **Performance degradation with Parallax.** Parallax integration is disabled by default. Enabling it in the Settings menu may cause significant frame-rate drops.
 

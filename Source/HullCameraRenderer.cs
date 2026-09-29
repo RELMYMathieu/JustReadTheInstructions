@@ -12,8 +12,9 @@ namespace JustReadTheInstructions
     {
         private readonly MuMechModuleHullCamera _hullCamera;
         private readonly Camera[] _cameras = new Camera[4];
+        private readonly CameraSynchronizer[] _synchronizers = new CameraSynchronizer[4];
+        private Camera _mainFarPqsCamera;
         private readonly Dictionary<Light, CommandBuffer> _strippedRaymarchedBuffers = new Dictionary<Light, CommandBuffer>();
-        private int _frameCount;
 
         private static Light _cachedScaledSunLight;
 
@@ -92,14 +93,27 @@ namespace JustReadTheInstructions
 
         private void SetupCameras()
         {
+            CreateCameras();
+
+            JRTIStreamServer.Instance?.RegisterCamera(InstanceId, TargetTexture.width, TargetTexture.height);
+            JRTIPerf.Register(InstanceId, GetDisplayName());
+
+            Debug.Log($"[JRTI]: Cameras created for '{GetDisplayName()}'");
+        }
+
+        private void CreateCameras()
+        {
             SetupNearCamera();
             SetupFarPqsCamera();
             SetupScaledCamera();
             SetupGalaxyCamera();
+        }
 
-            JRTIStreamServer.Instance?.RegisterCamera(InstanceId);
-
-            Debug.Log($"[JRTI]: Cameras created for '{GetDisplayName()}'");
+        public void RebuildCameras()
+        {
+            DestroyCameras();
+            CreateCameras();
+            Debug.Log($"[JRTI]: Cameras rebuilt for '{GetDisplayName()}'");
         }
 
         private void SetupNearCamera()
@@ -256,8 +270,7 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableScatterer)
                 ScattererIntegration.ApplyToScaledCamera(camera);
 
-            var synchronizer = camObj.AddComponent<CameraSynchronizer>();
-            synchronizer.SourceCamera = _cameras[NearCameraIndex];
+            AddSynchronizer(camObj, ScaledCameraIndex);
 
             camObj.AddComponent<CanvasFix>();
 
@@ -301,8 +314,7 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableTUFX)
                 TUFXIntegration.ApplyToCamera(camera);
 
-            var synchronizer = camObj.AddComponent<CameraSynchronizer>();
-            synchronizer.SourceCamera = _cameras[NearCameraIndex];
+            AddSynchronizer(camObj, GalaxyCameraIndex);
 
             camObj.AddComponent<CanvasFix>();
 
@@ -310,29 +322,24 @@ namespace JustReadTheInstructions
             camera.enabled = false;
         }
 
-        private Camera FindCameraByName(string cameraName, bool logIfMissing = true)
+        private void AddSynchronizer(GameObject camObj, int cameraIndex)
         {
-            foreach (var cam in Camera.allCameras)
-            {
-                if (cam.name == cameraName)
-                    return cam;
-            }
-
-            if (logIfMissing)
-                Debug.LogWarning($"[JRTI]: Camera '{cameraName}' not found");
-            return null;
+            var synchronizer = camObj.AddComponent<CameraSynchronizer>();
+            synchronizer.SourceCamera = _cameras[NearCameraIndex];
+            _synchronizers[cameraIndex] = synchronizer;
         }
 
-        public void Update(bool hasInGameViewer = false)
+        private Camera FindCameraByName(string cameraName, bool logIfMissing = true)
+        {
+            var camera = CameraLookup.FindActive(cameraName);
+            if (camera == null && logIfMissing)
+                Debug.LogWarning($"[JRTI]: Camera '{cameraName}' not found");
+            return camera;
+        }
+
+        public void Render(bool capture, bool rephaseCapture)
         {
             if (!IsActive || _hullCamera == null) return;
-
-            _frameCount++;
-
-            bool hasViewers = hasInGameViewer || (JRTIStreamServer.Instance?.HasActiveClients(InstanceId) ?? false);
-            bool shouldRender = hasViewers && (_frameCount % (JRTISettings.RenderEveryOtherFrame ? 2 : 1)) == 0;
-
-            if (!shouldRender) return;
 
             if (!TargetTexture.IsCreated()) TargetTexture.Create();
 
@@ -354,7 +361,8 @@ namespace JustReadTheInstructions
                 var camera = _cameras[i];
                 if (camera == null) continue;
                 camera.targetTexture = TargetTexture;
-                camera.GetComponent<CameraSynchronizer>()?.ManualSync();
+                if (_synchronizers[i] != null)
+                    _synchronizers[i].ManualSync();
 
                 if (i == NearCameraIndex && filterActive)
                     HullcamFilterIntegration.RenderWithFilter(camera, _hullCamera);
@@ -369,15 +377,19 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
                 _dockingOverlay.Render(TargetTexture);
 
-            JRTIStreamServer.Instance?.TryCaptureFrame(InstanceId, TargetTexture);
+            if (capture)
+                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
         }
 
         private void SynchronizeFarPqsCamera()
         {
             _farPqsReady = false;
 
-            var mainFarPqsCam = FindCameraByName("Camera 01", logIfMissing: false);
-            if (mainFarPqsCam == null || !mainFarPqsCam.enabled || !mainFarPqsCam.gameObject.activeInHierarchy)
+            if (_mainFarPqsCamera == null)
+                _mainFarPqsCamera = FindCameraByName("Camera 01", logIfMissing: false);
+
+            var mainFarPqsCam = _mainFarPqsCamera;
+            if (mainFarPqsCam == null || !mainFarPqsCam.isActiveAndEnabled)
                 return;
 
             if (_cameras[FarPqsCameraIndex] == null)
@@ -602,24 +614,9 @@ namespace JustReadTheInstructions
             IsActive = false;
 
             JRTIStreamServer.Instance?.UnregisterCamera(InstanceId);
+            JRTIPerf.Unregister(InstanceId);
 
-            foreach (var camera in _cameras)
-            {
-                if (camera != null)
-                {
-                    DeferredIntegration.RemoveFromCamera(camera);
-                    TUFXIntegration.RemoveFromCamera(camera);
-                    EVEIntegration.RemoveFromCamera(camera);
-                    ParallaxIntegration.RemoveFromCamera(camera);
-                    FireflyIntegration.RemoveFromCamera(camera);
-                    FireflyIntegration.CleanupCamera(camera);
-                    ScattererIntegration.RemoveFromCamera(camera);
-                    HullcamFilterIntegration.RemoveFromCamera(camera);
-
-                    if (camera.gameObject != null)
-                        UnityEngine.Object.Destroy(camera.gameObject);
-                }
-            }
+            DestroyCameras();
 
             TargetTexture?.Release();
             TargetTexture = null;
@@ -627,6 +624,32 @@ namespace JustReadTheInstructions
             _dockingOverlay.Dispose();
 
             Debug.Log($"[JRTI]: Disposed camera '{GetDisplayName()}'");
+        }
+
+        private void DestroyCameras()
+        {
+            for (int i = 0; i < _cameras.Length; i++)
+            {
+                var camera = _cameras[i];
+                _cameras[i] = null;
+                _synchronizers[i] = null;
+                if (camera == null) continue;
+
+                DeferredIntegration.RemoveFromCamera(camera);
+                TUFXIntegration.RemoveFromCamera(camera);
+                EVEIntegration.RemoveFromCamera(camera);
+                ParallaxIntegration.RemoveFromCamera(camera);
+                FireflyIntegration.RemoveFromCamera(camera);
+                FireflyIntegration.CleanupCamera(camera);
+                ScattererIntegration.RemoveFromCamera(camera);
+                HullcamFilterIntegration.RemoveFromCamera(camera);
+
+                if (camera.gameObject != null)
+                    UnityEngine.Object.Destroy(camera.gameObject);
+            }
+
+            _mainFarPqsCamera = null;
+            _farPqsReady = false;
         }
 
         public string GetDiagnosticInfo()

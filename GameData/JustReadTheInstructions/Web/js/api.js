@@ -1,9 +1,27 @@
 import { API } from './config.js';
 
-export async function fetchCameras() {
-    const res = await fetch(API.cameras);
-    if (!res.ok) throw new Error(`cameras fetch failed: ${res.status}`);
+async function getJson(url, what) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`${what} fetch failed: ${res.status}`);
     return res.json();
+}
+
+async function send(url, method, body, what) {
+    const res = await fetch(url, {
+        method,
+        headers: body == null ? undefined : { 'Content-Type': 'application/json' },
+        body: body == null ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${what} failed: ${res.status} ${await res.text()}`);
+    return res;
+}
+
+export function fetchSession() {
+    return getJson(API.session, 'session');
+}
+
+export function fetchCameras() {
+    return getJson(API.cameras, 'cameras');
 }
 
 export async function checkStatus(cameraId) {
@@ -24,11 +42,13 @@ export async function uploadRecordingChunk(sessionId, filename, blob, mimeType) 
     if (!res.ok) throw new Error(`upload chunk failed: ${res.status}`);
 }
 
-export function heartbeatRecording(sessionId, filename) {
-    return fetch(API.recordingAppend(sessionId, filename), {
-        method: 'POST',
-        body: '',
-    }).catch(() => { });
+export async function heartbeatRecording(sessionId, filename) {
+    try {
+        const res = await fetch(API.recordingHeartbeat(sessionId, filename), { method: 'POST' });
+        return res.status;
+    } catch {
+        return 0;
+    }
 }
 
 export async function finalizeRecording(sessionId, filename) {
@@ -48,18 +68,17 @@ export function finalizeRecordingBeacon(sessionId, filename) {
     } catch { }
 }
 
-export async function getCameraSettings(cameraId) {
-    const res = await fetch(API.settings(cameraId));
-    if (!res.ok) throw new Error(`settings fetch failed: ${res.status}`);
+export async function gameRecording(cameraId, action, codec) {
+    const res = await send(API.gameRecording(cameraId, action, codec), 'POST', null, `in-game recording ${action}`);
     return res.json();
 }
 
+export function getCameraSettings(cameraId) {
+    return getJson(API.settings(cameraId), 'settings');
+}
+
 export async function setCameraSettings(cameraId, settings) {
-    await fetch(API.settings(cameraId), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-    });
+    await send(API.settings(cameraId), 'POST', settings, 'settings update');
 }
 
 export function abortRecording(sessionId, filename) {
@@ -67,4 +86,41 @@ export function abortRecording(sessionId, filename) {
         method: 'POST',
         keepalive: true,
     }).catch(() => { });
+}
+
+export function fetchRecordings() {
+    return getJson(API.recordings, 'recordings');
+}
+
+export function fetchProgram() {
+    return getJson(API.program, 'program');
+}
+
+export async function takeProgram(name) {
+    const res = await send(API.programTake(name), 'POST', null, 'take on air');
+    return res.json();
+}
+
+export async function clearProgram() {
+    const res = await send(API.programClear, 'POST', null, 'take off air');
+    return res.json();
+}
+
+export function fetchLayouts() {
+    return getJson(API.layouts, 'layouts');
+}
+
+export async function fetchLayout(name) {
+    const res = await fetch(API.layout(name), { cache: 'no-store' });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`layout fetch failed: ${res.status}`);
+    return res.text();
+}
+
+export async function saveLayout(name, layout) {
+    await send(API.layout(name), 'PUT', layout, 'layout save');
+}
+
+export async function deleteLayout(name) {
+    await send(API.layout(name), 'DELETE', null, 'layout delete');
 }

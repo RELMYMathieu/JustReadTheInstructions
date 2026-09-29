@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace JustReadTheInstructions
 {
@@ -11,8 +13,14 @@ namespace JustReadTheInstructions
         internal sealed class LatestFrameSlot : IDisposable
         {
             private byte[] _frame;
-            private readonly ManualResetEventSlim _signal = new ManualResetEventSlim(false);
+            private readonly ManualResetEventSlim _signal;
             private volatile bool _disposed;
+
+            public LatestFrameSlot() : this(new ManualResetEventSlim(false)) { }
+
+            public LatestFrameSlot(ManualResetEventSlim sharedSignal) => _signal = sharedSignal;
+
+            public bool IsDisposed => _disposed;
 
             public void Push(byte[] jpeg)
             {
@@ -26,8 +34,10 @@ namespace JustReadTheInstructions
                 if (_disposed) return null;
                 if (!_signal.Wait(timeoutMs)) return null;
                 _signal.Reset();
-                return Interlocked.Exchange(ref _frame, null);
+                return TakeReady();
             }
+
+            public byte[] TakeReady() => Interlocked.Exchange(ref _frame, null);
 
             public void Dispose()
             {
@@ -36,8 +46,39 @@ namespace JustReadTheInstructions
             }
         }
 
+        internal readonly struct CapturedFrame
+        {
+            public readonly byte[] Raw;
+            public readonly int Width;
+            public readonly int Height;
+            public readonly bool Rgba;
+            public readonly long CapturedAt;
+            public readonly long Sequence;
+
+            public CapturedFrame(byte[] raw, int width, int height, bool rgba, long capturedAt, long sequence)
+            {
+                Raw = raw;
+                Width = width;
+                Height = height;
+                Rgba = rgba;
+                CapturedAt = capturedAt;
+                Sequence = sequence;
+            }
+
+            public GraphicsFormat Format => Rgba ? GraphicsFormat.R8G8B8A8_UNorm : GraphicsFormat.R8G8B8_UNorm;
+        }
+
         internal sealed class CameraStreamState : IDisposable
         {
+            public readonly int FrameWidth;
+            public readonly int FrameHeight;
+
+            public CameraStreamState(int frameWidth, int frameHeight)
+            {
+                FrameWidth = frameWidth;
+                FrameHeight = frameHeight;
+            }
+
             public byte[] LatestJpeg;
             public readonly object JpegLock = new object();
 
@@ -106,20 +147,98 @@ namespace JustReadTheInstructions
 
             public int MjpegClientCount => MjpegClients.Count;
 
-            public bool HasActiveClients
+            public bool NeedsJpeg
                 => MjpegClients.Count > 0 || PreviewClients.Count > 0 || _snapshotPending;
+
+            public bool HasActiveClients => NeedsJpeg || Recorder != null;
+
+            private Mp4Recorder _recorder;
+            public readonly object RecordingLock = new object();
+            public DateTime RecordingStartedUtc;
+
+            public Mp4Recorder Recorder => Volatile.Read(ref _recorder);
+
+            public void SetRecorder(Mp4Recorder recorder)
+            {
+                RecordingStartedUtc = DateTime.UtcNow;
+                Volatile.Write(ref _recorder, recorder);
+            }
+
+            public Mp4Recorder TakeRecorder() => Interlocked.Exchange(ref _recorder, null);
 
             public void MarkSnapshotInterest() => _snapshotPending = true;
 
-            public void PushFrame(byte[] jpeg)
+            private const int MaxCapturesInFlight = 2;
+            private int _capturesInFlight;
+            private long _nextCaptureSequence;
+            private long _lastPublishedSequence = -1;
+            private readonly FrameSchedule _captureSchedule = new FrameSchedule();
+            private readonly Stack<byte[]> _freeFrameBuffers = new Stack<byte[]>();
+            private Texture2D _readbackTexture;
+
+            public float CaptureOverdue(float now)
+                => Volatile.Read(ref _capturesInFlight) >= MaxCapturesInFlight
+                    ? float.NegativeInfinity
+                    : _captureSchedule.Overdue(now);
+
+            public long BeginCapture(float now, float period, bool rephase)
+            {
+                Interlocked.Increment(ref _capturesInFlight);
+                _captureSchedule.Advance(now, period, rephase);
+                return _nextCaptureSequence++;
+            }
+
+            public void EndCapture(byte[] frameBuffer)
+            {
+                if (frameBuffer != null)
+                    lock (_freeFrameBuffers) _freeFrameBuffers.Push(frameBuffer);
+                Interlocked.Decrement(ref _capturesInFlight);
+            }
+
+            public byte[] RentFrameBuffer(int size)
+            {
+                lock (_freeFrameBuffers)
+                {
+                    while (_freeFrameBuffers.Count > 0)
+                    {
+                        var buffer = _freeFrameBuffers.Pop();
+                        if (buffer.Length == size) return buffer;
+                    }
+                }
+                return new byte[size];
+            }
+
+            public Texture2D GetReadbackTexture(int width, int height, TextureFormat format)
+            {
+                if (_readbackTexture == null || _readbackTexture.width != width || _readbackTexture.height != height
+                    || _readbackTexture.format != format)
+                {
+                    DestroyReadbackTexture();
+                    _readbackTexture = new Texture2D(width, height, format, false);
+                }
+                return _readbackTexture;
+            }
+
+            private void DestroyReadbackTexture()
+            {
+                if (_readbackTexture != null)
+                    UnityEngine.Object.Destroy(_readbackTexture);
+                _readbackTexture = null;
+            }
+
+            public void PushFrame(byte[] jpeg, long sequence)
             {
                 _snapshotPending = false;
                 lock (JpegLock)
+                {
+                    if (sequence < _lastPublishedSequence) return;
+                    _lastPublishedSequence = sequence;
                     LatestJpeg = jpeg;
-                foreach (var kv in MjpegClients)
-                    kv.Value.Push(jpeg);
-                foreach (var kv in PreviewClients)
-                    kv.Value.Push(jpeg);
+                    foreach (var kv in MjpegClients)
+                        kv.Value.Push(jpeg);
+                    foreach (var kv in PreviewClients)
+                        kv.Value.Push(jpeg);
+                }
             }
 
             public void Dispose()
@@ -128,6 +247,16 @@ namespace JustReadTheInstructions
                     kv.Value.Dispose();
                 foreach (var kv in PreviewClients)
                     kv.Value.Dispose();
+                StopRecordingOnClose();
+                DestroyReadbackTexture();
+            }
+
+            private void StopRecordingOnClose()
+            {
+                var recorder = TakeRecorder();
+                if (recorder == null) return;
+                recorder.Stop();
+                Debug.Log($"[JRTI-Stream]: In-game recording saved (camera closed): {recorder.FilePath}");
             }
         }
 
@@ -161,7 +290,7 @@ namespace JustReadTheInstructions
                 return new RecordingSession(sessionId, finalPath, stream);
             }
 
-            private static string ResolveUniquePath(string requested)
+            internal static string ResolveUniquePath(string requested)
             {
                 if (!File.Exists(requested)) return requested;
 
@@ -189,11 +318,14 @@ namespace JustReadTheInstructions
                     {
                         _stream.Write(buffer, 0, read);
                         BytesWritten += read;
+                        Interlocked.Add(ref _recordedBytesTotal, read);
                     }
                     _stream.Flush();
                     LastActivityUtc = DateTime.UtcNow;
                 }
             }
+
+            public void Touch() => LastActivityUtc = DateTime.UtcNow;
 
             public void Dispose()
             {

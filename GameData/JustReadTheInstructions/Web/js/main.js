@@ -2,12 +2,16 @@ import { CAMERA_SYNC_MS } from './config.js';
 import { fetchCameras } from './api.js';
 import { CameraCard } from './camera-card.js';
 import { mountSettingsUI } from './settings-ui.js';
+import { mountRecordingsUI } from './recordings-ui.js';
 import { enableDragOrder } from './drag-order.js';
 import { RecordingGroups } from './recording-groups.js';
+import { setInGameRecordingAvailable } from './recorder-settings.js';
+import { getSession } from './session.js';
+import { copyWithToast } from './ui.js';
 
 const KNOWN_CAMERAS_KEY = 'jrti-known-cameras';
 const LAUNCH_ID_KEY = 'jrti-launch-id';
-const ORDER_KEY = 'jrti-camera-order';
+const ORDER_KEY = 'jrti-camera-order-by-name';
 
 const cards = new Map();
 const groups = new RecordingGroups(() => cards);
@@ -15,14 +19,21 @@ const groups = new RecordingGroups(() => cards);
 const liveContainer = document.getElementById('cameras-live');
 const offlineSection = document.getElementById('cameras-offline-section');
 const offlineContainer = document.getElementById('cameras-offline');
+const errorEl = document.getElementById('error');
+const emptyEl = document.getElementById('empty');
+const linkStatus = document.getElementById('link-status');
+const linkStatusText = document.getElementById('link-status-text');
 
 let savedOrder = { live: [], offline: [] };
 
-function setStatus(id, message) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (message) { el.textContent = message; el.classList.add('visible'); }
-    else { el.classList.remove('visible'); }
+function setError(message) {
+    errorEl.textContent = message ?? '';
+    errorEl.classList.toggle('visible', Boolean(message));
+}
+
+function setLinkStatus(state, text) {
+    linkStatus.dataset.state = state;
+    linkStatusText.textContent = text;
 }
 
 function loadOrder() {
@@ -33,19 +44,21 @@ function loadOrder() {
     }
 }
 
+function cardKeys(container) {
+    return [...container.querySelectorAll('.camera-card')].map((el) => el.dataset.key);
+}
+
 function saveOrder() {
-    const live = [...liveContainer.querySelectorAll('.camera-card')].map(el => el.dataset.id);
-    const offline = [...offlineContainer.querySelectorAll('.camera-card')].map(el => el.dataset.id);
-    savedOrder = { live, offline };
+    savedOrder = { live: cardKeys(liveContainer), offline: cardKeys(offlineContainer) };
     try { localStorage.setItem(ORDER_KEY, JSON.stringify(savedOrder)); } catch { }
 }
 
 function insertOrdered(container, el, order) {
-    const pos = order.indexOf(el.dataset.id);
+    const pos = order.indexOf(el.dataset.key);
     if (pos === -1) { container.appendChild(el); return; }
     const existing = [...container.querySelectorAll('.camera-card')];
     for (let i = pos + 1; i < order.length; i++) {
-        const after = existing.find(c => c.dataset.id === order[i]);
+        const after = existing.find((c) => c.dataset.key === order[i]);
         if (after) { after.before(el); return; }
     }
     container.appendChild(el);
@@ -80,28 +93,36 @@ function restoreKnownCameras() {
     } catch { }
 }
 
-async function checkLaunchId() {
-    try {
-        const res = await fetch('/session');
-        if (!res.ok) return;
-        const { launchId } = await res.json();
-        const stored = localStorage.getItem(LAUNCH_ID_KEY);
-        if (stored !== launchId) {
+async function applySession() {
+    const session = await getSession();
+    setInGameRecordingAvailable(session.inGameRecording === true, session.codecs);
+    if (session.launchId && localStorage.getItem(LAUNCH_ID_KEY) !== session.launchId) {
+        try {
             localStorage.removeItem(KNOWN_CAMERAS_KEY);
-            localStorage.removeItem(ORDER_KEY);
-            localStorage.setItem(LAUNCH_ID_KEY, launchId);
-        }
-    } catch { }
+            localStorage.setItem(LAUNCH_ID_KEY, session.launchId);
+        } catch { }
+    }
+    showLanAddress(session.lanUrls[0]);
+    if (session.version) document.getElementById('version').textContent = `JRTI ${session.version}`;
+}
+
+function showLanAddress(url) {
+    const chip = document.getElementById('lan-chip');
+    if (!url || !chip) return;
+    document.getElementById('lan-chip-text').textContent = new URL(url).host;
+    chip.hidden = false;
+    chip.addEventListener('click', () => copyWithToast(url, 'Network address'));
 }
 
 async function sync() {
     let cameras;
     try {
         cameras = await fetchCameras();
-        setStatus('error', null);
+        setError(null);
     } catch {
-        setStatus('error', 'Could not connect to KSP. Is the game running?');
-        setStatus('empty', null);
+        setLinkStatus('offline', 'Not connected to KSP');
+        setError('Could not reach KSP. Is the game running, in a flight, with the web server on?');
+        emptyEl.classList.remove('visible');
         return;
     }
 
@@ -123,6 +144,7 @@ async function sync() {
             } else {
                 existing.update(cam);
             }
+            groups.syncCard(existing);
         } else {
             const card = new CameraCard(cam);
             cards.set(cam.id, card);
@@ -134,12 +156,10 @@ async function sync() {
     persistKnownCameras();
     groups.refresh();
 
-    const hasOffline = [...cards.values()].some(c => c.destroyed);
+    const hasOffline = [...cards.values()].some((c) => c.destroyed);
     offlineSection.hidden = !hasOffline;
-
-    setStatus('empty', cameras.length === 0 && !hasOffline
-        ? 'No cameras open. Open or stream a hull camera in KSP first.'
-        : null);
+    emptyEl.classList.toggle('visible', cameras.length === 0);
+    setLinkStatus('online', cameras.length === 1 ? 'Connected · 1 camera' : `Connected · ${cameras.length} cameras`);
 }
 
 function wireLifecycle() {
@@ -152,9 +172,10 @@ function wireLifecycle() {
 
 async function main() {
     mountSettingsUI();
+    mountRecordingsUI();
     groups.mount(document.getElementById('groups-bar'));
     wireLifecycle();
-    await checkLaunchId();
+    await applySession();
     loadOrder();
     restoreKnownCameras();
     enableDragOrder(liveContainer, saveOrder);

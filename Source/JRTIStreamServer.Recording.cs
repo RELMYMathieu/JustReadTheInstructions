@@ -11,6 +11,12 @@ namespace JustReadTheInstructions
         private void HandleRecordingEndpoint(HttpListenerContext ctx, string path)
         {
             var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2 && ctx.Request.HttpMethod == "GET")
+            {
+                ServeRecordingFile(ctx, parts[1]);
+                return;
+            }
+
             if (parts.Length != 3)
             {
                 ServeError(ctx, 400, "Expected /recordings/<sessionId>/<action>");
@@ -43,6 +49,7 @@ namespace JustReadTheInstructions
             switch (action)
             {
                 case "append": AppendRecordingChunk(ctx, sessionId, safeName); break;
+                case "heartbeat": TouchRecordingSession(ctx, sessionId); break;
                 case "finalize": FinalizeRecordingSession(ctx, sessionId); break;
                 case "abort": AbortRecordingSession(ctx, sessionId); break;
                 default: ServeError(ctx, 404, "Unknown recording action"); break;
@@ -94,6 +101,20 @@ namespace JustReadTheInstructions
                 Debug.LogError($"[JRTI-Stream]: Append failed for {sessionId}: {ex.Message}");
                 ServeError(ctx, 500, "Append failed");
             }
+        }
+
+        private void TouchRecordingSession(HttpListenerContext ctx, string sessionId)
+        {
+            if (_finalizedSessions.ContainsKey(sessionId))
+            {
+                ServeError(ctx, 410, "Session closed");
+                return;
+            }
+
+            if (_recordings.TryGetValue(sessionId, out var session))
+                session.Touch();
+
+            ServeText(ctx, "ok", "text/plain");
         }
 
         private void FinalizeRecordingSession(HttpListenerContext ctx, string sessionId)

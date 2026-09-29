@@ -6,6 +6,13 @@ import {
     WAITING_OVERLAY_HTML,
 } from './config.js';
 
+const snapshots = new Set();
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    for (const snapshot of snapshots) snapshot.refresh();
+});
+
 export class CameraSnapshot {
     constructor(snapshotBaseUrl, cardEl, { getRecorder, isLivePreviewActive }) {
         this._snapshotBaseUrl = snapshotBaseUrl;
@@ -18,9 +25,11 @@ export class CameraSnapshot {
         this._jitterTimer = null;
         this._offlineSince = 0;
         this._losSignaled = false;
+        this._online = false;
     }
 
     start() {
+        snapshots.add(this);
         this._refresh();
         this._jitterTimer = setTimeout(() => {
             this._jitterTimer = null;
@@ -29,6 +38,7 @@ export class CameraSnapshot {
     }
 
     stop() {
+        snapshots.delete(this);
         clearTimeout(this._jitterTimer);
         this._jitterTimer = null;
         clearInterval(this._timer);
@@ -38,31 +48,44 @@ export class CameraSnapshot {
     markOnline() {
         this._offlineSince = 0;
         this._losSignaled = false;
+        if (this._online) return;
+        this._online = true;
         this._cardEl.classList.remove('offline');
-        const overlay = this._cardEl.querySelector('.offline-overlay');
-        if (overlay) overlay.innerHTML = WAITING_OVERLAY_HTML;
+        this._setOverlay(WAITING_OVERLAY_HTML);
         this._getRecorder()?.handleSignalRestored();
     }
 
     markOffline() {
+        this._online = false;
         if (!this._offlineSince) this._offlineSince = Date.now();
         this._cardEl.classList.add('offline');
-        const overlay = this._cardEl.querySelector('.offline-overlay');
-        if (overlay && Date.now() - this._offlineSince >= LOS_DELAY_MS) {
-            overlay.innerHTML = LOS_OVERLAY_HTML;
-        }
+        if (Date.now() - this._offlineSince >= LOS_DELAY_MS) this._setOverlay(LOS_OVERLAY_HTML);
         if (!this._losSignaled && Date.now() - this._offlineSince >= RECORDER_LOS_DELAY_MS) {
             this._losSignaled = true;
             this._getRecorder()?.handleSignalLost();
         }
     }
 
+    showLost() {
+        this._online = false;
+        this._cardEl.classList.add('offline');
+        this._setOverlay(LOS_OVERLAY_HTML);
+    }
+
     refresh() {
         return this._refresh();
     }
 
+    _setOverlay(html) {
+        const overlay = this._cardEl.querySelector('.offline-overlay');
+        if (overlay && overlay.dataset.html !== html) {
+            overlay.innerHTML = html;
+            overlay.dataset.html = html;
+        }
+    }
+
     async _refresh() {
-        if (this._loading) return;
+        if (this._loading || document.hidden) return;
         const recorder = this._getRecorder();
         if (recorder && recorder.state !== 'idle') return;
         if (this._isLivePreviewActive()) return;

@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using UnityEngine;
 
 namespace JustReadTheInstructions
@@ -7,13 +8,14 @@ namespace JustReadTheInstructions
     [KSPAddon(KSPAddon.Startup.Instantly, true)]
     public class JRTISettings : MonoBehaviour
     {
-        private const string ConfigUrl = "GameData/JustReadTheInstructions/settings.cfg";
+        private static readonly string ModRoot = KSPUtil.ApplicationRootPath + "GameData/JustReadTheInstructions/";
+        private static readonly string ConfigPath = ModRoot + "PluginData/settings.cfg";
+        private static readonly string LegacyConfigPath = ModRoot + "settings.cfg";
 
         public static int RenderWidth { get; internal set; } = 1280;
         public static int RenderHeight { get; internal set; } = 720;
         public static int AntiAliasing { get; internal set; } = 2;
         public static bool UseHDR { get; internal set; } = true;
-        public static bool RenderEveryOtherFrame { get; internal set; } = true;
 
         public static bool EnableDockingOverlay { get; internal set; } = true;
 
@@ -31,6 +33,10 @@ namespace JustReadTheInstructions
         public static int StreamPort { get; internal set; } = 8080;
         public static int StreamJpegQuality { get; internal set; } = 90;
         public static int StreamMaxFps { get; internal set; } = 30;
+        public static bool SpreadCaptures { get; internal set; } = true;
+        public static bool InGameRecording { get; internal set; } = true;
+
+        public static float FramePeriod => 1f / Mathf.Max(1, StreamMaxFps);
 
         public static bool EnableDeferred { get; internal set; } = true;
         public static bool EnableTUFX { get; internal set; } = true;
@@ -81,7 +87,10 @@ namespace JustReadTheInstructions
             {
                 Debug.Log("[JRTI]: Loading configuration...");
 
-                ConfigNode fileNode = ConfigNode.Load(ConfigUrl);
+                bool legacy = !File.Exists(ConfigPath) && File.Exists(LegacyConfigPath);
+                ConfigNode fileNode = legacy || File.Exists(ConfigPath)
+                    ? ConfigNode.Load(legacy ? LegacyConfigPath : ConfigPath)
+                    : null;
                 if (fileNode == null || !fileNode.HasNode("Settings"))
                 {
                     Debug.Log("[JRTI]: No config found, using defaults");
@@ -94,7 +103,6 @@ namespace JustReadTheInstructions
                 RenderHeight = ParseInt(settings, "RenderHeight", RenderHeight);
                 AntiAliasing = ParseInt(settings, "AntiAliasing", AntiAliasing);
                 UseHDR = ParseBool(settings, "UseHDR", UseHDR);
-                RenderEveryOtherFrame = ParseBool(settings, "RenderEveryOtherFrame", RenderEveryOtherFrame);
                 EnableDockingOverlay = ParseBool(settings, "EnableDockingOverlay", EnableDockingOverlay);
                 MaxOpenCameras = ParseUInt(settings, "MaxOpenCameras", MaxOpenCameras, 1, 64);
                 MaxWindowScale = ParseFloat(settings, "MaxWindowScale", MaxWindowScale);
@@ -106,6 +114,8 @@ namespace JustReadTheInstructions
                 StreamPort = ParseInt(settings, "StreamPort", StreamPort);
                 StreamJpegQuality = ParseInt(settings, "StreamJpegQuality", StreamJpegQuality);
                 StreamMaxFps = ParseInt(settings, "StreamMaxFps", StreamMaxFps);
+                SpreadCaptures = ParseBool(settings, "SpreadCaptures", SpreadCaptures);
+                InGameRecording = ParseBool(settings, "InGameRecording", InGameRecording);
 
                 EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
                 EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
@@ -116,6 +126,7 @@ namespace JustReadTheInstructions
                 EnableHullcamFilter = ParseBool(settings, "EnableHullcamFilter", EnableHullcamFilter);
 
                 Sanitize();
+                if (legacy) MoveLegacyConfig();
 
                 Debug.Log($"[JRTI]: Config loaded - {RenderWidth}x{RenderHeight}");
                 Debug.Log($"[JRTI]: Stream config - port:{StreamPort}, quality:{StreamJpegQuality}, maxFps:{StreamMaxFps}");
@@ -126,7 +137,21 @@ namespace JustReadTheInstructions
             }
         }
 
-        public static void Save()
+        private static void MoveLegacyConfig()
+        {
+            if (!Save()) return;
+            try
+            {
+                File.Delete(LegacyConfigPath);
+                Debug.Log($"[JRTI]: Settings moved to {ConfigPath} so mod updates no longer reset them");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[JRTI]: Could not delete the old settings file {LegacyConfigPath}: {ex.Message}");
+            }
+        }
+
+        public static bool Save()
         {
             try
             {
@@ -139,7 +164,6 @@ namespace JustReadTheInstructions
                 settings.AddValue("RenderHeight", RenderHeight);
                 settings.AddValue("AntiAliasing", AntiAliasing);
                 settings.AddValue("UseHDR", UseHDR);
-                settings.AddValue("RenderEveryOtherFrame", RenderEveryOtherFrame);
                 settings.AddValue("EnableDockingOverlay", EnableDockingOverlay);
                 settings.AddValue("MaxWindowScale", MaxWindowScale.ToString(CultureInfo.InvariantCulture));
                 settings.AddValue("MinWindowScale", MinWindowScale.ToString(CultureInfo.InvariantCulture));
@@ -151,6 +175,8 @@ namespace JustReadTheInstructions
                 settings.AddValue("StreamPort", StreamPort);
                 settings.AddValue("StreamJpegQuality", StreamJpegQuality);
                 settings.AddValue("StreamMaxFps", StreamMaxFps);
+                settings.AddValue("SpreadCaptures", SpreadCaptures);
+                settings.AddValue("InGameRecording", InGameRecording);
 
                 settings.AddValue("EnableDeferred", EnableDeferred);
                 settings.AddValue("EnableTUFX", EnableTUFX);
@@ -160,12 +186,15 @@ namespace JustReadTheInstructions
                 settings.AddValue("EnableScatterer", EnableScatterer);
                 settings.AddValue("EnableHullcamFilter", EnableHullcamFilter);
 
-                root.Save(KSPUtil.ApplicationRootPath + ConfigUrl);
+                Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath));
+                root.Save(ConfigPath);
                 Debug.Log("[JRTI]: Settings saved");
+                return true;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[JRTI]: Failed to save config: {ex.Message}");
+                return false;
             }
         }
 

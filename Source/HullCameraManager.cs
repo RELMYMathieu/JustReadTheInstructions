@@ -15,11 +15,35 @@ namespace JustReadTheInstructions
         private readonly HashSet<int> _streamOnlyRenderers = new HashSet<int>();
         private int _nextWindowId = 2000;
 
+        private const float FrameTimeSmoothing = 0.1f;
+        private const float MapExitRebuildDelaySeconds = 0.5f;
+
+        private readonly struct DueRender
+        {
+            public readonly HullCameraRenderer Renderer;
+            public readonly float Overdue;
+            public readonly bool Capture;
+
+            public DueRender(HullCameraRenderer renderer, float overdue, bool capture)
+            {
+                Renderer = renderer;
+                Overdue = overdue;
+                Capture = capture;
+            }
+        }
+
+        private readonly List<DueRender> _dueRenders = new List<DueRender>();
+        private readonly HashSet<int> _deferredRenders = new HashSet<int>();
+        private readonly Dictionary<int, FrameSchedule> _windowSchedules = new Dictionary<int, FrameSchedule>();
+        private float _smoothedFrameTime;
+        private float _rebuildCamerasAt = -1f;
+
         void Awake()
         {
             if (Instance != null) { Destroy(this); return; }
             Instance = this;
             JRTICameraRuntime.Reset();
+            GameEvents.OnMapExited.Add(OnMapExited);
             Debug.Log("[JRTI]: Camera Manager initialized");
         }
 
@@ -27,6 +51,7 @@ namespace JustReadTheInstructions
         {
             if (Instance == this)
             {
+                GameEvents.OnMapExited.Remove(OnMapExited);
                 CloseAllCameras();
                 HullCameraWindow.DestroyStaticResources();
                 Instance = null;
@@ -35,6 +60,7 @@ namespace JustReadTheInstructions
 
         void Update()
         {
+            RebuildCamerasAfterMapView();
             UpdateAllRenderers();
             SyncStreamServerState();
             if (Time.frameCount % 60 == 0)
@@ -49,13 +75,101 @@ namespace JustReadTheInstructions
             DrawAllWindows();
         }
 
+        private void OnMapExited() => _rebuildCamerasAt = Time.unscaledTime + MapExitRebuildDelaySeconds;
+
+        private void RebuildCamerasAfterMapView()
+        {
+            if (_rebuildCamerasAt < 0f || Time.unscaledTime < _rebuildCamerasAt || MapView.MapIsEnabled)
+                return;
+
+            _rebuildCamerasAt = -1f;
+            foreach (var renderer in _renderers.Values)
+                renderer.RebuildCameras();
+        }
+
         private void UpdateAllRenderers()
         {
+            var server = JRTIStreamServer.Instance;
+            float now = Time.unscaledTime;
+            UpdateSmoothedFrameTime();
+            float earlyTolerance = _smoothedFrameTime * 0.5f;
+            int scheduledCameras = 0;
+            _dueRenders.Clear();
+
             foreach (var kvp in _renderers)
             {
-                bool hasWindow = _windows.ContainsKey(kvp.Key);
-                kvp.Value.Update(hasWindow);
+                float overdue = float.NegativeInfinity;
+                bool capture = server != null && server.TryGetCaptureOverdue(kvp.Key, now, out overdue);
+                if (!capture)
+                {
+                    if (!_windows.ContainsKey(kvp.Key)) continue;
+                    overdue = WindowSchedule(kvp.Key).Overdue(now);
+                }
+
+                scheduledCameras++;
+                if (overdue >= -earlyTolerance) InsertByOverdue(new DueRender(kvp.Value, overdue, capture));
             }
+
+            GrantDueRenders(RenderBudget(scheduledCameras), now);
+        }
+
+        private FrameSchedule WindowSchedule(int cameraId)
+        {
+            if (!_windowSchedules.TryGetValue(cameraId, out var schedule))
+                _windowSchedules[cameraId] = schedule = new FrameSchedule();
+            return schedule;
+        }
+
+        private void UpdateSmoothedFrameTime()
+        {
+            float frameTime = Time.unscaledDeltaTime;
+            _smoothedFrameTime = _smoothedFrameTime > 0f
+                ? Mathf.Lerp(_smoothedFrameTime, frameTime, FrameTimeSmoothing)
+                : frameTime;
+        }
+
+        private int RenderBudget(int scheduledCameras)
+        {
+            if (!JRTISettings.SpreadCaptures || scheduledCameras <= 1)
+                return scheduledCameras;
+
+            float rendersPerFrame = scheduledCameras * JRTISettings.StreamMaxFps * _smoothedFrameTime;
+            return Mathf.Clamp(Mathf.CeilToInt(rendersPerFrame), 1, scheduledCameras);
+        }
+
+        private void InsertByOverdue(DueRender render)
+        {
+            int index = _dueRenders.Count;
+            while (index > 0 && _dueRenders[index - 1].Overdue < render.Overdue)
+                index--;
+            _dueRenders.Insert(index, render);
+        }
+
+        private void GrantDueRenders(int budget, float now)
+        {
+            for (int i = 0; i < _dueRenders.Count; i++)
+            {
+                var due = _dueRenders[i];
+                int id = due.Renderer.InstanceId;
+
+                if (i >= budget)
+                {
+                    _deferredRenders.Add(id);
+                    JRTIPerf.RecordDeferred(id);
+                    continue;
+                }
+
+                bool rephase = _deferredRenders.Remove(id);
+                if (!due.Capture) WindowSchedule(id).Advance(now, JRTISettings.FramePeriod, rephase);
+                RenderCamera(due.Renderer, due.Capture, rephase);
+            }
+        }
+
+        private static void RenderCamera(HullCameraRenderer renderer, bool capture, bool rephaseCapture)
+        {
+            long start = JRTIPerf.Now();
+            renderer.Render(capture, rephaseCapture);
+            JRTIPerf.RecordMainThread(renderer.InstanceId, CameraMetric.Render, start);
         }
 
         private void UpdateAllWindows()
@@ -72,6 +186,7 @@ namespace JustReadTheInstructions
             foreach (var id in closedWindows)
             {
                 _windows.Remove(id);
+                _windowSchedules.Remove(id);
                 _streamOnlyRenderers.Add(id);
             }
         }
@@ -220,6 +335,8 @@ namespace JustReadTheInstructions
             }
 
             _streamOnlyRenderers.Remove(stableId);
+            _deferredRenders.Remove(stableId);
+            _windowSchedules.Remove(stableId);
         }
 
         public void StopStream(int stableId)
@@ -249,6 +366,8 @@ namespace JustReadTheInstructions
         }
 
         public int GetOpenCameraCount() => _renderers.Count;
+
+        public bool HasWindow(int stableId) => _windows.ContainsKey(stableId);
 
         public void UpdateAllCameraVisualEffects()
         {

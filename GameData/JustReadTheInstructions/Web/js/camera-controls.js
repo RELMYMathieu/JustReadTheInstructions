@@ -1,33 +1,52 @@
 import { getCameraSettings, setCameraSettings } from './api.js';
 
 const DEFAULTS = { brightness: 0, contrast: 1, gamma: 1 };
+const POST_DELAY_MS = 300;
+
+let panel = null;
+
+export function isControlsOpen() {
+    return panel != null && !panel.hidden;
+}
 
 export function initControls(cameraId) {
     const toggle = document.getElementById('controls-toggle');
-    const panel = document.getElementById('controls-panel');
+    panel = document.getElementById('controls-panel');
     if (!toggle || !panel) return;
+
+    const setOpen = (open) => {
+        panel.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.classList.toggle('active', open);
+    };
 
     toggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        panel.hidden = !panel.hidden;
+        setOpen(panel.hidden);
     });
 
     document.addEventListener('click', (e) => {
-        if (!panel.hidden && !panel.contains(e.target) && e.target !== toggle)
-            panel.hidden = true;
+        if (!panel.hidden && !panel.contains(e.target) && !toggle.contains(e.target)) setOpen(false);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panel.hidden) {
+            setOpen(false);
+            toggle.focus();
+        }
     });
 
     const controls = {
         brightness: { slider: document.getElementById('ctrl-brightness'), display: document.getElementById('val-brightness'), fmt: v => (+v).toFixed(2) },
-        contrast:   { slider: document.getElementById('ctrl-contrast'),   display: document.getElementById('val-contrast'),   fmt: v => (+v).toFixed(2) },
-        gamma:      { slider: document.getElementById('ctrl-gamma'),      display: document.getElementById('val-gamma'),      fmt: v => (+v).toFixed(2) },
-        fov:        { slider: document.getElementById('ctrl-fov'),        display: document.getElementById('val-fov'),        fmt: v => `${Math.round(+v)}°` },
+        contrast: { slider: document.getElementById('ctrl-contrast'), display: document.getElementById('val-contrast'), fmt: v => (+v).toFixed(2) },
+        gamma: { slider: document.getElementById('ctrl-gamma'), display: document.getElementById('val-gamma'), fmt: v => (+v).toFixed(2) },
+        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), fmt: v => `${Math.round(+v)}°` },
     };
 
     let debounce;
     const schedulePost = () => {
         clearTimeout(debounce);
-        debounce = setTimeout(() => postSettings(cameraId, controls), 300);
+        debounce = setTimeout(() => postSettings(cameraId, controls), POST_DELAY_MS);
     };
 
     for (const ctrl of Object.values(controls)) {
@@ -71,8 +90,8 @@ async function loadSettings(cameraId, controls) {
             document.querySelector('[data-reset="fov"]').dataset.default = s.fov;
             setSlider(c, s.fov);
             if (fovRow) fovRow.hidden = false;
-        } else {
-            if (fovRow) fovRow.hidden = true;
+        } else if (fovRow) {
+            fovRow.hidden = true;
         }
     } catch (err) {
         console.warn('[JRTI] Failed to load camera settings:', err);
@@ -89,8 +108,8 @@ async function postSettings(cameraId, controls) {
     try {
         const payload = {
             brightness: +controls.brightness.slider.value,
-            contrast:   +controls.contrast.slider.value,
-            gamma:      +controls.gamma.slider.value,
+            contrast: +controls.contrast.slider.value,
+            gamma: +controls.gamma.slider.value,
         };
         const fovRow = document.getElementById('fov-row');
         if (!fovRow?.hidden && controls.fov?.slider)

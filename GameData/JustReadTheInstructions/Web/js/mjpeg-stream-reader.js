@@ -1,66 +1,110 @@
+import { STREAM_RETRY_MIN_MS, STREAM_RETRY_MAX_MS, STREAM_STALL_MS } from './config.js';
+
+const headerDecoder = new TextDecoder();
+
+function withCacheBuster(url) {
+    return `${url}${url.includes('?') ? '&' : '?'}r=${Date.now()}`;
+}
+
+function concat(a, b) {
+    const joined = new Uint8Array(a.length + b.length);
+    joined.set(a);
+    joined.set(b, a.length);
+    return joined;
+}
+
+function indexOfHeaderEnd(buf) {
+    for (let i = 0; i + 3 < buf.length; i++) {
+        if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) return i;
+    }
+    return -1;
+}
+
+function parsePartHeaders(bytes) {
+    const headers = new Map();
+    for (const line of headerDecoder.decode(bytes).split('\r\n')) {
+        const colon = line.indexOf(':');
+        if (colon > 0) headers.set(line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim());
+    }
+    return {
+        length: Number(headers.get('content-length')),
+        cameraId: headers.has('x-camera-id') ? Number(headers.get('x-camera-id')) : null,
+    };
+}
+
 export class MjpegStreamReader {
     constructor(streamUrl, onFrame) {
         this._streamUrl = streamUrl;
         this._onFrame = onFrame;
         this._fetchAbort = null;
         this._retryTimer = null;
+        this._stallTimer = null;
+        this._retryMs = STREAM_RETRY_MIN_MS;
+        this._stopped = false;
     }
 
     start() {
+        this._stopped = false;
         this._pump();
     }
 
     stop() {
+        this._stopped = true;
         this._fetchAbort?.abort();
         this._fetchAbort = null;
         clearTimeout(this._retryTimer);
+        clearTimeout(this._stallTimer);
         this._retryTimer = null;
     }
 
     async _pump() {
-        this._fetchAbort = new AbortController();
+        const controller = new AbortController();
+        this._fetchAbort = controller;
         try {
-            const response = await fetch(`${this._streamUrl}?r=${Date.now()}`, {
-                signal: this._fetchAbort.signal,
-            });
+            this._armStallWatchdog(controller);
+            const response = await fetch(withCacheBuster(this._streamUrl), { signal: controller.signal, cache: 'no-store' });
+            if (!response.ok) throw new Error(`stream request failed: ${response.status}`);
+            await this._readParts(response.body.getReader(), controller);
+        } catch { }
+        clearTimeout(this._stallTimer);
+        if (this._stopped || this._fetchAbort !== controller) return;
+        this._retryTimer = setTimeout(() => this._pump(), this._retryMs);
+        this._retryMs = Math.min(this._retryMs * 2, STREAM_RETRY_MAX_MS);
+    }
 
-            const reader = response.body.getReader();
-            let buf = new Uint8Array(0);
+    _armStallWatchdog(controller) {
+        clearTimeout(this._stallTimer);
+        this._stallTimer = setTimeout(() => controller.abort(), STREAM_STALL_MS);
+    }
 
-            const flush = async () => {
-                while (true) {
-                    let soi = -1;
-                    for (let i = 0; i < buf.length - 1; i++) {
-                        if (buf[i] === 0xFF && buf[i + 1] === 0xD8) { soi = i; break; }
-                    }
-                    if (soi === -1) break;
+    async _readParts(reader, controller) {
+        let buf = new Uint8Array(0);
+        let part = null;
 
-                    let eoi = -1;
-                    for (let i = soi + 2; i < buf.length - 1; i++) {
-                        if (buf[i] === 0xFF && buf[i + 1] === 0xD9) { eoi = i; break; }
-                    }
-                    if (eoi === -1) break;
-
-                    const frame = buf.slice(soi, eoi + 2);
-                    buf = buf.slice(eoi + 2);
-
-                    const shouldContinue = await this._onFrame(frame);
-                    if (shouldContinue === false) break;
-                }
-            };
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) return;
+            this._armStallWatchdog(controller);
+            buf = concat(buf, value);
 
             while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const next = new Uint8Array(buf.length + value.length);
-                next.set(buf);
-                next.set(value, buf.length);
-                buf = next;
-                await flush();
+                if (!part) {
+                    const headerEnd = indexOfHeaderEnd(buf);
+                    if (headerEnd === -1) break;
+                    part = parsePartHeaders(buf.subarray(0, headerEnd));
+                    buf = buf.subarray(headerEnd + 4);
+                }
+                if (buf.length < part.length) break;
+
+                const frame = buf.slice(0, part.length);
+                const { cameraId } = part;
+                buf = buf.subarray(part.length);
+                part = null;
+                this._retryMs = STREAM_RETRY_MIN_MS;
+
+                const shouldContinue = await this._onFrame(frame, cameraId);
+                if (shouldContinue === false) break;
             }
-        } catch (e) {
-            if (e.name === 'AbortError') return;
-            this._retryTimer = setTimeout(() => this._pump(), 1000);
         }
     }
 }
