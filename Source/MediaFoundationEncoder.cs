@@ -18,9 +18,13 @@ namespace JustReadTheInstructions
         private bool _hasAudio;
         private bool _threadStarted;
 
+        [ThreadStatic] private static byte[] _bgraScratch;
+
         public string Description { get; }
 
         public IAudioEncoder Audio => _hasAudio ? this : null;
+
+        private bool GpuConvertsColor => _deviceManager != IntPtr.Zero;
 
         public MediaFoundationEncoder(string path, int width, int height, int fps)
         {
@@ -43,7 +47,7 @@ namespace JustReadTheInstructions
                     _writer = CreateWriter(path, width, height, fps, withAudio: false);
                     sound = $"no sound ({ex.Message})";
                 }
-                Description = _deviceManager != IntPtr.Zero
+                Description = GpuConvertsColor
                     ? $"Windows Media Foundation, GPU color conversion, {sound}"
                     : $"Windows Media Foundation, {sound}";
             }
@@ -54,7 +58,22 @@ namespace JustReadTheInstructions
             }
         }
 
-        public object CopyFrame(byte[] bottomUpRgba) => MediaFoundation.CreateBuffer(bottomUpRgba, _frameBytes);
+        public object CopyFrame(byte[] bottomUpRgba)
+            => MediaFoundation.CreateBuffer(GpuConvertsColor ? bottomUpRgba : SwapRedBlue(bottomUpRgba), _frameBytes);
+
+        private byte[] SwapRedBlue(byte[] rgba)
+        {
+            var bgra = _bgraScratch;
+            if (bgra == null || bgra.Length != _frameBytes) _bgraScratch = bgra = new byte[_frameBytes];
+            for (int i = 0; i < _frameBytes; i += BytesPerPixel)
+            {
+                bgra[i] = rgba[i + 2];
+                bgra[i + 1] = rgba[i + 1];
+                bgra[i + 2] = rgba[i];
+                bgra[i + 3] = rgba[i + 3];
+            }
+            return bgra;
+        }
 
         public void Encode(object frame, long frameIndex)
         {
@@ -123,11 +142,13 @@ namespace JustReadTheInstructions
                 outputType = MediaFoundation.CreateVideoType(MediaFoundation.VideoFormatH264, width, height, fps);
                 MediaFoundation.SetUInt32(outputType, MediaFoundation.AverageBitrate, bitrate);
                 MediaFoundation.SetUInt32(outputType, MediaFoundation.Mpeg2Profile, HighProfile);
+                MediaFoundation.MarkStudioRangeOutput(outputType);
                 _stream = MediaFoundation.AddStream(writer, outputType);
 
-                inputType = MediaFoundation.CreateVideoType(MediaFoundation.VideoFormatAbgr32, width, height, fps);
+                inputType = MediaFoundation.CreateVideoType(GpuConvertsColor ? MediaFoundation.VideoFormatAbgr32 : MediaFoundation.VideoFormatRgb32, width, height, fps);
                 MediaFoundation.SetUInt32(inputType, MediaFoundation.DefaultStride, unchecked((uint)(-width * BytesPerPixel)));
                 MediaFoundation.SetUInt32(inputType, MediaFoundation.AllSamplesIndependent, 1);
+                MediaFoundation.MarkRgbSource(inputType);
 
                 encoderSettings = MediaFoundation.CreateAttributes(3);
                 MediaFoundation.SetUInt32(encoderSettings, MediaFoundation.EncoderRateControlMode, UnconstrainedVbr);

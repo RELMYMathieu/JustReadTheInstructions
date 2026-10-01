@@ -12,6 +12,11 @@ namespace JustReadTheInstructions
         private const int D3DDriverHardware = 1;
         private const uint D3DDeviceFlags = 0x20 | 0x800;
         private const uint D3DSdkVersion = 7;
+        private const uint FullRange = 1;
+        private const uint StudioRange = 2;
+        private const uint Bt709Matrix = 1;
+        private const uint Bt709Primaries = 2;
+        private const uint Bt709Transfer = 5;
 
         public static readonly Guid MajorType = new Guid("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
         public static readonly Guid Subtype = new Guid("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
@@ -38,11 +43,16 @@ namespace JustReadTheInstructions
         public static readonly Guid AudioBitsPerSample = new Guid("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
         public static readonly Guid VideoFormatH264 = new Guid("34363248-0000-0010-8000-00aa00389b71");
         public static readonly Guid VideoFormatAbgr32 = new Guid("00000020-0000-0010-8000-00aa00389b71");
+        public static readonly Guid VideoFormatRgb32 = new Guid("00000016-0000-0010-8000-00aa00389b71");
         public static readonly Guid EncoderRateControlMode = new Guid("1c0608e9-370c-4710-8a58-cb6181c42423");
         public static readonly Guid EncoderMeanBitrate = new Guid("f7222374-2144-4815-b550-a37f8e12ee52");
         public static readonly Guid EncoderGopSize = new Guid("95f31b26-95a4-41aa-9303-246a7fc6eef1");
         public static readonly Guid SinkWriterDisableThrottling = new Guid("08b845d8-2b74-4afe-9d53-be16d2d5ae4f");
         public static readonly Guid SinkWriterDeviceManager = new Guid("ec822da2-e1e9-4b29-a0d8-563c719f5269");
+        private static readonly Guid NominalRange = new Guid("c21b8ee5-b956-4071-8daf-325edf5cab11");
+        private static readonly Guid YuvMatrix = new Guid("3e23d450-2c75-4d25-a00e-b91670d12327");
+        private static readonly Guid VideoPrimaries = new Guid("dbfbe4d7-0740-4ee0-8192-850ab0e21935");
+        private static readonly Guid TransferFunction = new Guid("5fb0fce9-be5c-4935-a811-ec838f8eed93");
         private static readonly Guid D3DMultithreadInterface = new Guid("9b7e4e00-342c-4106-a19f-4f2704f689f0");
 
         private const int QueryInterfaceSlot = 0;
@@ -164,6 +174,21 @@ namespace JustReadTheInstructions
             SetUInt32(mediaType, AudioChannels, (uint)channels);
             SetUInt32(mediaType, AudioAverageBytesPerSecond, (uint)bytesPerSecond);
             return mediaType;
+        }
+
+        public static void MarkRgbSource(IntPtr mediaType) => SetBt709(mediaType, FullRange);
+
+        public static void MarkStudioRangeOutput(IntPtr mediaType)
+        {
+            SetBt709(mediaType, StudioRange);
+            SetUInt32(mediaType, YuvMatrix, Bt709Matrix);
+        }
+
+        private static void SetBt709(IntPtr mediaType, uint range)
+        {
+            SetUInt32(mediaType, NominalRange, range);
+            SetUInt32(mediaType, VideoPrimaries, Bt709Primaries);
+            SetUInt32(mediaType, TransferFunction, Bt709Transfer);
         }
 
         public static IntPtr CreateGpuDeviceManager()

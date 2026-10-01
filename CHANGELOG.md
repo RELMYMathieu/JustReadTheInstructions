@@ -42,6 +42,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menus can be moved through with the arrow keys
 
 
+## v2.5.1 - 2026-10-01
+
+### Fixed
+
+- In-game recordings no longer crush dark scenes or oversaturate colors on Windows, which was most visible as the sky darkens during ascent. Videos are now saved in the standard HD color format (BT.709, TV range) and say so in the file, so players, editors and OBS show them as they looked in game
+- In-game recordings on Linux and macOS use the same standard HD colors, fixing slightly shifted hues
+- In-game recording on Windows no longer fails to start when JRTI cannot use the graphics card for color conversion
+
+
+## v2.5.0 - 2026-09-29
+
+### Added
+
+- Features from v2.4.1.1, v2.4.1.2 and v2.4.1.3 deemed stable, and now added to stable version
+- For a full changelog, see below (version 2.4.1.1 to 2.4.1.3)
+
+
 ## v2.4.1.3 - 2026-09-27
 
 ### Added
