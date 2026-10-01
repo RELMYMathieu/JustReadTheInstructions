@@ -15,6 +15,7 @@ namespace JustReadTheInstructions
         private const int ProbeWidth = 256;
         private const int ProbeHeight = 144;
         private const int ProbeFps = 30;
+        private const string Bt709Tags = "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv";
 
         internal sealed class Encoder
         {
@@ -103,20 +104,23 @@ namespace JustReadTheInstructions
         {
             var nodes = RenderNodes();
 
-            yield return new Encoder(VideoCodec.H264, "h264_nvenc", "", "vflip", "-c:v h264_nvenc -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_nvenc", "", Bt709("nv12"), "-c:v h264_nvenc -profile:v high");
             foreach (var node in nodes)
-                yield return new Encoder(VideoCodec.H264, "h264_vaapi", $"-vaapi_device {node}", "vflip,format=nv12,hwupload", "-c:v h264_vaapi -profile:v high");
-            yield return new Encoder(VideoCodec.H264, "h264_videotoolbox", "", "vflip,format=nv12", "-c:v h264_videotoolbox -profile:v high");
-            yield return new Encoder(VideoCodec.H264, "h264_qsv", "", "vflip,format=nv12", "-c:v h264_qsv -profile:v high");
-            yield return new Encoder(VideoCodec.H264, "libx264", "", "vflip,format=yuv420p", "-c:v libx264 -preset veryfast -profile:v high");
-            yield return new Encoder(VideoCodec.H264, "libopenh264", "", "vflip,format=yuv420p", "-c:v libopenh264");
+                yield return new Encoder(VideoCodec.H264, "h264_vaapi", $"-vaapi_device {node}", Bt709("nv12") + ",hwupload", "-c:v h264_vaapi -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_videotoolbox", "", Bt709("nv12"), "-c:v h264_videotoolbox -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_qsv", "", Bt709("nv12"), "-c:v h264_qsv -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "libx264", "", Bt709("yuv420p"), "-c:v libx264 -preset veryfast -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "libopenh264", "", Bt709("yuv420p"), "-c:v libopenh264");
 
-            yield return new Encoder(VideoCodec.AV1, "av1_nvenc", "", "vflip", "-c:v av1_nvenc");
+            yield return new Encoder(VideoCodec.AV1, "av1_nvenc", "", Bt709("nv12"), "-c:v av1_nvenc");
             foreach (var node in nodes)
-                yield return new Encoder(VideoCodec.AV1, "av1_vaapi", $"-vaapi_device {node}", "vflip,format=nv12,hwupload", "-c:v av1_vaapi");
-            yield return new Encoder(VideoCodec.AV1, "av1_qsv", "", "vflip,format=nv12", "-c:v av1_qsv");
-            yield return new Encoder(VideoCodec.AV1, "libsvtav1", "", "vflip,format=yuv420p", "-c:v libsvtav1 -preset 10", capsBitrate: false);
+                yield return new Encoder(VideoCodec.AV1, "av1_vaapi", $"-vaapi_device {node}", Bt709("nv12") + ",hwupload", "-c:v av1_vaapi");
+            yield return new Encoder(VideoCodec.AV1, "av1_qsv", "", Bt709("nv12"), "-c:v av1_qsv");
+            yield return new Encoder(VideoCodec.AV1, "libsvtav1", "", Bt709("yuv420p"), "-c:v libsvtav1 -preset 10", capsBitrate: false);
         }
+
+        private static string Bt709(string pixelFormat)
+            => $"vflip,scale=out_color_matrix=bt709:out_range=tv,format={pixelFormat},setparams=color_primaries=bt709:color_trc=bt709";
 
         private static IEnumerable<string> RenderNodes()
         {
@@ -136,7 +140,7 @@ namespace JustReadTheInstructions
 
         private static string Arguments(Encoder encoder, string input, int width, int height, int fps, string output)
             => $"-hide_banner -loglevel error -nostats {encoder.DeviceArguments} {input} " +
-               $"-vf {encoder.Filter} {encoder.EncoderArguments} {RateArguments(encoder, VideoEncoders.Bitrate(width, height, fps))} " +
+               $"-vf {encoder.Filter} {encoder.EncoderArguments} {Bt709Tags} {RateArguments(encoder, VideoEncoders.Bitrate(width, height, fps))} " +
                $"-g {fps * VideoEncoders.GopSeconds} {output}";
 
         private static string RateArguments(Encoder encoder, uint bitrate)

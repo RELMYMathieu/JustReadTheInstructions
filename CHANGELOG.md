@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Fixed
+
+- In-game recordings no longer crush dark scenes or oversaturate colors on Windows, which was most visible as the sky darkens during ascent. Videos are now saved in the standard HD color format (BT.709, TV range) and say so in the file, so players, editors and OBS show them as they looked in game
+- In-game recordings on Linux and macOS use the same standard HD colors, fixing slightly shifted hues
+- In-game recording on Windows no longer fails to start when JRTI cannot use the graphics card for color conversion
+
+
 ## v2.5.0 - 2026-09-29
 
 ### Added
