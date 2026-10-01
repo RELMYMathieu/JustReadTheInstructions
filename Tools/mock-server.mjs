@@ -261,7 +261,7 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname.replace(/\/+$/, '') || '/';
     const parts = p.split('/').filter(Boolean);
     try {
-        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.0', lanUrls: [`http://192.168.1.42:${PORT}/`] });
+        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.1.1', lanUrls: [`http://192.168.1.42:${PORT}/`] });
         if (p === '/cameras') return json(res, cameraList());
         if (p === '/debug/stats') return json(res, sample());
         if (p === '/events') return events(req, res);
