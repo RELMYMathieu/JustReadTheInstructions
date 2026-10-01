@@ -311,7 +311,7 @@ namespace JustReadTheInstructions
                 JRTISettings.EnableTUFX,
                 v => JRTISettings.EnableTUFX = v,
                 TUFXIntegration.IsAvailable,
-                "TUFX post-processing effects (bloom, tone-mapping, etc.)"
+                "TUFX post-processing effects (bloom, tone-mapping, etc.), without motion blur"
             );
             GUILayout.Space(5);
             DrawIntegrationToggle(
@@ -344,6 +344,14 @@ namespace JustReadTheInstructions
                 v => JRTISettings.EnableFirefly = v,
                 FireflyIntegration.IsAvailable,
                 "Firefly - atmospheric re-entry plasma effects near camera"
+            );
+            GUILayout.Space(5);
+            DrawIntegrationToggle(
+                "Stock Aero Effects",
+                JRTISettings.EnableStockAeroFX,
+                v => JRTISettings.EnableStockAeroFX = v,
+                StockAeroFX.IsAvailable,
+                "Stock re-entry and Mach effects of the vessel you fly (Firefly replaces them)"
             );
             GUILayout.Space(8);
             DrawIntegrationToggle(
@@ -519,6 +527,7 @@ namespace JustReadTheInstructions
             Debug.Log($"[JRTI-Diag]: EVE:      Available={EVEIntegration.IsAvailable}, Enabled={JRTISettings.EnableEVE}");
             Debug.Log($"[JRTI-Diag]: Parallax: Available={ParallaxIntegration.IsAvailable}, Enabled={JRTISettings.EnableParallax}");
             Debug.Log($"[JRTI-Diag]: Firefly:  Available={FireflyIntegration.IsAvailable}, Enabled={JRTISettings.EnableFirefly}");
+            Debug.Log($"[JRTI-Diag]: Stock aero FX: Available={StockAeroFX.IsAvailable}, Enabled={JRTISettings.EnableStockAeroFX}");
             Debug.Log($"[JRTI-Diag]: Scatterer:Available={ScattererIntegration.IsAvailable}, Enabled={JRTISettings.EnableScatterer}");
             Debug.Log($"[JRTI-Diag]: HullcamFilter: Available={HullcamFilterIntegration.IsAvailable}, Enabled={JRTISettings.EnableHullcamFilter}");
             if (ParallaxIntegration.IsAvailable)

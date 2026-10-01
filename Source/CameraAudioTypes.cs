@@ -100,15 +100,17 @@ namespace JustReadTheInstructions
         public readonly int CameraId;
         public readonly float Gain;
         public readonly bool AutoGain;
+        public readonly bool Mastering;
 
-        public CameraMix(int cameraId, float gain, bool autoGain)
+        public CameraMix(int cameraId, float gain, bool autoGain, bool mastering)
         {
             CameraId = cameraId;
             Gain = gain;
             AutoGain = autoGain;
+            Mastering = mastering;
         }
 
-        public static CameraMix Default(int cameraId) => new CameraMix(cameraId, 1f, false);
+        public static CameraMix Default(int cameraId) => new CameraMix(cameraId, 1f, false, false);
     }
 
     internal sealed class VoiceState
@@ -137,12 +139,14 @@ namespace JustReadTheInstructions
         public readonly CameraMix[] Cameras;
         public readonly int[] CameraIds;
         public readonly VoiceState[] Voices;
+        public readonly MasteringSettings Mastering;
 
-        public AudioSnapshot(long ticks, CameraMix[] cameras, VoiceState[] voices)
+        public AudioSnapshot(long ticks, CameraMix[] cameras, VoiceState[] voices, MasteringSettings mastering)
         {
             Ticks = ticks;
             Cameras = cameras;
             Voices = voices;
+            Mastering = mastering;
             CameraIds = new int[cameras.Length];
             for (int i = 0; i < cameras.Length; i++)
                 CameraIds[i] = cameras[i].CameraId;
@@ -165,6 +169,12 @@ namespace JustReadTheInstructions
             Pcm = pcm;
             Ticks = ticks;
         }
+    }
+
+    internal interface IEmitterShape
+    {
+        float GameRolloff(float distance);
+        float Width(float distance);
     }
 
     internal interface IAudioSink

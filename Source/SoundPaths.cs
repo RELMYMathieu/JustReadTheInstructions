@@ -11,17 +11,19 @@ namespace JustReadTheInstructions
 
     internal readonly struct SoundSettings
     {
-        public static readonly SoundSettings Default = new SoundSettings(CameraMic.Game, 0f, false);
+        public static readonly SoundSettings Default = new SoundSettings(CameraMic.Game, 0f, false, false);
 
         public readonly CameraMic Mic;
         public readonly float GainDb;
         public readonly bool AutoGain;
+        public readonly bool Mastering;
 
-        public SoundSettings(CameraMic mic, float gainDb, bool autoGain)
+        public SoundSettings(CameraMic mic, float gainDb, bool autoGain, bool mastering)
         {
             Mic = mic;
             GainDb = gainDb;
             AutoGain = autoGain;
+            Mastering = mastering;
         }
     }
 
@@ -33,6 +35,22 @@ namespace JustReadTheInstructions
             => Enum.TryParse(id, ignoreCase: true, out mic) && Enum.IsDefined(typeof(CameraMic), mic);
     }
 
+    internal readonly struct AirSimProfile
+    {
+        public static readonly AirSimProfile Full = new AirSimProfile(1f, 1f, 0f);
+
+        public readonly float Echo;
+        public readonly float Grit;
+        public readonly float AngleHighpassHz;
+
+        public AirSimProfile(float echo, float grit, float angleHighpassHz)
+        {
+            Echo = echo;
+            Grit = grit;
+            AngleHighpassHz = angleHighpassHz;
+        }
+    }
+
     internal readonly struct VoicePath
     {
         public const float OpenCutoff = 20000f;
@@ -41,19 +59,21 @@ namespace JustReadTheInstructions
         public readonly float Left;
         public readonly float Right;
         public readonly float Cutoff;
+        public readonly float Highpass;
         public readonly float DelaySeconds;
         public readonly float EchoDelaySeconds;
         public readonly float EchoMix;
         public readonly float Distortion;
 
         public VoicePath(float left, float right, float cutoff, float delaySeconds)
-            : this(left, right, cutoff, delaySeconds, 0f, 0f, 0f) { }
+            : this(left, right, cutoff, 0f, delaySeconds, 0f, 0f, 0f) { }
 
-        private VoicePath(float left, float right, float cutoff, float delaySeconds, float echoDelaySeconds, float echoMix, float distortion)
+        private VoicePath(float left, float right, float cutoff, float highpass, float delaySeconds, float echoDelaySeconds, float echoMix, float distortion)
         {
             Left = left;
             Right = right;
             Cutoff = cutoff;
+            Highpass = highpass;
             DelaySeconds = delaySeconds;
             EchoDelaySeconds = echoDelaySeconds;
             EchoMix = echoMix;
@@ -62,11 +82,11 @@ namespace JustReadTheInstructions
 
         public bool IsSilent => Left == 0f && Right == 0f;
 
-        public VoicePath WithAirCharacter(float echoDelaySeconds, float echoMix, float distortion)
-            => new VoicePath(Left, Right, Cutoff, DelaySeconds, echoDelaySeconds, echoMix, distortion);
+        public VoicePath WithAirCharacter(float echoDelaySeconds, float echoMix, float distortion, float highpass)
+            => new VoicePath(Left, Right, Cutoff, highpass, DelaySeconds, echoDelaySeconds, echoMix, distortion);
 
         public VoicePath Muffled(float gain, float maxCutoff)
-            => new VoicePath(Left * gain, Right * gain, Math.Min(Cutoff, maxCutoff), DelaySeconds, EchoDelaySeconds, EchoMix, Distortion);
+            => new VoicePath(Left * gain, Right * gain, Math.Min(Cutoff, maxCutoff), Highpass, DelaySeconds, EchoDelaySeconds, EchoMix, Distortion);
     }
 
     internal struct PathInputs
@@ -76,13 +96,18 @@ namespace JustReadTheInstructions
         public float GameRolloff;
         public float Distance;
         public float ThrustKn;
+        public bool LoudnessScalesWithThrust;
         public float Pan;
         public float AirFactor;
         public float SpeedOfSound;
         public bool SameVessel;
         public bool Interior;
         public bool Muted;
-        public bool AheadOfShock;
+        public AirSimProfile AirSim;
+        public float Behind;
+        public float AheadOfCone;
+        public float Mach;
+        public float ShockMuffle;
     }
 
     internal static class SoundPaths
@@ -91,6 +116,8 @@ namespace JustReadTheInstructions
         private const float DefaultSpeedOfSound = 343f;
         private const float ReferenceDistance = 15f;
         private const float ReferenceThrustKn = 60f;
+        private const float PhysicalReachExponent = 0.5f;
+        private const float RseLoudnessThrustExponent = 0.32f;
         private const float AbsorptionDistance = 250f;
         private const float ThinAirCutoff = 250f;
         private const float ExteriorHullGain = 0.3f;
@@ -99,29 +126,57 @@ namespace JustReadTheInstructions
         private const float OnboardHullCutoff = 2500f;
         private const float OnboardAirGain = 0.5f;
         private const float OnboardAirCutoff = 1200f;
-        private const float AheadOfShockGain = 0.05f;
-        private const float AheadOfShockCutoff = 250f;
+        private const float ExternalBoomGain = 3.16f;
+        private const float OnboardBoomGain = 0.7f;
+        private const float OnboardBoomCutoff = 3000f;
+        private const float ShockMuffledGain = 0.05f;
+        private const float ShockMuffledCutoff = 250f;
         private const float ReflectionHeight = 5f;
         private const float MaxEchoDelay = 0.02f;
         private const float MaxEchoMix = 0.5f;
         private const float FullEchoDistance = 1000f;
         private const float MaxDistortion = 0.35f;
         private const float FullDistortionDistance = 3000f;
+        private const float NearDistortionPerMach = 0.5f;
+        private const float MinTailShockDelay = 0.05f;
+        private const float MaxTailShockDelay = 0.6f;
+        private const double FarFieldStretchExponent = 0.25;
 
-        public static float Reach(float thrustKn)
-            => thrustKn > ReferenceThrustKn ? (float)Math.Sqrt(thrustKn / ReferenceThrustKn) : 1f;
+        public static float Reach(float thrustKn, bool loudnessScalesWithThrust)
+        {
+            if (thrustKn <= ReferenceThrustKn) return 1f;
+            float exponent = loudnessScalesWithThrust ? PhysicalReachExponent - RseLoudnessThrustExponent : PhysicalReachExponent;
+            return (float)Math.Pow(thrustKn / ReferenceThrustKn, exponent);
+        }
 
         public static float AirFactor(double density) => Clamp01((float)(density / SeaLevelDensity));
 
-        public static bool InsideMachCone(double cosineBehind, double mach)
-            => mach > 1.0 && cosineBehind > Math.Sqrt(1.0 - 1.0 / (mach * mach));
+        public static float ViewAngleDegrees(float cosineAhead) => (1f + cosineAhead) * 90f;
+
+        public static float MachAngleDegrees(float mach) => mach > 1f ? (float)(Math.Asin(1.0 / mach) * 180.0 / Math.PI) : 90f;
+
+        public static float ShockMuffle(float viewAngle, float mach) => mach > 1f ? Clamp01(viewAngle / MachAngleDegrees(mach)) : 0f;
+
+        public static float AheadOfCone(float viewAngle, float mach)
+        {
+            float cone = MachAngleDegrees(mach);
+            return Clamp01((viewAngle - cone) / cone);
+        }
+
+        public static float TailShockDelay(float lengthMetres, float mach, float distance, float speedOfSound)
+        {
+            float length = Math.Max(lengthMetres, 1f);
+            float c = speedOfSound > 1f ? speedOfSound : DefaultSpeedOfSound;
+            double stretch = Math.Pow(Math.Max(1.0, distance / length), FarFieldStretchExponent);
+            return Math.Max(MinTailShockDelay, Math.Min(MaxTailShockDelay, (float)(length / (Math.Max(mach, 1f) * c) * stretch)));
+        }
 
         public static VoicePath Boom(CameraMic mic, float gain, float pan, float airFactor)
         {
             switch (mic)
             {
-                case CameraMic.External: return Panned(pan, gain * (float)Math.Sqrt(airFactor), VoicePath.OpenCutoff, 0f);
-                case CameraMic.Onboard: return Panned(pan, gain * OnboardAirGain, OnboardAirCutoff, 0f);
+                case CameraMic.External: return Panned(pan, gain * ExternalBoomGain * (float)Math.Sqrt(airFactor), VoicePath.OpenCutoff, 0f);
+                case CameraMic.Onboard: return Panned(pan, gain * OnboardBoomGain, OnboardBoomCutoff, 0f);
                 default: return Panned(pan, gain, VoicePath.OpenCutoff, 0f);
             }
         }
@@ -129,7 +184,8 @@ namespace JustReadTheInstructions
         public static VoicePath For(CameraMic mic, PathInputs input)
         {
             var path = ForMic(mic, input);
-            return input.AheadOfShock ? path.Muffled(AheadOfShockGain, AheadOfShockCutoff) : path;
+            if (input.SameVessel || input.ShockMuffle <= 0f) return path;
+            return path.Muffled(Lerp(1f, ShockMuffledGain, input.ShockMuffle), LogLerp(VoicePath.OpenCutoff, ShockMuffledCutoff, input.ShockMuffle));
         }
 
         private static VoicePath ForMic(CameraMic mic, PathInputs input)
@@ -153,10 +209,10 @@ namespace JustReadTheInstructions
             float airGain = ThroughAir(s, air);
             float airCutoff = AirCutoff(s.Distance, air);
             float delay = Delay(s.Distance, s.SpeedOfSound);
-            if (!s.SameVessel) return AirCharacter(Panned(s.Pan, airGain, airCutoff, delay), s.Distance, air);
+            if (!s.SameVessel) return AirCharacter(Panned(s.Pan, airGain, airCutoff, delay), s, air);
 
             float hullGain = s.Volume * ExteriorHullGain * (1f - air);
-            return AirCharacter(Panned(s.Pan, airGain + hullGain, Lerp(ExteriorHullCutoff, airCutoff, air), delay * air), s.Distance, air);
+            return AirCharacter(Panned(s.Pan, airGain + hullGain, Lerp(ExteriorHullCutoff, airCutoff, air), delay * air), s, air);
         }
 
         private static VoicePath Onboard(PathInputs s)
@@ -170,14 +226,17 @@ namespace JustReadTheInstructions
 
             float air = (float)Math.Sqrt(s.AirFactor);
             return AirCharacter(Panned(s.Pan, ThroughAir(s, air) * OnboardAirGain,
-                Math.Min(AirCutoff(s.Distance, air), OnboardAirCutoff), Delay(s.Distance, s.SpeedOfSound)), s.Distance, air);
+                Math.Min(AirCutoff(s.Distance, air), OnboardAirCutoff), Delay(s.Distance, s.SpeedOfSound)), s, air);
         }
 
-        private static VoicePath AirCharacter(VoicePath path, float distance, float air)
-            => path.WithAirCharacter(
-                Math.Min(MaxEchoDelay, 2f * ReflectionHeight * ReflectionHeight / Math.Max(distance, 1f) / DefaultSpeedOfSound),
-                MaxEchoMix * FarAmount(distance, FullEchoDistance) * air,
-                MaxDistortion * FarAmount(distance, FullDistortionDistance) * air);
+        private static VoicePath AirCharacter(VoicePath path, PathInputs s, float air)
+        {
+            float echoDelay = Math.Min(MaxEchoDelay, 2f * ReflectionHeight * ReflectionHeight / Math.Max(s.Distance, 1f) / DefaultSpeedOfSound);
+            float echoMix = MaxEchoMix * s.AirSim.Echo * FarAmount(s.Distance, FullEchoDistance) * air;
+            float grit = MaxDistortion * s.AirSim.Grit * s.Behind
+                         * Lerp(NearDistortionPerMach * Clamp01(s.Mach), 1f, FarAmount(s.Distance, FullDistortionDistance)) * air;
+            return path.WithAirCharacter(echoDelay, echoMix, grit, s.AirSim.AngleHighpassHz * s.AheadOfCone);
+        }
 
         private static float FarAmount(float distance, float fullDistance)
             => distance <= ReferenceDistance ? 0f : Clamp01((float)(Math.Log(distance / ReferenceDistance) / Math.Log(fullDistance / ReferenceDistance)));
@@ -187,7 +246,7 @@ namespace JustReadTheInstructions
 
         private static float DistanceGain(PathInputs s)
         {
-            float fullLevelDistance = ReferenceDistance * Reach(s.ThrustKn);
+            float fullLevelDistance = ReferenceDistance * Reach(s.ThrustKn, s.LoudnessScalesWithThrust);
             return s.Distance <= fullLevelDistance ? 1f : fullLevelDistance / s.Distance;
         }
 
@@ -205,6 +264,8 @@ namespace JustReadTheInstructions
         }
 
         private static float Lerp(float a, float b, float t) => a + (b - a) * t;
+
+        private static float LogLerp(float a, float b, float t) => (float)Math.Exp(Math.Log(a) + (Math.Log(b) - Math.Log(a)) * t);
 
         private static float Clamp01(float value) => value < 0f ? 0f : value > 1f ? 1f : value;
     }

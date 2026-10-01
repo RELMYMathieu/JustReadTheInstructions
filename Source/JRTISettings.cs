@@ -43,6 +43,7 @@ namespace JustReadTheInstructions
         public static bool EnableEVE { get; internal set; } = true;
         public static bool EnableParallax { get; internal set; } = false;
         public static bool EnableFirefly { get; internal set; } = true;
+        public static bool EnableStockAeroFX { get; internal set; } = true;
         public static bool EnableScatterer { get; internal set; } = true;
         public static bool EnableHullcamFilter { get; internal set; } = true;
 
@@ -122,6 +123,7 @@ namespace JustReadTheInstructions
                 EnableEVE = ParseBool(settings, "EnableEVE", EnableEVE);
                 EnableParallax = ParseBool(settings, "EnableParallax", EnableParallax);
                 EnableFirefly = ParseBool(settings, "EnableFirefly", EnableFirefly);
+                EnableStockAeroFX = ParseBool(settings, "EnableStockAeroFX", EnableStockAeroFX);
                 EnableScatterer = ParseBool(settings, "EnableScatterer", EnableScatterer);
                 EnableHullcamFilter = ParseBool(settings, "EnableHullcamFilter", EnableHullcamFilter);
 
@@ -183,6 +185,7 @@ namespace JustReadTheInstructions
                 settings.AddValue("EnableEVE", EnableEVE);
                 settings.AddValue("EnableParallax", EnableParallax);
                 settings.AddValue("EnableFirefly", EnableFirefly);
+                settings.AddValue("EnableStockAeroFX", EnableStockAeroFX);
                 settings.AddValue("EnableScatterer", EnableScatterer);
                 settings.AddValue("EnableHullcamFilter", EnableHullcamFilter);
 

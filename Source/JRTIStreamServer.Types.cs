@@ -121,6 +121,7 @@ namespace JustReadTheInstructions
             public volatile CameraMic Mic = CameraMic.Game;
             public float SoundGainDb;
             public volatile bool AutoGain;
+            public volatile bool Mastering;
 
             private byte[] _lut;
             private float _lutBrightness;

@@ -215,9 +215,11 @@ namespace JustReadTheInstructions
                 if (server.TryTakePendingFov(kvp.Key, out float fov))
                     renderer.SetFieldOfView(Mathf.Clamp(fov, renderer.GetMinFOV(), renderer.GetMaxFOV()));
 
-                if (publishInfo)
-                    server.PublishCameraInfo(kvp.Key, renderer.GetDisplayName(),
-                        renderer.GetFOV(), renderer.GetMinFOV(), renderer.GetMaxFOV());
+                if (!publishInfo) continue;
+                server.PublishCameraInfo(kvp.Key, renderer.GetDisplayName(),
+                    renderer.GetFOV(), renderer.GetMinFOV(), renderer.GetMaxFOV());
+                if (server.TryGetSoundSettings(kvp.Key, out var sound))
+                    CameraSoundMemory.Remember(renderer.SoundKey, sound);
             }
         }
 

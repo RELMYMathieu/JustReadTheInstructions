@@ -156,8 +156,9 @@ namespace JustReadTheInstructions
             ApplyLatestSnapshot();
             SyncBuses();
 
+            var mastering = _applied?.Mastering ?? MasteringSettings.RseDefault;
             foreach (var bus in _buses.Values)
-                bus.Begin(_applied?.CameraFor(bus.CameraId) ?? CameraMix.Default(bus.CameraId));
+                bus.Begin(_applied?.CameraFor(bus.CameraId) ?? CameraMix.Default(bus.CameraId), mastering);
 
             _expiredVoices.Clear();
             foreach (var kv in _voices)
@@ -366,9 +367,11 @@ namespace JustReadTheInstructions
             private const float DistortionDrive = 3f;
 
             private readonly Biquad _filter = new Biquad();
+            private readonly Biquad _highpass = new Biquad();
             private float _left;
             private float _right;
             private float _cutoff;
+            private float _highpassCutoff;
             private double _delay;
             private double _echoDelay;
             private float _echoMix;
@@ -377,6 +380,7 @@ namespace JustReadTheInstructions
             public PathState(VoicePath initial)
             {
                 _cutoff = initial.Cutoff;
+                _highpassCutoff = initial.Highpass;
                 _delay = DelayFrames(initial);
                 _echoDelay = EchoFrames(initial);
             }
@@ -395,13 +399,18 @@ namespace JustReadTheInstructions
                     _echoDelay = targetEcho;
                     _echoMix = target.EchoMix;
                     _distortion = target.Distortion;
+                    _highpassCutoff = target.Highpass;
                     _filter.Reset();
+                    _highpass.Reset();
                     return;
                 }
 
                 _cutoff = SmoothCutoff(_cutoff, target.Cutoff);
                 bool filtered = _cutoff < Biquad.BypassHz;
                 if (filtered) _filter.SetLowpass(_cutoff);
+                _highpassCutoff += (target.Highpass - _highpassCutoff) * (float)CutoffSmoothing;
+                bool thinned = _highpassCutoff > Biquad.HighpassOffHz;
+                if (thinned) _highpass.SetHighpass(_highpassCutoff);
 
                 bool echoed = _echoMix > 0f || target.EchoMix > 0f;
                 bool distorted = _distortion > 0f || target.Distortion > 0f;
@@ -415,6 +424,7 @@ namespace JustReadTheInstructions
                         x += voice.Read(read - (_echoDelay + (targetEcho - _echoDelay) * t)) * (_echoMix + (target.EchoMix - _echoMix) * t);
 
                     float y = filtered ? _filter.Process(x) : _filter.Pass(x);
+                    y = thinned ? _highpass.Process(y) : _highpass.Pass(y);
                     if (distorted)
                         y /= 1f + (_distortion + (target.Distortion - _distortion) * t) * DistortionDrive * Math.Abs(y);
 
@@ -440,8 +450,10 @@ namespace JustReadTheInstructions
             private readonly float[] _mix = new float[BlockFrames * Channels];
             private readonly Dictionary<long, PathState> _paths = new Dictionary<long, PathState>();
             private readonly AutoGain _autoGain = new AutoGain();
+            private readonly Compressor _compressor = new Compressor();
             private readonly Limiter _limiter = new Limiter();
             private CameraMix _settings;
+            private MasteringSettings _mastering;
             private float _gain = 1f;
 
             public MixBus(int cameraId)
@@ -450,9 +462,10 @@ namespace JustReadTheInstructions
                 _settings = CameraMix.Default(cameraId);
             }
 
-            public void Begin(CameraMix settings)
+            public void Begin(CameraMix settings, MasteringSettings mastering)
             {
                 _settings = settings;
+                _mastering = mastering;
                 Array.Clear(_mix, 0, _mix.Length);
             }
 
@@ -468,8 +481,10 @@ namespace JustReadTheInstructions
             public byte[] Finish()
             {
                 float gain = _settings.Gain * _autoGain.Next(_mix, _settings.Gain, _settings.AutoGain);
-                _limiter.Process(_mix, _gain, gain);
+                GainRamp.Apply(_mix, _gain, gain);
                 _gain = gain;
+                if (_settings.Mastering) _compressor.Process(_mix, _mastering);
+                _limiter.Process(_mix);
 
                 var pcm = new byte[_mix.Length * BytesPerSample];
                 for (int i = 0; i < _mix.Length; i++)

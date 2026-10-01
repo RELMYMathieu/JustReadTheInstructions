@@ -74,11 +74,19 @@
                 <div class="ctrl-row">
                     <span class="ctrl-label" id="auto-gain-label">Auto gain</span>
                     <div class="ctrl-choice" role="group" aria-labelledby="auto-gain-label">
-                        <button type="button" class="btn" data-auto-gain="false" aria-pressed="true">Off</button>
-                        <button type="button" class="btn" data-auto-gain="true" aria-pressed="false">On</button>
+                        <button type="button" class="btn" data-toggle="autoGain" data-on="false" aria-pressed="true">Off</button>
+                        <button type="button" class="btn" data-toggle="autoGain" data-on="true" aria-pressed="false">On</button>
                     </div>
                 </div>
-                <p class="hint ctrl-note">On top of Gain, slowly lifts this camera when its sound gets quiet, up to +24 dB. Wind and background noise rise with it.</p>
+                <p class="hint ctrl-note">On top of Gain, keeps this camera near a steady level: slowly lifts quiet sound (up to +24 dB) and brings loud sound down, so booms and ignitions still stand out. Wind and background noise rise with it.</p>
+                <div class="ctrl-row">
+                    <span class="ctrl-label" id="mastering-label">Mastering</span>
+                    <div class="ctrl-choice" role="group" aria-labelledby="mastering-label">
+                        <button type="button" class="btn" data-toggle="mastering" data-on="false" aria-pressed="true">Off</button>
+                        <button type="button" class="btn" data-toggle="mastering" data-on="true" aria-pressed="false">On</button>
+                    </div>
+                </div>
+                <p class="hint ctrl-note">Compresses like the game does with Rocket Sound Enhancement: denser and louder, with less difference between quiet and loud.</p>
             </div>
         </div>
     </div>

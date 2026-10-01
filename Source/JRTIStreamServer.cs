@@ -116,7 +116,23 @@ namespace JustReadTheInstructions
         }
 
         internal SoundSettings SoundSettingsOf(int cameraId)
-            => _states.TryGetValue(cameraId, out var s) ? new SoundSettings(s.Mic, s.SoundGainDb, s.AutoGain) : SoundSettings.Default;
+            => TryGetSoundSettings(cameraId, out var sound) ? sound : SoundSettings.Default;
+
+        internal bool TryGetSoundSettings(int cameraId, out SoundSettings sound)
+        {
+            bool known = _states.TryGetValue(cameraId, out var s);
+            sound = known ? new SoundSettings(s.Mic, s.SoundGainDb, s.AutoGain, s.Mastering) : SoundSettings.Default;
+            return known;
+        }
+
+        internal void RestoreSoundSettings(int cameraId, SoundSettings sound)
+        {
+            if (!_states.TryGetValue(cameraId, out var s)) return;
+            s.Mic = sound.Mic;
+            s.SoundGainDb = sound.GainDb;
+            s.AutoGain = sound.AutoGain;
+            s.Mastering = sound.Mastering;
+        }
 
         public bool IsStreaming(int cameraId)
             => _states.TryGetValue(cameraId, out var s) && s.MjpegClientCount > 0;

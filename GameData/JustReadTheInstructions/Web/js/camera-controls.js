@@ -4,6 +4,7 @@ import { toast } from './ui.js';
 
 const DEFAULTS = { brightness: 0, contrast: 1, gamma: 1, soundGain: 0 };
 const POST_DELAY_MS = 300;
+const SOUND_TOGGLES = ['autoGain', 'mastering'];
 
 let panel = null;
 
@@ -26,7 +27,7 @@ export function initControls(cameraId) {
     const sound = {
         group: document.getElementById('sound-group'),
         mic: document.getElementById('ctrl-mic'),
-        autoGain: [...document.querySelectorAll('[data-auto-gain]')],
+        toggles: [...document.querySelectorAll('[data-toggle]')],
     };
     sound.mic.append(...MICS.map((mic) => new Option(mic.label, mic.id)));
     const sent = {};
@@ -66,9 +67,9 @@ export function initControls(cameraId) {
         schedulePost();
     });
 
-    for (const btn of sound.autoGain) {
+    for (const btn of sound.toggles) {
         btn.addEventListener('click', () => {
-            setAutoGain(sound, btn.dataset.autoGain === 'true');
+            setToggle(sound, btn.dataset.toggle, btn.dataset.on === 'true');
             schedulePost();
         });
     }
@@ -103,12 +104,13 @@ function showMicHint(value) {
     if (hint) hint.textContent = MICS.find((mic) => mic.id === value)?.hint ?? '';
 }
 
-function setAutoGain(sound, on) {
-    for (const btn of sound.autoGain) btn.setAttribute('aria-pressed', String((btn.dataset.autoGain === 'true') === on));
+function setToggle(sound, key, on) {
+    for (const btn of sound.toggles)
+        if (btn.dataset.toggle === key) btn.setAttribute('aria-pressed', String((btn.dataset.on === 'true') === on));
 }
 
-function isAutoGainOn(sound) {
-    return sound.autoGain.some((btn) => btn.dataset.autoGain === 'true' && btn.getAttribute('aria-pressed') === 'true');
+function isToggleOn(sound, key) {
+    return sound.toggles.some((btn) => btn.dataset.toggle === key && btn.dataset.on === 'true' && btn.getAttribute('aria-pressed') === 'true');
 }
 
 async function loadSettings(cameraId, controls, sound, sent) {
@@ -124,7 +126,7 @@ async function loadSettings(cameraId, controls, sound, sent) {
             sound.mic.value = s.mic;
             showMicHint(s.mic);
             setSlider(controls.soundGain, s.soundGain ?? 0);
-            setAutoGain(sound, s.autoGain === true);
+            for (const key of SOUND_TOGGLES) setToggle(sound, key, s[key] === true);
         }
 
         const fovRow = document.getElementById('fov-row');
@@ -165,7 +167,7 @@ function readValues(controls, sound) {
     if (!sound.group.hidden) {
         values.mic = sound.mic.value;
         values.soundGain = +controls.soundGain.slider.value;
-        values.autoGain = isAutoGainOn(sound);
+        for (const key of SOUND_TOGGLES) values[key] = isToggleOn(sound, key);
     }
     return values;
 }

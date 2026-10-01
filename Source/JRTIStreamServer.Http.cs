@@ -278,6 +278,8 @@ namespace JustReadTheInstructions
                     state.SoundGainDb = UnityEngine.Mathf.Clamp(soundGain, -24f, 24f);
                 if (TryParseJsonBool(body, "autoGain", out var autoGain))
                     state.AutoGain = autoGain;
+                if (TryParseJsonBool(body, "mastering", out var mastering))
+                    state.Mastering = mastering;
 
                 ctx.Response.StatusCode = 200;
                 ctx.Response.Close();
@@ -291,7 +293,8 @@ namespace JustReadTheInstructions
             sb.Append($"\"gamma\":{state.Gamma.ToString("F2", ic)},");
             sb.Append($"\"mic\":\"{CameraMics.Id(state.Mic)}\",");
             sb.Append($"\"soundGain\":{state.SoundGainDb.ToString("F1", ic)},");
-            sb.Append($"\"autoGain\":{(state.AutoGain ? "true" : "false")}");
+            sb.Append($"\"autoGain\":{(state.AutoGain ? "true" : "false")},");
+            sb.Append($"\"mastering\":{(state.Mastering ? "true" : "false")}");
 
             if (state.HasFov)
             {

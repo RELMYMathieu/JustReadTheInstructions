@@ -10,17 +10,30 @@ namespace JustReadTheInstructions
 {
     internal static class RSEIntegration
     {
+        public const string SonicBoomGroup = "SONICBOOM";
+        public const string ReentryHeatGroup = "REENTRYHEAT";
+        internal const double FullMachEffectsPressureKPa = 0.4041;
+
         private const BindingFlags InstanceFields = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
         private const BindingFlags StaticFields = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
-        private const string SonicBoomGroup = "SONICBOOM";
         private const string InteriorChannel = "Interior";
+        private const string EnginesModule = "RSE_Engines";
+        private const string ShipEffectsParentPrefix = "ShipEffects_";
+        private const string SourceTag = "RSE_";
         private const float UnityDefaultMaxDistance = 500f;
+        private const float RseDefaultCombMix = 0.25f;
+        private const float RseDefaultDistortion = 0.5f;
         private const int NormalMuffler = 0;
         private const int AirSimMuffler = 2;
+        private const int MaxCachedLayerGroups = 64;
+
+        private static readonly Dictionary<object, Dictionary<string, List<RseLayer>>> LayerCache = new Dictionary<object, Dictionary<string, List<RseLayer>>>();
+        private static readonly List<RseLayer> NoLayers = new List<RseLayer>();
 
         private static bool? _isAvailable;
         private static Type _moduleType;
         private static Type _effectType;
+        private static Type _filterType;
         private static FieldInfo _moduleSources;
         private static FieldInfo _moduleDoppler;
         private static FieldInfo _effectSource;
@@ -45,15 +58,30 @@ namespace JustReadTheInstructions
         private static FieldInfo _mufflerQuality;
         private static FieldInfo _audioEffectsEnabled;
         private static FieldInfo _machEffectsAmount;
+        private static FieldInfo _exteriorVolume;
+        private static FieldInfo _autoLimiter;
+        private static FieldInfo _customLimiter;
+        private static FieldInfo _limiterThreshold;
+        private static FieldInfo _limiterGain;
+        private static FieldInfo _limiterAttack;
+        private static FieldInfo _limiterRelease;
+        private static FieldInfo _defaultCombMix;
+        private static FieldInfo _defaultDistortion;
         private static bool _machVolumeReadable;
+        private static bool _airSimReadable;
+        private static FieldInfo _layerName;
         private static FieldInfo _layerClips;
         private static FieldInfo _layerChannel;
         private static FieldInfo _layerVolume;
         private static FieldInfo _layerVolumeCurve;
+        private static FieldInfo _layerPitch;
+        private static FieldInfo _layerPitchCurve;
         private static FieldInfo _layerRolloffMode;
         private static FieldInfo _layerMaxDistance;
         private static FieldInfo _layerRolloffCurve;
-        private static bool _boomsReadable;
+        private static FieldInfo _layerMassToVolume;
+        private static FieldInfo _layerMassToPitch;
+        private static bool _layersReadable;
 
         public static bool IsAvailable
         {
@@ -64,6 +92,11 @@ namespace JustReadTheInstructions
                 return _isAvailable.Value;
             }
         }
+
+        internal static float EffectiveMach(Vessel vessel)
+            => (float)vessel.mach * Mathf.Clamp01((float)(vessel.staticPressurekPa / FullMachEffectsPressureKPa));
+
+        internal static float MachVolume(float machPass) => Mathf.Log10(Mathf.Lerp(0.1f, 10f, machPass)) * 0.5f;
 
         public static RsePlayerEffects PlayerEffectsOf(AudioSource source, Part part)
         {
@@ -77,7 +110,9 @@ namespace JustReadTheInstructions
                 return new RsePlayerEffects(
                     () => (float)_moduleDoppler.GetValue(module),
                     () => ModuleScalesVolume(module, layer),
-                    () => (float)_moduleMachPass.GetValue(module));
+                    () => (float)_moduleMachPass.GetValue(module),
+                    FilterProfile(module, _moduleAirSimFilters, layer),
+                    module.GetType().Name == EnginesModule);
             }
 
             foreach (var effect in part.GetComponentsInChildren(_effectType, true))
@@ -87,7 +122,9 @@ namespace JustReadTheInstructions
                 return new RsePlayerEffects(
                     () => loop ? (float)_effectDoppler.GetValue(effect) : 1f,
                     () => EffectScalesVolume(effect),
-                    () => (float)_effectMachPass.GetValue(effect));
+                    () => (float)_effectMachPass.GetValue(effect),
+                    ProfileFrom(name => _effectType.GetField(name)?.GetValue(effect)),
+                    false);
             }
 
             var shipEffects = part.vessel != null && _shipEffectsType != null ? part.vessel.GetComponent(_shipEffectsType) : null;
@@ -98,12 +135,64 @@ namespace JustReadTheInstructions
                     return new RsePlayerEffects(
                         () => 1f,
                         () => ShipScalesVolume(shipEffects, layer),
-                        () => (float)_shipMachPass.GetValue(shipEffects));
+                        () => (float)_shipMachPass.GetValue(shipEffects),
+                        FilterProfile(shipEffects, _shipAirSimFilters, layer),
+                        false);
             }
             return null;
         }
 
-        internal static float MachVolume(float machPass) => Mathf.Log10(Mathf.Lerp(0.1f, 10f, machPass)) * 0.5f;
+        public static bool IsReplacedByJrti(AudioSource source)
+        {
+            var parent = source.transform.parent;
+            if (parent == null || !parent.name.StartsWith(ShipEffectsParentPrefix, StringComparison.Ordinal)) return false;
+
+            var vessel = source.GetComponentInParent<Vessel>();
+            if (vessel == null) return false;
+
+            string layerName = source.name.StartsWith(SourceTag, StringComparison.Ordinal) ? source.name.Substring(SourceTag.Length) : source.name;
+            return ShipLayers(vessel, SonicBoomGroup).Any(layer => layer.Name == layerName)
+                   || ShipLayers(vessel, ReentryHeatGroup).Any(layer => layer.Name == layerName);
+        }
+
+        public static List<RseLayer> ShipLayers(Vessel vessel, string group)
+        {
+            var groups = IsAvailable && _layersReadable ? SoundLayerGroupsOf(vessel) as IDictionary : null;
+            if (groups == null) return NoLayers;
+
+            if (!LayerCache.TryGetValue(groups, out var byGroup))
+            {
+                if (LayerCache.Count >= MaxCachedLayerGroups) LayerCache.Clear();
+                LayerCache[groups] = byGroup = ReadLayerGroups(groups);
+            }
+            return byGroup.TryGetValue(group, out var layers) ? layers : NoLayers;
+        }
+
+        public static MasteringSettings Mastering()
+        {
+            if (!IsAvailable || _autoLimiter == null) return MasteringSettings.RseDefault;
+            if (_customLimiter != null && (bool)_customLimiter.GetValue(null))
+                return new MasteringSettings((float)_limiterThreshold.GetValue(null), (float)_limiterGain.GetValue(null),
+                    (float)_limiterAttack.GetValue(null), (float)_limiterRelease.GetValue(null));
+            return MasteringSettings.FromAutoLimiter((float)_autoLimiter.GetValue(null));
+        }
+
+        public static float ExteriorVolume() => IsAvailable && _exteriorVolume != null ? (float)_exteriorVolume.GetValue(null) : 1f;
+
+        public static Func<float> PlayerNeutralMinDistanceOf(AudioSource source, Part part)
+        {
+            if (part == null || !IsAvailable || _partAudioManagerType == null) return null;
+            var manager = part.GetComponent(_partAudioManagerType);
+            if (manager == null || !ReferenceEquals(_managerSource.GetValue(manager), source)) return null;
+            return () => (float)_managerMinDistance.GetValue(manager);
+        }
+
+        public static bool IsInterior(AudioMixerGroup group)
+        {
+            if (group == null || !IsAvailable) return false;
+            if (ReferenceEquals(_interiorGroup, null)) _interiorGroup = _interiorMixer.GetValue(null) as AudioMixerGroup;
+            return ReferenceEquals(group, _interiorGroup);
+        }
 
         private static bool ModuleScalesVolume(object module, string layer)
             => MachScalesVolume(requiresAudioEffects: true)
@@ -127,53 +216,43 @@ namespace JustReadTheInstructions
 
         private static bool Has(object dictionary, string key) => dictionary is IDictionary entries && entries.Contains(key);
 
+        private static AirSimProfile FilterProfile(object owner, FieldInfo filtersField, string layer)
+        {
+            if (!_airSimReadable || filtersField == null) return AirSimProfile.Full;
+            if (!(filtersField.GetValue(owner) is IDictionary filters) || !filters.Contains(layer)) return new AirSimProfile(0f, 0f, 0f);
+            var filter = filters[layer];
+            return ProfileFrom(name => _filterType.GetProperty(name)?.GetValue(filter));
+        }
+
+        private static AirSimProfile ProfileFrom(Func<string, object> read)
+        {
+            if (!_airSimReadable) return AirSimProfile.Full;
+            try
+            {
+                bool comb = read("EnableCombFilter") is bool c && c;
+                bool distortion = read("EnableDistortionFilter") is bool d && d;
+                float combMix = read("MaxCombMix") is float m ? m : RseDefaultCombMix;
+                float maxDistortion = read("MaxDistortion") is float x ? x : RseDefaultDistortion;
+                float highpass = read("AngleHighpass") is float h ? h : 0f;
+                return new AirSimProfile(
+                    comb ? combMix / DefaultOf(_defaultCombMix, RseDefaultCombMix) : 0f,
+                    distortion ? maxDistortion / DefaultOf(_defaultDistortion, RseDefaultDistortion) : 0f,
+                    highpass);
+            }
+            catch (Exception)
+            {
+                return AirSimProfile.Full;
+            }
+        }
+
+        private static float DefaultOf(FieldInfo field, float fallback)
+            => field?.GetValue(null) is float value && value > 0f ? value : fallback;
+
         private static string LayerOf(IDictionary sources, AudioSource source)
         {
             foreach (DictionaryEntry entry in sources)
                 if (ReferenceEquals(entry.Value, source)) return entry.Key as string;
             return null;
-        }
-
-        public static Func<float> PlayerNeutralMinDistanceOf(AudioSource source, Part part)
-        {
-            if (part == null || !IsAvailable || _partAudioManagerType == null) return null;
-            var manager = part.GetComponent(_partAudioManagerType);
-            if (manager == null || !ReferenceEquals(_managerSource.GetValue(manager), source)) return null;
-            return () => (float)_managerMinDistance.GetValue(manager);
-        }
-
-        public static bool IsInterior(AudioMixerGroup group)
-        {
-            if (group == null || !IsAvailable) return false;
-            if (ReferenceEquals(_interiorGroup, null)) _interiorGroup = _interiorMixer.GetValue(null) as AudioMixerGroup;
-            return ReferenceEquals(group, _interiorGroup);
-        }
-
-        public static bool FollowsPlayerCamera(AudioSource source)
-        {
-            var parent = source.transform.parent;
-            return parent != null
-                   && parent.name.StartsWith("ShipEffects_", StringComparison.Ordinal)
-                   && source.name.IndexOf("SonicBoom", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        public static List<BoomLayer> SonicBoomLayers(Vessel vessel)
-        {
-            var layers = new List<BoomLayer>();
-            if (!IsAvailable || !_boomsReadable) return layers;
-
-            if (!(SoundLayerGroupsOf(vessel) is IDictionary groups)) return layers;
-
-            foreach (DictionaryEntry group in groups)
-            {
-                if (group.Key.ToString() != SonicBoomGroup || !(group.Value is IEnumerable members)) continue;
-                foreach (var member in members)
-                {
-                    var layer = ToBoomLayer(member);
-                    if (layer != null) layers.Add(layer);
-                }
-            }
-            return layers;
         }
 
         private static object SoundLayerGroupsOf(Vessel vessel)
@@ -183,29 +262,50 @@ namespace JustReadTheInstructions
             return shipEffects != null ? _soundLayerGroups.GetValue(shipEffects) : null;
         }
 
-        private static BoomLayer ToBoomLayer(object layer)
+        private static Dictionary<string, List<RseLayer>> ReadLayerGroups(IDictionary groups)
+        {
+            var byGroup = new Dictionary<string, List<RseLayer>>();
+            foreach (DictionaryEntry group in groups)
+            {
+                if (!(group.Value is IEnumerable members)) continue;
+                var layers = new List<RseLayer>();
+                foreach (var member in members)
+                {
+                    var layer = ToLayer(member);
+                    if (layer != null) layers.Add(layer);
+                }
+                byGroup[group.Key.ToString()] = layers;
+            }
+            return byGroup;
+        }
+
+        private static RseLayer ToLayer(object layer)
         {
             if (!(_layerClips.GetValue(layer) is AudioClip[] clips) || clips.Length == 0) return null;
             if (_layerChannel.GetValue(layer)?.ToString() == InteriorChannel) return null;
-            return new BoomLayer(clips, VolumeOf(layer), RolloffOf(layer));
+            return new RseLayer(
+                _layerName.GetValue(layer) as string ?? "",
+                clips,
+                CurveOf(layer, _layerVolumeCurve, _layerVolume),
+                CurveOf(layer, _layerPitchCurve, _layerPitch),
+                CurveOf(layer, null, _layerMassToVolume),
+                CurveOf(layer, null, _layerMassToPitch),
+                RolloffOf(layer));
         }
 
-        private static Func<float, float> VolumeOf(object layer)
+        private static Func<float, float> CurveOf(object layer, FieldInfo floatCurve, FieldInfo fxCurve)
         {
-            if (_layerVolumeCurve.GetValue(layer) is FloatCurve curve) return control => curve.Evaluate(control);
-            if (_layerVolume.GetValue(layer) is FXCurve fx) return control => fx.Value(control);
+            if (floatCurve?.GetValue(layer) is FloatCurve curve) return control => curve.Evaluate(control);
+            if (fxCurve?.GetValue(layer) is FXCurve fx) return control => fx.Value(control);
             return control => 1f;
         }
 
-        private static Func<float, float> RolloffOf(object layer)
+        private static RseRolloff RolloffOf(object layer)
         {
             var mode = (AudioRolloffMode)_layerRolloffMode.GetValue(layer);
             float max = mode == AudioRolloffMode.Logarithmic ? UnityDefaultMaxDistance : Mathf.Max((float)_layerMaxDistance.GetValue(layer), 1f);
-            if (mode == AudioRolloffMode.Custom && _layerRolloffCurve.GetValue(layer) is FloatCurve curve)
-                return distance => curve.Evaluate(Mathf.Clamp01(distance / max));
-            if (mode == AudioRolloffMode.Linear)
-                return distance => Mathf.Clamp01(1f - distance / max);
-            return distance => 1f / Mathf.Clamp(distance, 1f, max);
+            var curve = mode == AudioRolloffMode.Custom ? _layerRolloffCurve.GetValue(layer) as FloatCurve : null;
+            return new RseRolloff(mode, max, curve);
         }
 
         private static bool Load()
@@ -230,9 +330,10 @@ namespace JustReadTheInstructions
                     return false;
                 }
 
-                LoadSonicBooms(assembly);
+                LoadLayers(assembly);
                 LoadPartAudioManager(assembly);
                 LoadMachVolume(assembly);
+                LoadSettings(assembly);
                 Debug.Log("[JRTI-Audio]: Rocket Sound Enhancement support enabled");
                 return true;
             }
@@ -243,24 +344,29 @@ namespace JustReadTheInstructions
             }
         }
 
-        private static void LoadSonicBooms(Assembly assembly)
+        private static void LoadLayers(Assembly assembly)
         {
             _shipEffectsType = assembly.GetType("RocketSoundEnhancement.ShipEffects");
             var layerType = assembly.GetType("RocketSoundEnhancement.SoundLayer");
             _soundLayerGroups = _shipEffectsType?.GetField("SoundLayerGroups", InstanceFields);
             _configSoundLayerGroups = assembly.GetType("RocketSoundEnhancement.ShipEffectsConfig")?.GetField("SoundLayerGroups", StaticFields);
+            _layerName = layerType?.GetField("name", InstanceFields);
             _layerClips = layerType?.GetField("audioClips", InstanceFields);
             _layerChannel = layerType?.GetField("channel", InstanceFields);
             _layerVolume = layerType?.GetField("volume", InstanceFields);
             _layerVolumeCurve = layerType?.GetField("volumeFC", InstanceFields);
+            _layerPitch = layerType?.GetField("pitch", InstanceFields);
+            _layerPitchCurve = layerType?.GetField("pitchFC", InstanceFields);
             _layerRolloffMode = layerType?.GetField("rolloffMode", InstanceFields);
             _layerMaxDistance = layerType?.GetField("maxDistance", InstanceFields);
             _layerRolloffCurve = layerType?.GetField("rollOffCurve", InstanceFields);
+            _layerMassToVolume = layerType?.GetField("massToVolume", InstanceFields);
+            _layerMassToPitch = layerType?.GetField("massToPitch", InstanceFields);
 
-            _boomsReadable = (_configSoundLayerGroups != null || _soundLayerGroups != null) && _layerClips != null && _layerChannel != null && _layerVolume != null
-                             && _layerVolumeCurve != null && _layerRolloffMode != null && _layerMaxDistance != null && _layerRolloffCurve != null;
-            if (!_boomsReadable)
-                Debug.LogWarning("[JRTI-Audio]: Rocket Sound Enhancement sonic boom layers not recognised (new version?) - cameras hear no sonic booms");
+            _layersReadable = (_configSoundLayerGroups != null || _soundLayerGroups != null) && _layerName != null && _layerClips != null && _layerChannel != null
+                              && _layerVolume != null && _layerVolumeCurve != null && _layerRolloffMode != null && _layerMaxDistance != null && _layerRolloffCurve != null;
+            if (!_layersReadable)
+                Debug.LogWarning("[JRTI-Audio]: Rocket Sound Enhancement ship sound layers not recognised (new version?) - cameras hear no sonic booms and RSE's own re-entry sound");
         }
 
         private static void LoadMachVolume(Assembly assembly)
@@ -287,6 +393,27 @@ namespace JustReadTheInstructions
                 Debug.LogWarning("[JRTI-Audio]: Rocket Sound Enhancement Mach settings not recognised (new version?) - some RSE sounds keep the player camera's Mach muffling on JRTI cameras");
         }
 
+        private static void LoadSettings(Assembly assembly)
+        {
+            var settingsType = assembly.GetType("RocketSoundEnhancement.Settings");
+            _filterType = assembly.GetType("RocketSoundEnhancement.AudioFilters.AirSimulationFilter");
+            _exteriorVolume = settingsType?.GetField("ExteriorVolume", StaticFields);
+            _autoLimiter = settingsType?.GetField("AutoLimiter", StaticFields);
+            _customLimiter = settingsType?.GetField("EnableCustomLimiter", StaticFields);
+            _limiterThreshold = settingsType?.GetField("LimiterThreshold", StaticFields);
+            _limiterGain = settingsType?.GetField("LimiterGain", StaticFields);
+            _limiterAttack = settingsType?.GetField("LimiterAttack", StaticFields);
+            _limiterRelease = settingsType?.GetField("LimiterRelease", StaticFields);
+            _defaultCombMix = settingsType?.GetField("AirSimMaxCombMix", StaticFields);
+            _defaultDistortion = settingsType?.GetField("AirSimMaxDistortion", StaticFields);
+            if (_customLimiter == null || _limiterThreshold == null || _limiterGain == null || _limiterAttack == null || _limiterRelease == null)
+                _customLimiter = null;
+
+            _airSimReadable = _filterType != null && _filterType.GetProperty("EnableCombFilter") != null && _filterType.GetProperty("MaxDistortion") != null;
+            if (!_airSimReadable)
+                Debug.LogWarning("[JRTI-Audio]: Rocket Sound Enhancement AirSim settings not recognised (new version?) - every RSE sound gets JRTI's full air character on cameras");
+        }
+
         private static void LoadPartAudioManager(Assembly assembly)
         {
             _partAudioManagerType = assembly.GetType("RocketSoundEnhancement.RSE_PartAudioManager");
@@ -296,22 +423,72 @@ namespace JustReadTheInstructions
         }
     }
 
-    internal sealed class BoomLayer
+    internal sealed class RseLayer : IEmitterShape
     {
-        private const float MaxControlMach = 4f;
-
+        public readonly string Name;
         public readonly AudioClip[] Clips;
         private readonly Func<float, float> _volume;
-        private readonly Func<float, float> _rolloff;
+        private readonly Func<float, float> _pitch;
+        private readonly Func<float, float> _massToVolume;
+        private readonly Func<float, float> _massToPitch;
+        private readonly RseRolloff _rolloff;
 
-        public BoomLayer(AudioClip[] clips, Func<float, float> volume, Func<float, float> rolloff)
+        public RseLayer(string name, AudioClip[] clips, Func<float, float> volume, Func<float, float> pitch,
+            Func<float, float> massToVolume, Func<float, float> massToPitch, RseRolloff rolloff)
         {
+            Name = name;
             Clips = clips;
             _volume = volume;
+            _pitch = pitch;
+            _massToVolume = massToVolume;
+            _massToPitch = massToPitch;
             _rolloff = rolloff;
         }
 
-        public float Gain(double mach, float distance) => _volume(Mathf.Min((float)mach, MaxControlMach)) * _rolloff(distance);
+        public float Volume(float control, float mass) => _volume(control) * _massToVolume(mass);
+
+        public float Pitch(float control, float mass) => _pitch(control) * _massToPitch(mass);
+
+        public float Rolloff(float distance, bool inMetres) => _rolloff.At(distance, inMetres);
+
+        public float GameRolloff(float distance) => _rolloff.At(distance, false);
+
+        public float Width(float distance) => 0f;
+    }
+
+    internal sealed class RseRolloff
+    {
+        private readonly AudioRolloffMode _mode;
+        private readonly float _maxDistance;
+        private readonly FloatCurve _curve;
+        private readonly bool _keyedInMetres;
+        private readonly float _peakDistance;
+        private readonly float _peakValue;
+
+        public RseRolloff(AudioRolloffMode mode, float maxDistance, FloatCurve curve)
+        {
+            _mode = mode;
+            _maxDistance = maxDistance;
+            _curve = curve;
+            var keys = curve?.Curve.keys;
+            if (keys == null || keys.Length == 0) return;
+
+            _keyedInMetres = keys[keys.Length - 1].time > 1f;
+            var peak = keys.OrderByDescending(key => key.value).First();
+            _peakDistance = peak.time;
+            _peakValue = peak.value;
+        }
+
+        public float At(float distance, bool inMetres)
+        {
+            if (_mode == AudioRolloffMode.Custom && _curve != null)
+            {
+                if (!inMetres || !_keyedInMetres) return _curve.Evaluate(Mathf.Clamp01(distance / _maxDistance));
+                return _peakDistance > 0f && distance >= _peakDistance ? _peakValue : _curve.Evaluate(distance);
+            }
+            if (_mode == AudioRolloffMode.Linear) return Mathf.Clamp01(1f - distance / _maxDistance);
+            return 1f / Mathf.Clamp(distance, 1f, _maxDistance);
+        }
     }
 
     internal sealed class RsePlayerEffects
@@ -319,15 +496,19 @@ namespace JustReadTheInstructions
         private const float MinMachVolume = 0.01f;
         private static readonly float NeutralMachVolume = RSEIntegration.MachVolume(1f);
 
+        public readonly AirSimProfile AirSim;
+        public readonly bool LoudnessScalesWithThrust;
         private readonly Func<float> _doppler;
         private readonly Func<bool> _machScalesVolume;
         private readonly Func<float> _machPass;
 
-        public RsePlayerEffects(Func<float> doppler, Func<bool> machScalesVolume, Func<float> machPass)
+        public RsePlayerEffects(Func<float> doppler, Func<bool> machScalesVolume, Func<float> machPass, AirSimProfile airSim, bool loudnessScalesWithThrust)
         {
             _doppler = doppler;
             _machScalesVolume = machScalesVolume;
             _machPass = machPass;
+            AirSim = airSim;
+            LoudnessScalesWithThrust = loudnessScalesWithThrust;
         }
 
         public float Doppler => _doppler();

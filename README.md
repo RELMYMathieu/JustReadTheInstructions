@@ -82,6 +82,8 @@ o7 and have fun :D
 
 The web UI lives at `http://localhost:8080/` (or the port set in the settings). Settings are saved in `GameData/JustReadTheInstructions/PluginData/settings.cfg`, which mod updates never overwrite.
 
+Visual mods are applied to camera feeds as in the main view and can be turned off one by one under integrations: Deferred, TUFX (without motion blur, which smears feeds that render at their own pace), Scatterer, EVE, Parallax, Firefly, and the stock re-entry and Mach effects when Firefly is not installed.
+
 ## Camera Layouts
 
 The **Layout** button in the web UI opens `layout.html`: several cameras in one window, sized to fill it. Open **Cameras** to drag cameras onto the screen, drag a tile onto another to swap them, double-click a tile (or press `1` to `9`) to spotlight it, and use **Fill** for edge to edge split screens.
@@ -96,17 +98,23 @@ Every camera has its own sound: the game's sounds as heard from where the camera
 
 For OBS, add `&audio=1` to a viewer or clean feed URL (`http://localhost:8080/layout.html?program&audio=1`) and tick "Control audio via OBS" on the browser source. The clean feed plays the sound of the layout on air and crossfades on Take. In-game recordings always include the camera's sound.
 
-Each camera card on the main page has a **Mic** picker in its bottom border, so you can set every camera's mic before recording without opening a viewer. **Adjust** in the viewer sets the **Mic**, **Gain** and **Auto gain** under **Sound**, for every viewer and recording:
+Each camera card on the main page has a **Mic** picker in its bottom border, so you can set every camera's mic before recording without opening a viewer. **Adjust** in the viewer sets the **Mic**, **Gain**, **Auto gain** and **Mastering** under **Sound**, for every viewer and recording:
 
 | Mic | What it hears |
 | --- | --- |
 | Game mix (default) | The game's sound from where the camera is, clean: no air delay, echo or hull muffling |
-| External | Sound crossing the air: it arrives late from far away, changes pitch as things fly past, gets duller, hollower (ground echo) and grittier with distance and thinner air, and stops in vacuum except for the camera's own vessel through the hull |
+| External | Sound crossing the air: it arrives late from far away, changes pitch as things fly past, gets duller, hollower (ground echo) and grittier with distance and thinner air, grittiest behind a vessel and thinner ahead of it, and stops in vacuum except for the camera's own vessel through the hull |
 | Onboard | Its own vessel through the structure and the cabin, other vessels muffled by the hull |
 
-Big engines carry further on every mic: an engine's sound reaches further the more thrust it is making (with the square root of its thrust), so a pad camera still hears a heavy launch kilometres away while small engines fade as before. A part with several engines, like a Raptor cluster, counts all of them. **Auto gain** (off by default) slowly lifts a camera whose sound has gone quiet, up to +24 dB, and never turns a loud camera down; it lifts wind and background noise too.
+Big engines carry further on every mic: an engine's sound reaches further the more thrust it is making, so a pad camera still hears a heavy launch kilometres away while small engines fade as before. A part with several engines, like a Raptor cluster, counts all of them. With Rocket Sound Enhancement, whose engine sounds are already louder for more thrust, the extra reach is smaller so the total stays physical.
 
-Works with **Rocket Sound Enhancement**: its engine layers play on cameras without the player camera's Doppler, and when **Harmony** is installed (RSE requires it) its ignition, flameout and decoupler sounds are heard too. Sonic booms use RSE's sounds: when a vessel flies past Mach 1 in air, the vessel stays a faint rumble on each camera until its shock reaches that camera, then the boom hits, like on a ground camera; cameras riding on that vessel never hear their own boom. A few sounds built into KSP, such as explosions, are kept compressed by Unity and cannot be read yet; they are listed in `KSP.log` and counted on the Diagnostics page.
+**Auto gain** (off by default) keeps a camera near a steady level: it slowly lifts quiet sound, up to +24 dB, and brings loud sound down, which leaves room for booms and ignitions to stand out; it lifts wind and background noise too. **Mastering** (off by default) compresses the camera like the game does with Rocket Sound Enhancement (its Limiter Amount from RSE's settings): denser and louder, with less difference between quiet and loud.
+
+Each camera remembers its mic, gain, auto gain and mastering, in `PluginData/camera-sound.cfg`: they come back when the camera opens again, after a revert, a quickload or relaunching the same craft. A second copy of a craft flying at the same time starts on the defaults.
+
+Works with **Rocket Sound Enhancement**: its engine layers play on cameras without the player camera's Doppler, and when **Harmony** is installed (RSE requires it) its ignition, flameout and decoupler sounds are heard too. Each RSE sound keeps the air treatment its config gives it (engines get echo and grit, while RCS, jetpacks and collisions only get duller with distance), and each vessel's re-entry roar follows its own heating, not the vessel you fly.
+
+Sonic booms use RSE's sounds. A boom reaches a camera each time a vessel's speed toward that camera crosses the speed of sound, after the time the sound takes to get there: a flyby booms once, and a booster coming back (boostback, entry burn, descent, landing burn) can boom several times. Each is a double boom-boom from the nose and tail shocks, further apart the longer the vessel and the further the camera. Ahead of a supersonic vessel its sound is a faint rumble, and it comes back gradually after the cone passes, as in RSE. Cameras riding on that vessel hear a boom instead each time it crosses Mach 1 in air, going up or slowing down. Booms follow RSE's own scaling (heavier vessels boom louder and deeper), hit hardest on External and come through the hull clearly on Onboard. RSE Default's far boom, the rumble meant for 0.5 to 5 km, plays on External and Onboard (RSE itself only ever plays the near one). A few sounds built into KSP, such as explosions, are kept compressed by Unity and cannot be read yet; they are listed in `KSP.log` and counted on the Diagnostics page.
 
 ## Camera Naming & IDs
 
