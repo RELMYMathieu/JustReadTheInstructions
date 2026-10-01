@@ -120,6 +120,7 @@ namespace JustReadTheInstructions
             public float Gamma = 1f;
             public volatile CameraMic Mic = CameraMic.Game;
             public float SoundGainDb;
+            public volatile bool AutoGain;
 
             private byte[] _lut;
             private float _lutBrightness;

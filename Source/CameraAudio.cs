@@ -13,6 +13,7 @@ namespace JustReadTheInstructions
 
         private const float SourceRefreshSeconds = 0.25f;
         private const float MinPanDistance = 0.001f;
+        private const long FirstOneShotId = (long)int.MaxValue + 1;
 
         private readonly CameraAudioMixer _mixer = new CameraAudioMixer();
         private readonly Dictionary<AudioClip, ClipPcm> _clips = new Dictionary<AudioClip, ClipPcm>();
@@ -26,7 +27,7 @@ namespace JustReadTheInstructions
         private readonly List<BoomHit> _boomHits = new List<BoomHit>();
         private readonly List<Boom> _booms = new List<Boom>();
         private float _refreshSourcesAt;
-        private int _nextOneShotId = -1;
+        private long _nextOneShotId = FirstOneShotId;
 
         void Awake()
         {
@@ -48,7 +49,7 @@ namespace JustReadTheInstructions
 
         void LateUpdate()
         {
-            var cameraIds = _mixer.ListenedCameraIds();
+            var cameraIds = _mixer.ListenedCameraIds;
             OneShotHook.Listening = cameraIds.Length > 0;
             if (cameraIds.Length == 0)
             {
@@ -98,7 +99,7 @@ namespace JustReadTheInstructions
                 if (fired.Source == null) continue;
                 var entry = EntryFor(fired.Source);
                 var pcm = entry.FollowsPlayerCamera ? null : ReadClip(fired.Clip);
-                if (pcm != null) _oneShots.Add(new OneShot(_nextOneShotId--, entry, fired.Clip, pcm, fired.VolumeScale, Time.unscaledTime));
+                if (pcm != null) _oneShots.Add(new OneShot(_nextOneShotId++, entry, fired.Clip, pcm, fired.VolumeScale, Time.unscaledTime));
             }
         }
 
@@ -119,7 +120,7 @@ namespace JustReadTheInstructions
                     var pcm = ReadClip(layer.Clips[UnityEngine.Random.Range(0, layer.Clips.Length)]);
                     float gain = layer.Gain(hit.Source.mach, hit.Distance) * GameSettings.SHIP_VOLUME;
                     if (pcm != null && gain > 0f)
-                        _booms.Add(new Boom(_nextOneShotId--, hit.CameraId, pcm, SoundPaths.Boom(listener.Mic, gain, pan, listener.AirFactor), Time.unscaledTime));
+                        _booms.Add(new Boom(_nextOneShotId++, hit.CameraId, pcm, SoundPaths.Boom(listener.Mic, gain, pan, listener.AirFactor), Time.unscaledTime));
                 }
             }
         }
@@ -137,12 +138,9 @@ namespace JustReadTheInstructions
                 Vessel vessel = null;
                 if (manager != null) manager.TryGetListener(cameraIds[i], out view, out vessel);
 
-                var mic = CameraMic.Game;
-                float gainDb = 0f;
-                if (server != null) server.GetSoundSettings(cameraIds[i], out mic, out gainDb);
-
-                listeners[i] = new Listener(cameraIds[i], view, vessel, mic);
-                cameras[i] = new CameraMix(cameraIds[i], Mathf.Pow(10f, gainDb / 20f));
+                var sound = server != null ? server.SoundSettingsOf(cameraIds[i]) : SoundSettings.Default;
+                listeners[i] = new Listener(cameraIds[i], view, vessel, sound.Mic);
+                cameras[i] = new CameraMix(cameraIds[i], Mathf.Pow(10f, sound.GainDb / 20f), sound.AutoGain);
             }
             return listeners;
         }
@@ -199,7 +197,7 @@ namespace JustReadTheInstructions
             return false;
         }
 
-        private void AddVoice(int id, SoundSource entry, ClipPcm pcm, int timeSamples, float pitch, bool loop, float volume, Listener[] listeners)
+        private void AddVoice(long id, SoundSource entry, ClipPcm pcm, int timeSamples, float pitch, bool loop, float volume, Listener[] listeners)
         {
             var emitter = new Emitter(entry, volume);
             var paths = new VoicePath[listeners.Length];
@@ -256,6 +254,8 @@ namespace JustReadTheInstructions
             private readonly bool _interior;
             private readonly Vessel _vessel;
             private readonly float _airFactor;
+            private readonly float _thrustKn;
+            private readonly float _reach;
 
             public Emitter(SoundSource entry, float volume)
             {
@@ -265,6 +265,8 @@ namespace JustReadTheInstructions
                 _interior = entry.IsInterior;
                 _vessel = entry.Vessel;
                 _airFactor = _vessel != null ? SoundPaths.AirFactor(_vessel.atmDensity) : 1f;
+                _thrustKn = entry.ThrustKn;
+                _reach = SoundPaths.Reach(_thrustKn);
             }
 
             public VoicePath PathTo(Listener listener, SonicBoomDetector booms)
@@ -278,8 +280,9 @@ namespace JustReadTheInstructions
                 {
                     Volume = _volume,
                     SpatialBlend = blend,
-                    GameRolloff = _entry.GameRolloff(distance),
+                    GameRolloff = _entry.GameRolloff(distance / _reach),
                     Distance = distance,
+                    ThrustKn = _thrustKn,
                     Pan = PanOf(offset, distance, listener.View, blend) * (1f - _entry.Width(distance)),
                     AirFactor = _vessel != null ? Mathf.Min(listener.AirFactor, _airFactor) : listener.AirFactor,
                     SpeedOfSound = listener.SpeedOfSound,
@@ -293,13 +296,13 @@ namespace JustReadTheInstructions
 
         private sealed class Boom
         {
-            public readonly int Id;
+            public readonly long Id;
             public readonly int CameraId;
             public readonly ClipPcm Pcm;
             public readonly VoicePath Path;
             public readonly float StartedAt;
 
-            public Boom(int id, int cameraId, ClipPcm pcm, VoicePath path, float startedAt)
+            public Boom(long id, int cameraId, ClipPcm pcm, VoicePath path, float startedAt)
             {
                 Id = id;
                 CameraId = cameraId;
@@ -319,14 +322,14 @@ namespace JustReadTheInstructions
 
         private sealed class OneShot
         {
-            public readonly int Id;
+            public readonly long Id;
             public readonly SoundSource Entry;
             public readonly AudioClip Clip;
             public readonly ClipPcm Pcm;
             public readonly float VolumeScale;
             public readonly float StartedAt;
 
-            public OneShot(int id, SoundSource entry, AudioClip clip, ClipPcm pcm, float volumeScale, float startedAt)
+            public OneShot(long id, SoundSource entry, AudioClip clip, ClipPcm pcm, float volumeScale, float startedAt)
             {
                 Id = id;
                 Entry = entry;
@@ -347,6 +350,7 @@ namespace JustReadTheInstructions
             public readonly int Id;
             public readonly bool FollowsPlayerCamera;
             private readonly Part _part;
+            private readonly List<ModuleEngines> _engines;
             private readonly bool _inInternalSpace;
             private readonly RsePlayerEffects _rse;
             private readonly AnimationCurve _rolloffCurve;
@@ -361,6 +365,7 @@ namespace JustReadTheInstructions
                 var part = source.GetComponentInParent<Part>();
                 _inInternalSpace = model != null;
                 _part = part != null ? part : _inInternalSpace ? model.part : null;
+                _engines = _part != null ? _part.FindModulesImplementing<ModuleEngines>() : null;
                 FollowsPlayerCamera = RSEIntegration.FollowsPlayerCamera(source);
                 _rse = RSEIntegration.PlayerEffectsOf(source, _part);
                 _rolloffCurve = source.rolloffMode == AudioRolloffMode.Custom ? source.GetCustomCurve(AudioSourceCurveType.CustomRolloff) : null;
@@ -390,6 +395,18 @@ namespace JustReadTheInstructions
                 => Mathf.Clamp01(_spreadCurve.Evaluate(distance / Mathf.Max(Source.maxDistance, MinRolloffDistance)) * WidthPerSpreadUnit);
 
             public Vessel Vessel => _part != null ? _part.vessel : null;
+
+            public float ThrustKn
+            {
+                get
+                {
+                    float thrust = 0f;
+                    if (_engines != null)
+                        foreach (var engine in _engines)
+                            if (engine != null) thrust += engine.finalThrust;
+                    return thrust;
+                }
+            }
 
             public bool IsInterior => _inInternalSpace || RSEIntegration.IsInterior(Source.outputAudioMixerGroup);
 

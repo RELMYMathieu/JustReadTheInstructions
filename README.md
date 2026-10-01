@@ -92,17 +92,19 @@ For live shows, point one OBS browser source at the **clean feed**, `http://loca
 
 ## Camera Sound
 
-Every camera has its own sound: the game's sounds as heard from where the camera is, mixed inside the game without changing what you hear. Turn it on with **Sound** (`M`) in the camera viewer or on the layout page. The layout page plays the spotlight tile, or the tile picked with its speaker button, and saves that choice with the layout.
+Every camera has its own sound: the game's sounds as heard from where the camera is, mixed inside the game without changing what you hear. Turn it on with **Listen** (`M`) in the camera viewer or on the layout page; it plays in that browser tab only. The layout page plays the spotlight tile, or the tile picked with its speaker button, and saves that choice with the layout.
 
 For OBS, add `&audio=1` to a viewer or clean feed URL (`http://localhost:8080/layout.html?program&audio=1`) and tick "Control audio via OBS" on the browser source. The clean feed plays the sound of the layout on air and crossfades on Take. In-game recordings always include the camera's sound.
 
-**Adjust** in the viewer sets each camera's **Mic** and **Sound gain**, for every viewer and recording:
+Each camera card on the main page has a **Mic** picker in its bottom border, so you can set every camera's mic before recording without opening a viewer. **Adjust** in the viewer sets the **Mic**, **Gain** and **Auto gain** under **Sound**, for every viewer and recording:
 
 | Mic | What it hears |
 | --- | --- |
-| Game mix (default) | What the player would hear standing where the camera is |
+| Game mix (default) | The game's sound from where the camera is, clean: no air delay, echo or hull muffling |
 | External | Sound crossing the air: it arrives late from far away, changes pitch as things fly past, gets duller, hollower (ground echo) and grittier with distance and thinner air, and stops in vacuum except for the camera's own vessel through the hull |
 | Onboard | Its own vessel through the structure and the cabin, other vessels muffled by the hull |
+
+Big engines carry further on every mic: an engine's sound reaches further the more thrust it is making (with the square root of its thrust), so a pad camera still hears a heavy launch kilometres away while small engines fade as before. A part with several engines, like a Raptor cluster, counts all of them. **Auto gain** (off by default) slowly lifts a camera whose sound has gone quiet, up to +24 dB, and never turns a loud camera down; it lifts wind and background noise too.
 
 Works with **Rocket Sound Enhancement**: its engine layers play on cameras without the player camera's Doppler, and when **Harmony** is installed (RSE requires it) its ignition, flameout and decoupler sounds are heard too. Sonic booms use RSE's sounds: when a vessel flies past Mach 1 in air, the vessel stays a faint rumble on each camera until its shock reaches that camera, then the boom hits, like on a ground camera; cameras riding on that vessel never hear their own boom. A few sounds built into KSP, such as explosions, are kept compressed by Unity and cannot be read yet; they are listed in `KSP.log` and counted on the Diagnostics page.
 

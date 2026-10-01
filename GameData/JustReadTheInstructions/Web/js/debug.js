@@ -55,7 +55,7 @@ const TILES = [
     {
         label: 'Camera sound',
         value: s => `${s.audio_cameras ?? 0}`,
-        detail: s => `cameras listened, ${s.audio_voices ?? 0} sounds, mix ${fmt(s.audio_mix_ms_avg ?? 0, 2)} ms per 20 ms`,
+        detail: s => `cameras listened, ${s.audio_voices ?? 0} sounds, main thread ${fmt(s.audio_main_ms_avg ?? 0, 2)} ms per frame (max ${fmt(s.audio_main_ms_max ?? 0, 2)}), mix ${fmt(s.audio_mix_ms_avg ?? 0, 2)} ms per 20 ms (max ${fmt(s.audio_mix_ms_max ?? 0, 1)})`,
         warn: s => s.audio_mix_ms_max > 10
             ? 'Mixing 20 ms of sound took over 10 ms: camera sound may stutter with this many cameras and sounds'
             : s.audio_skipped_sounds > 0

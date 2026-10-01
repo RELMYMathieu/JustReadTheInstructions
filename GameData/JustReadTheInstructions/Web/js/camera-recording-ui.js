@@ -93,7 +93,7 @@ export class CameraRecordingUI {
         const active = state === 'recording' || state === 'paused' || state === 'finalizing';
         if (active) this._lastBytes = bytes;
         const shown = active ? bytes : this._lastBytes;
-        this._sizeEl.textContent = shown > 0 ? (active ? formatBytes(shown) : `Last ${formatBytes(shown)}`) : '';
+        this._sizeEl.textContent = shown > 0 ? (active ? formatBytes(shown) : `Saved ${formatBytes(shown)}`) : '';
     }
 
     _startClock(startedAt) {

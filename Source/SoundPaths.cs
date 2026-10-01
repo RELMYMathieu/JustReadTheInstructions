@@ -9,6 +9,22 @@ namespace JustReadTheInstructions
         Onboard,
     }
 
+    internal readonly struct SoundSettings
+    {
+        public static readonly SoundSettings Default = new SoundSettings(CameraMic.Game, 0f, false);
+
+        public readonly CameraMic Mic;
+        public readonly float GainDb;
+        public readonly bool AutoGain;
+
+        public SoundSettings(CameraMic mic, float gainDb, bool autoGain)
+        {
+            Mic = mic;
+            GainDb = gainDb;
+            AutoGain = autoGain;
+        }
+    }
+
     internal static class CameraMics
     {
         public static string Id(CameraMic mic) => mic.ToString().ToLowerInvariant();
@@ -59,6 +75,7 @@ namespace JustReadTheInstructions
         public float SpatialBlend;
         public float GameRolloff;
         public float Distance;
+        public float ThrustKn;
         public float Pan;
         public float AirFactor;
         public float SpeedOfSound;
@@ -73,6 +90,7 @@ namespace JustReadTheInstructions
         private const float SeaLevelDensity = 1.225f;
         private const float DefaultSpeedOfSound = 343f;
         private const float ReferenceDistance = 15f;
+        private const float ReferenceThrustKn = 60f;
         private const float AbsorptionDistance = 250f;
         private const float ThinAirCutoff = 250f;
         private const float ExteriorHullGain = 0.3f;
@@ -89,6 +107,9 @@ namespace JustReadTheInstructions
         private const float FullEchoDistance = 1000f;
         private const float MaxDistortion = 0.35f;
         private const float FullDistortionDistance = 3000f;
+
+        public static float Reach(float thrustKn)
+            => thrustKn > ReferenceThrustKn ? (float)Math.Sqrt(thrustKn / ReferenceThrustKn) : 1f;
 
         public static float AirFactor(double density) => Clamp01((float)(density / SeaLevelDensity));
 
@@ -122,7 +143,7 @@ namespace JustReadTheInstructions
         }
 
         private static VoicePath Game(PathInputs s)
-            => s.Muted ? VoicePath.Silent : Panned(s.Pan, s.Volume * Lerp(1f, s.GameRolloff, s.SpatialBlend), VoicePath.OpenCutoff, 0f);
+            => s.Muted || (s.Interior && !s.SameVessel) ? VoicePath.Silent : Panned(s.Pan, s.Volume * Lerp(1f, s.GameRolloff, s.SpatialBlend), VoicePath.OpenCutoff, 0f);
 
         private static VoicePath External(PathInputs s)
         {
@@ -142,7 +163,7 @@ namespace JustReadTheInstructions
         {
             if (s.SameVessel)
             {
-                float gain = s.Volume * (s.Interior ? 1f : OnboardHullGain) * Lerp(1f, DistanceGain(s.Distance), s.SpatialBlend);
+                float gain = s.Volume * (s.Interior ? 1f : OnboardHullGain) * Lerp(1f, DistanceGain(s), s.SpatialBlend);
                 return Panned(s.Pan, gain, s.Interior ? VoicePath.OpenCutoff : OnboardHullCutoff, 0f);
             }
             if (s.Interior) return VoicePath.Silent;
@@ -162,10 +183,13 @@ namespace JustReadTheInstructions
             => distance <= ReferenceDistance ? 0f : Clamp01((float)(Math.Log(distance / ReferenceDistance) / Math.Log(fullDistance / ReferenceDistance)));
 
         private static float ThroughAir(PathInputs s, float air)
-            => s.Volume * Lerp(1f, DistanceGain(s.Distance), s.SpatialBlend) * air;
+            => s.Volume * Lerp(1f, DistanceGain(s), s.SpatialBlend) * air;
 
-        private static float DistanceGain(float distance)
-            => distance <= ReferenceDistance ? 1f : ReferenceDistance / distance;
+        private static float DistanceGain(PathInputs s)
+        {
+            float fullLevelDistance = ReferenceDistance * Reach(s.ThrustKn);
+            return s.Distance <= fullLevelDistance ? 1f : fullLevelDistance / s.Distance;
+        }
 
         private static float AirCutoff(float distance, float air)
             => Math.Min(VoicePath.OpenCutoff / (1f + distance / AbsorptionDistance), Lerp(ThinAirCutoff, VoicePath.OpenCutoff, air));

@@ -28,6 +28,12 @@ export const LAYOUT_SAVE_RETRY_MS = 3000;
 export const LOS_OVERLAY_HTML = '<img src="/images/los.png" alt="Loss of signal">';
 export const WAITING_OVERLAY_HTML = '<span class="waiting">Waiting for frames</span>';
 
+export const MICS = Object.freeze([
+    { id: 'game', label: 'Game mix', hint: "The game's sound from where this camera is, clean: no air delay, echo or hull muffling." },
+    { id: 'external', label: 'External', hint: 'Outside mic: sound crosses the air and arrives late from far away. Silent in vacuum, except its own vessel through the hull.' },
+    { id: 'onboard', label: 'Onboard', hint: 'Inside mic: its own vessel through the structure, other vessels muffled by the hull.' },
+]);
+
 export const API = Object.freeze({
     session: '/session',
     cameras: '/cameras',

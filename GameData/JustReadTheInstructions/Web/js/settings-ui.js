@@ -52,6 +52,7 @@ function render(controls) {
     renderOptions(controls.codec, availableCodecLabels(), codec);
     document.getElementById('settings-recorder-row').hidden = !isInGameRecordingAvailable();
     document.getElementById('settings-codec-row').hidden = !usesGameRecorder();
+    document.getElementById('settings-los-row').hidden = usesGameRecorder();
     document.getElementById('settings-codec-warning').hidden = !usesGameRecorder() || codec === VIDEO_CODECS.H264;
 }
 

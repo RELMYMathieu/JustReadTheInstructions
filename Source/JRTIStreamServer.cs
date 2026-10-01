@@ -115,14 +115,8 @@ namespace JustReadTheInstructions
             return _states.TryGetValue(cameraId, out var s) && s.TryTakePendingFov(out fov);
         }
 
-        internal void GetSoundSettings(int cameraId, out CameraMic mic, out float gainDb)
-        {
-            mic = CameraMic.Game;
-            gainDb = 0f;
-            if (!_states.TryGetValue(cameraId, out var s)) return;
-            mic = s.Mic;
-            gainDb = s.SoundGainDb;
-        }
+        internal SoundSettings SoundSettingsOf(int cameraId)
+            => _states.TryGetValue(cameraId, out var s) ? new SoundSettings(s.Mic, s.SoundGainDb, s.AutoGain) : SoundSettings.Default;
 
         public bool IsStreaming(int cameraId)
             => _states.TryGetValue(cameraId, out var s) && s.MjpegClientCount > 0;

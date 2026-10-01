@@ -64,6 +64,24 @@ function insertOrdered(container, el, order) {
     container.appendChild(el);
 }
 
+function syncOfflineSection() {
+    offlineSection.hidden = ![...cards.values()].some((c) => c.destroyed);
+}
+
+function forgetCard(card) {
+    cards.delete(card.id);
+    card.dispose();
+    persistKnownCameras();
+    saveOrder();
+    syncOfflineSection();
+}
+
+function addCard(card) {
+    cards.set(card.id, card);
+    card.onForget = forgetCard;
+    groups.syncCard(card);
+}
+
 function persistKnownCameras() {
     try {
         localStorage.setItem(KNOWN_CAMERAS_KEY, JSON.stringify(
@@ -85,11 +103,10 @@ function restoreKnownCameras() {
                 streamUrl: `/viewer.html?id=${id}`,
             });
             card.markDestroyed();
-            cards.set(id, card);
-            groups.syncCard(card);
+            addCard(card);
             insertOrdered(offlineContainer, card.el, savedOrder.offline);
         }
-        offlineSection.hidden = stored.length === 0;
+        syncOfflineSection();
     } catch { }
 }
 
@@ -147,19 +164,23 @@ async function sync() {
             groups.syncCard(existing);
         } else {
             const card = new CameraCard(cam);
-            cards.set(cam.id, card);
-            groups.syncCard(card);
+            addCard(card);
             insertOrdered(liveContainer, card.el, savedOrder.live);
         }
     }
 
     persistKnownCameras();
     groups.refresh();
-
-    const hasOffline = [...cards.values()].some((c) => c.destroyed);
-    offlineSection.hidden = !hasOffline;
+    syncOfflineSection();
     emptyEl.classList.toggle('visible', cameras.length === 0);
     setLinkStatus('online', cameras.length === 1 ? 'Connected · 1 camera' : `Connected · ${cameras.length} cameras`);
+}
+
+function trackStatusLineHeight() {
+    const statusline = document.querySelector('.statusline');
+    new ResizeObserver(() => {
+        document.documentElement.style.setProperty('--status-h', `${statusline.offsetHeight}px`);
+    }).observe(statusline);
 }
 
 function wireLifecycle() {
@@ -174,6 +195,7 @@ async function main() {
     mountSettingsUI();
     mountRecordingsUI();
     groups.mount(document.getElementById('groups-bar'));
+    trackStatusLineHeight();
     wireLifecycle();
     await applySession();
     loadOrder();

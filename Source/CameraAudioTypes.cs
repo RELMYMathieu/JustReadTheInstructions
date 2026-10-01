@@ -99,28 +99,30 @@ namespace JustReadTheInstructions
     {
         public readonly int CameraId;
         public readonly float Gain;
+        public readonly bool AutoGain;
 
-        public CameraMix(int cameraId, float gain)
+        public CameraMix(int cameraId, float gain, bool autoGain)
         {
             CameraId = cameraId;
             Gain = gain;
+            AutoGain = autoGain;
         }
 
-        public static CameraMix Default(int cameraId) => new CameraMix(cameraId, 1f);
+        public static CameraMix Default(int cameraId) => new CameraMix(cameraId, 1f, false);
     }
 
     internal sealed class VoiceState
     {
-        public readonly int SourceId;
+        public readonly long VoiceId;
         public readonly ClipPcm Clip;
         public readonly int TimeSamples;
         public readonly double ClipSamplesPerSecond;
         public readonly bool Loop;
         public readonly VoicePath[] Paths;
 
-        public VoiceState(int sourceId, ClipPcm clip, int timeSamples, double clipSamplesPerSecond, bool loop, VoicePath[] paths)
+        public VoiceState(long voiceId, ClipPcm clip, int timeSamples, double clipSamplesPerSecond, bool loop, VoicePath[] paths)
         {
-            SourceId = sourceId;
+            VoiceId = voiceId;
             Clip = clip;
             TimeSamples = timeSamples;
             ClipSamplesPerSecond = clipSamplesPerSecond;
@@ -208,6 +210,7 @@ namespace JustReadTheInstructions
             lock (_blocks)
             {
                 _disposed = true;
+                _blocks.Clear();
                 Monitor.PulseAll(_blocks);
             }
         }

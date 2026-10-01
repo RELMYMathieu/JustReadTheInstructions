@@ -55,10 +55,12 @@ namespace JustReadTheInstructions
 
         private float _gain = 1f;
 
-        public void Process(float[] stereo, float inputGain)
+        public void Process(float[] stereo, float fromGain, float toGain)
         {
+            float gainStep = (toGain - fromGain) * 2f / stereo.Length;
             for (int i = 0; i < stereo.Length; i += 2)
             {
+                float inputGain = fromGain + gainStep * (i / 2);
                 float left = stereo[i] * inputGain;
                 float right = stereo[i + 1] * inputGain;
                 float peak = Math.Max(Math.Abs(left), Math.Abs(right));
@@ -67,6 +69,44 @@ namespace JustReadTheInstructions
                 stereo[i] = left * _gain;
                 stereo[i + 1] = right * _gain;
             }
+        }
+    }
+
+    internal sealed class AutoGain
+    {
+        private const float MaxDb = 24f;
+        private const float TargetRms = 0.1f;
+        private const float GateRms = 0.0005f;
+        private const float RiseDbPerSecond = 4f;
+        private const float FallDbPerSecond = 20f;
+        private const float LevelSeconds = 0.5f;
+        private const float BlockSeconds = CameraAudioMixer.BlockFrames / (float)CameraAudioMixer.SampleRate;
+
+        private float _meanSquare;
+        private float _db;
+
+        public float Next(float[] stereo, float inputGain, bool enabled)
+        {
+            if (!enabled)
+            {
+                _meanSquare = 0f;
+                _db = 0f;
+                return 1f;
+            }
+
+            float sum = 0f;
+            foreach (float sample in stereo) sum += sample * sample;
+            _meanSquare += (sum / stereo.Length * inputGain * inputGain - _meanSquare) * (BlockSeconds / LevelSeconds);
+
+            float rms = (float)Math.Sqrt(_meanSquare);
+            if (rms > GateRms)
+            {
+                float wanted = Math.Max(0f, Math.Min(MaxDb, 20f * (float)Math.Log10(TargetRms / rms)));
+                _db = wanted > _db
+                    ? Math.Min(wanted, _db + RiseDbPerSecond * BlockSeconds)
+                    : Math.Max(wanted, _db - FallDbPerSecond * BlockSeconds);
+            }
+            return (float)Math.Pow(10.0, _db / 20.0);
         }
     }
 }

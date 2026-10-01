@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -20,17 +19,20 @@ namespace JustReadTheInstructions
         private const int IdleSleepMs = 50;
         private const int TickSleepMs = 5;
 
-        private readonly ConcurrentDictionary<int, ConcurrentDictionary<IAudioSink, bool>> _sinks
-            = new ConcurrentDictionary<int, ConcurrentDictionary<IAudioSink, bool>>();
-        private readonly Dictionary<int, MixVoice> _voices = new Dictionary<int, MixVoice>();
-        private readonly Dictionary<int, MixBus> _buses = new Dictionary<int, MixBus>();
-        private readonly List<int> _expiredVoices = new List<int>();
+        private static readonly Predicate<IAudioSink> IsClosed = sink => !sink.IsOpen;
 
+        private readonly Dictionary<int, List<IAudioSink>> _sinks = new Dictionary<int, List<IAudioSink>>();
+        private readonly Dictionary<long, MixVoice> _voices = new Dictionary<long, MixVoice>();
+        private readonly Dictionary<int, MixBus> _buses = new Dictionary<int, MixBus>();
+        private readonly List<long> _expiredVoices = new List<long>();
+
+        private int[] _listened = new int[0];
         private AudioSnapshot _latest;
         private AudioSnapshot _applied;
-        private long _nextFrame;
         private Thread _thread;
         private volatile bool _running;
+
+        public int[] ListenedCameraIds => Volatile.Read(ref _listened);
 
         public void Start()
         {
@@ -43,14 +45,22 @@ namespace JustReadTheInstructions
         {
             _running = false;
             _thread?.Join(1000);
-            _sinks.Clear();
+            lock (_sinks)
+            {
+                _sinks.Clear();
+                RefreshListened();
+            }
         }
 
         public void Subscribe(int cameraId, IAudioSink sink)
-            => _sinks.GetOrAdd(cameraId, _ => new ConcurrentDictionary<IAudioSink, bool>())[sink] = true;
-
-        public int[] ListenedCameraIds()
-            => _sinks.Where(kv => kv.Value.Keys.Any(sink => sink.IsOpen)).Select(kv => kv.Key).ToArray();
+        {
+            lock (_sinks)
+            {
+                if (!_sinks.TryGetValue(cameraId, out var sinks)) _sinks[cameraId] = sinks = new List<IAudioSink>();
+                sinks.Add(sink);
+                RefreshListened();
+            }
+        }
 
         public void Publish(AudioSnapshot snapshot) => Volatile.Write(ref _latest, snapshot);
 
@@ -82,7 +92,8 @@ namespace JustReadTheInstructions
             {
                 try
                 {
-                    if (ListenedCameraIds().Length == 0)
+                    DropClosedSinks();
+                    if (ListenedCameraIds.Length == 0)
                     {
                         if (!idle) Reset();
                         idle = true;
@@ -98,7 +109,7 @@ namespace JustReadTheInstructions
                     }
 
                     long due = (Stopwatch.GetTimestamp() - startTicks) * SampleRate / Stopwatch.Frequency;
-                    if (due - framesMixed > MaxLagFrames) framesMixed = due - BlockFrames;
+                    if (due - framesMixed > MaxLagFrames) framesMixed = (due / BlockFrames - 1) * BlockFrames;
                     while (framesMixed + BlockFrames <= due)
                     {
                         long mixStart = Stopwatch.GetTimestamp();
@@ -125,12 +136,23 @@ namespace JustReadTheInstructions
             _applied = null;
         }
 
+        private void DropClosedSinks()
+        {
+            lock (_sinks)
+            {
+                int dropped = 0;
+                foreach (var sinks in _sinks.Values)
+                    dropped += sinks.RemoveAll(IsClosed);
+                if (dropped > 0) RefreshListened();
+            }
+        }
+
+        private void RefreshListened()
+            => Volatile.Write(ref _listened, _sinks.Where(kv => kv.Value.Count > 0).Select(kv => kv.Key).ToArray());
+
         private void MixBlock(long blockStart, long blockTicks)
         {
-            if (blockStart != _nextFrame)
-                foreach (var voice in _voices.Values) voice.ClearHistory();
-            _nextFrame = blockStart + BlockFrames;
-
+            long blockEnd = blockStart + BlockFrames;
             ApplyLatestSnapshot();
             SyncBuses();
 
@@ -141,13 +163,13 @@ namespace JustReadTheInstructions
             foreach (var kv in _voices)
             {
                 var voice = kv.Value;
-                voice.Render(blockStart);
+                voice.Advance(blockStart);
                 foreach (var bus in _buses.Values)
                     bus.Add(kv.Key, voice, voice.PathFor(bus.CameraId), blockStart);
-                if (voice.HasExpired(_nextFrame)) _expiredVoices.Add(kv.Key);
+                if (voice.HasExpired(blockEnd)) _expiredVoices.Add(kv.Key);
             }
 
-            foreach (int id in _expiredVoices)
+            foreach (long id in _expiredVoices)
             {
                 _voices.Remove(id);
                 foreach (var bus in _buses.Values)
@@ -156,12 +178,11 @@ namespace JustReadTheInstructions
 
             foreach (var bus in _buses.Values)
             {
-                if (!_sinks.TryGetValue(bus.CameraId, out var sinks)) continue;
                 var block = new AudioBlock(bus.Finish(), blockTicks);
-                foreach (var sink in sinks.Keys)
+                lock (_sinks)
                 {
-                    if (sink.IsOpen) sink.Push(block);
-                    else sinks.TryRemove(sink, out _);
+                    if (!_sinks.TryGetValue(bus.CameraId, out var sinks)) continue;
+                    foreach (var sink in sinks) sink.Push(block);
                 }
             }
         }
@@ -179,15 +200,15 @@ namespace JustReadTheInstructions
 
             foreach (var state in snapshot.Voices)
             {
-                if (!_voices.TryGetValue(state.SourceId, out var voice) || voice.Clip != state.Clip)
-                    _voices[state.SourceId] = voice = new MixVoice(state.Clip, _nextFrame - BlockFrames);
+                if (!_voices.TryGetValue(state.VoiceId, out var voice) || voice.Clip != state.Clip)
+                    _voices[state.VoiceId] = voice = new MixVoice(state.Clip);
                 voice.Sync(state, snapshot.CameraIds, elapsedSeconds);
             }
         }
 
         private void SyncBuses()
         {
-            var listened = ListenedCameraIds();
+            var listened = ListenedCameraIds;
             foreach (int id in listened)
                 if (!_buses.ContainsKey(id)) _buses[id] = new MixBus(id);
 
@@ -221,28 +242,33 @@ namespace JustReadTheInstructions
         private sealed class MixVoice
         {
             private const double ResyncSeconds = 0.1;
-            private const int InitialHistoryFrames = 4096;
+            private const int HistoryBlocks = 512;
+            private const int HistoryMask = HistoryBlocks - 1;
+            private const double BlocksPerFrame = 1.0 / BlockFrames;
+
+            private struct Segment
+            {
+                public long Block;
+                public double Cursor;
+                public double Step;
+                public float From;
+                public float To;
+            }
 
             public readonly ClipPcm Clip;
+            private readonly Segment[] _history = new Segment[HistoryBlocks];
             private double _cursor;
             private double _step;
             private bool _loop;
             private bool _synced;
             private bool _ending;
-            private bool _clipDone;
             private float _level;
-            private long _written;
             private long _silentFrom = -1;
             private double _maxDelayFrames;
             private int[] _cameraIds = new int[0];
             private VoicePath[] _paths = new VoicePath[0];
-            private float[] _history = new float[InitialHistoryFrames];
 
-            public MixVoice(ClipPcm clip, long startFrame)
-            {
-                Clip = clip;
-                _written = startFrame;
-            }
+            public MixVoice(ClipPcm clip) => Clip = clip;
 
             public void MarkEnding() => _ending = true;
 
@@ -258,7 +284,6 @@ namespace JustReadTheInstructions
                 _maxDelayFrames = 0;
                 foreach (var path in _paths)
                     _maxDelayFrames = Math.Max(_maxDelayFrames, DelayFrames(path) + EchoFrames(path));
-                EnsureHistory((int)_maxDelayFrames + 2 * BlockFrames + 2);
 
                 SyncCursor(state, elapsedSeconds);
             }
@@ -271,36 +296,48 @@ namespace JustReadTheInstructions
 
             public bool HasExpired(long now) => _silentFrom >= 0 && now - _silentFrom > _maxDelayFrames + BlockFrames;
 
-            public void ClearHistory() => Array.Clear(_history, 0, _history.Length);
+            public void Advance(long blockStart)
+            {
+                long block = blockStart / BlockFrames;
+                int length = Clip.Samples.Length;
+                bool clipDone = !_loop && _cursor >= length;
+                float to = _ending || clipDone ? 0f : 1f;
+
+                _history[block & HistoryMask] = new Segment { Block = block, Cursor = _cursor, Step = _step, From = _level, To = to };
+                if (_level == 0f && to == 0f && _silentFrom < 0) _silentFrom = blockStart;
+
+                _level = to;
+                _cursor += _step * BlockFrames;
+                if (_loop && length > 0 && _cursor >= length) _cursor %= length;
+            }
 
             public float Read(double frame)
             {
-                long index = (long)Math.Floor(frame);
-                float fraction = (float)(frame - index);
-                int mask = _history.Length - 1;
-                float a = _history[index & mask];
-                return fraction == 0f ? a : a + (_history[(index + 1) & mask] - a) * fraction;
+                if (frame < 0) return 0f;
+                double blocks = frame * BlocksPerFrame;
+                long block = (long)blocks;
+                ref var segment = ref _history[block & HistoryMask];
+                if (segment.Block != block) return 0f;
+
+                float progress = (float)(blocks - block);
+                float level = segment.From + (segment.To - segment.From) * progress;
+                return level == 0f ? 0f : SampleAt(segment.Cursor + progress * BlockFrames * segment.Step) * level;
             }
 
-            public void Render(long blockStart)
+            private float SampleAt(double cursor)
             {
-                int mask = _history.Length - 1;
-                float from = _level;
-                float to = _ending || _clipDone ? 0f : 1f;
+                var samples = Clip.Samples;
+                int length = samples.Length;
+                if (cursor >= length)
+                {
+                    if (!_loop || length == 0) return 0f;
+                    do cursor -= length; while (cursor >= length);
+                }
 
-                if (from == 0f && to == 0f)
-                {
-                    for (int i = 0; i < BlockFrames; i++) _history[(blockStart + i) & mask] = 0f;
-                    if (_silentFrom < 0) _silentFrom = blockStart;
-                }
-                else
-                {
-                    float step = 1f / BlockFrames;
-                    for (int i = 0; i < BlockFrames; i++)
-                        _history[(blockStart + i) & mask] = NextSample() * (from + (to - from) * i * step);
-                    _level = to;
-                }
-                _written = blockStart + BlockFrames;
+                int index = (int)cursor;
+                int next = index + 1 < length ? index + 1 : _loop ? 0 : index;
+                float fraction = (float)(cursor - index);
+                return (samples[index] + (samples[next] - samples[index]) * fraction) * ClipPcm.SampleScale;
             }
 
             private void SyncCursor(VoiceState state, double elapsedSeconds)
@@ -316,48 +353,8 @@ namespace JustReadTheInstructions
                     else if (drift < -length / 2.0) drift += length;
                 }
 
-                if (!_synced || Math.Abs(drift) > ResyncSeconds * Clip.Frequency)
-                {
-                    _cursor = expected;
-                    _clipDone = false;
-                }
+                if (!_synced || Math.Abs(drift) > ResyncSeconds * Clip.Frequency) _cursor = expected;
                 _synced = true;
-            }
-
-            private float NextSample()
-            {
-                var samples = Clip.Samples;
-                int length = samples.Length;
-                if (_clipDone) return 0f;
-                if (_cursor >= length)
-                {
-                    if (!_loop || length == 0)
-                    {
-                        _clipDone = true;
-                        return 0f;
-                    }
-                    _cursor %= length;
-                }
-
-                int index = (int)_cursor;
-                int next = index + 1 < length ? index + 1 : _loop ? 0 : index;
-                float fraction = (float)(_cursor - index);
-                _cursor += _step;
-                return (samples[index] + (samples[next] - samples[index]) * fraction) * ClipPcm.SampleScale;
-            }
-
-            private void EnsureHistory(int frames)
-            {
-                if (frames <= _history.Length) return;
-
-                int size = _history.Length;
-                while (size < frames) size <<= 1;
-                var grown = new float[size];
-                int oldMask = _history.Length - 1;
-                int newMask = size - 1;
-                for (long frame = _written - _history.Length; frame < _written; frame++)
-                    grown[frame & newMask] = _history[frame & oldMask];
-                _history = grown;
             }
         }
 
@@ -441,9 +438,11 @@ namespace JustReadTheInstructions
         {
             public readonly int CameraId;
             private readonly float[] _mix = new float[BlockFrames * Channels];
-            private readonly Dictionary<int, PathState> _paths = new Dictionary<int, PathState>();
+            private readonly Dictionary<long, PathState> _paths = new Dictionary<long, PathState>();
+            private readonly AutoGain _autoGain = new AutoGain();
             private readonly Limiter _limiter = new Limiter();
             private CameraMix _settings;
+            private float _gain = 1f;
 
             public MixBus(int cameraId)
             {
@@ -457,9 +456,9 @@ namespace JustReadTheInstructions
                 Array.Clear(_mix, 0, _mix.Length);
             }
 
-            public void Forget(int voiceId) => _paths.Remove(voiceId);
+            public void Forget(long voiceId) => _paths.Remove(voiceId);
 
-            public void Add(int voiceId, MixVoice voice, VoicePath target, long blockStart)
+            public void Add(long voiceId, MixVoice voice, VoicePath target, long blockStart)
             {
                 if (!_paths.TryGetValue(voiceId, out var path))
                     _paths[voiceId] = path = new PathState(target);
@@ -468,7 +467,9 @@ namespace JustReadTheInstructions
 
             public byte[] Finish()
             {
-                _limiter.Process(_mix, _settings.Gain);
+                float gain = _settings.Gain * _autoGain.Next(_mix, _settings.Gain, _settings.AutoGain);
+                _limiter.Process(_mix, _gain, gain);
+                _gain = gain;
 
                 var pcm = new byte[_mix.Length * BytesPerSample];
                 for (int i = 0; i < _mix.Length; i++)

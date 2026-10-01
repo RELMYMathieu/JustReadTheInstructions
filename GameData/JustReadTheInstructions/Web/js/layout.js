@@ -38,7 +38,7 @@ const SHORTCUTS = [
     ['G', 'Fill the window edge to edge'],
     ['N', 'Camera names: when idle, on, off'],
     ['L', 'Columns: auto, 1, 2, 3, 4'],
-    ['M', 'Sound on or off: you hear the spotlight, or the tile picked with its speaker button'],
+    ['M', 'Listen in this tab: you hear the spotlight, or the tile picked with its speaker button'],
     ['F', 'Fullscreen'],
     ['Ctrl Z', 'Undo the last change'],
     ['?', 'This list'],

@@ -73,6 +73,7 @@ namespace JustReadTheInstructions
             Global("audio_cameras", s => s.Audio.Cameras),
             Global("audio_voices", s => s.Audio.Voices),
             Global("audio_main_ms_avg", s => s.Audio.MainMs.Average),
+            Global("audio_main_ms_max", s => s.Audio.MainMs.Max),
             Global("audio_mix_ms_avg", s => s.Audio.MixMs.Average),
             Global("audio_mix_ms_max", s => s.Audio.MixMs.Max),
             Global("audio_skipped_sounds", s => s.Audio.SkippedSounds),

@@ -69,7 +69,7 @@ namespace JustReadTheInstructions
                 int id = kv.Key;
                 string name = kv.Value.DisplayName ?? id.ToString();
                 sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,\"viewerCount\":{kv.Value.MjpegClientCount},")
-                  .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\",")
+                  .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\",\"mic\":\"{CameraMics.Id(kv.Value.Mic)}\",")
                   .Append($"\"recording\":{RecordingJson(kv.Value)}}}");
                 first = false;
             }
@@ -276,6 +276,8 @@ namespace JustReadTheInstructions
                     state.Mic = parsedMic;
                 if (TryParseJsonFloat(body, "soundGain", out var soundGain))
                     state.SoundGainDb = UnityEngine.Mathf.Clamp(soundGain, -24f, 24f);
+                if (TryParseJsonBool(body, "autoGain", out var autoGain))
+                    state.AutoGain = autoGain;
 
                 ctx.Response.StatusCode = 200;
                 ctx.Response.Close();
@@ -288,7 +290,8 @@ namespace JustReadTheInstructions
             sb.Append($"\"contrast\":{state.Contrast.ToString("F2", ic)},");
             sb.Append($"\"gamma\":{state.Gamma.ToString("F2", ic)},");
             sb.Append($"\"mic\":\"{CameraMics.Id(state.Mic)}\",");
-            sb.Append($"\"soundGain\":{state.SoundGainDb.ToString("F1", ic)}");
+            sb.Append($"\"soundGain\":{state.SoundGainDb.ToString("F1", ic)},");
+            sb.Append($"\"autoGain\":{(state.AutoGain ? "true" : "false")}");
 
             if (state.HasFov)
             {
@@ -301,14 +304,21 @@ namespace JustReadTheInstructions
             ServeText(ctx, sb.ToString(), "application/json");
         }
 
+        private static int JsonValueStart(string json, string key)
+        {
+            var pattern = $"\"{key}\"";
+            int idx = json.IndexOf(pattern, StringComparison.Ordinal);
+            if (idx < 0) return -1;
+            idx += pattern.Length;
+            while (idx < json.Length && (json[idx] == ' ' || json[idx] == ':')) idx++;
+            return idx;
+        }
+
         private static bool TryParseJsonFloat(string json, string key, out float value)
         {
             value = 0f;
-            var pattern = $"\"{key}\"";
-            int idx = json.IndexOf(pattern, StringComparison.Ordinal);
+            int idx = JsonValueStart(json, key);
             if (idx < 0) return false;
-            idx += pattern.Length;
-            while (idx < json.Length && (json[idx] == ' ' || json[idx] == ':')) idx++;
             int start = idx;
             while (idx < json.Length && (json[idx] == '-' || json[idx] == '.' || char.IsDigit(json[idx]))) idx++;
             return float.TryParse(
@@ -321,16 +331,21 @@ namespace JustReadTheInstructions
         private static bool TryParseJsonString(string json, string key, out string value)
         {
             value = null;
-            var pattern = $"\"{key}\"";
-            int idx = json.IndexOf(pattern, StringComparison.Ordinal);
-            if (idx < 0) return false;
-            idx += pattern.Length;
-            while (idx < json.Length && (json[idx] == ' ' || json[idx] == ':')) idx++;
-            if (idx >= json.Length || json[idx] != '"') return false;
+            int idx = JsonValueStart(json, key);
+            if (idx < 0 || idx >= json.Length || json[idx] != '"') return false;
             int end = json.IndexOf('"', idx + 1);
             if (end < 0) return false;
             value = json.Substring(idx + 1, end - idx - 1);
             return true;
+        }
+
+        private static bool TryParseJsonBool(string json, string key, out bool value)
+        {
+            value = false;
+            int idx = JsonValueStart(json, key);
+            if (idx < 0) return false;
+            value = string.CompareOrdinal(json, idx, "true", 0, 4) == 0;
+            return value || string.CompareOrdinal(json, idx, "false", 0, 5) == 0;
         }
 
         private static void ServeText(HttpListenerContext ctx, string text, string contentType)
