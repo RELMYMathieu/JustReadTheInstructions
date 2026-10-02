@@ -24,6 +24,8 @@ namespace JustReadTheInstructions
 
         public IAudioEncoder Audio => _hasAudio ? this : null;
 
+        public bool WritesFragments { get; private set; } = true;
+
         private bool GpuConvertsColor => _deviceManager != IntPtr.Zero;
 
         public MediaFoundationEncoder(string path, int width, int height, int fps)
@@ -47,9 +49,10 @@ namespace JustReadTheInstructions
                     _writer = CreateWriter(path, width, height, fps, withAudio: false);
                     sound = $"no sound ({ex.Message})";
                 }
-                Description = GpuConvertsColor
-                    ? $"Windows Media Foundation, GPU color conversion, {sound}"
-                    : $"Windows Media Foundation, {sound}";
+                Description = "Windows Media Foundation"
+                    + (GpuConvertsColor ? ", GPU color conversion" : "")
+                    + (WritesFragments ? "" : ", plain MP4")
+                    + $", {sound}";
             }
             catch
             {
@@ -136,7 +139,14 @@ namespace JustReadTheInstructions
                 MediaFoundation.SetGuid(attributes, MediaFoundation.ContainerType, MediaFoundation.ContainerFragmentedMpeg4);
                 if (_deviceManager != IntPtr.Zero)
                     MediaFoundation.SetUnknown(attributes, MediaFoundation.SinkWriterDeviceManager, _deviceManager);
-                writer = MediaFoundation.CreateSinkWriter(path, attributes);
+                if (MediaFoundation.TryCreateSinkWriter(path, attributes, out writer) < 0)
+                {
+                    // Wine/Proton's Media Foundation has no fragmented MP4 sink and rejects it with E_INVALIDARG
+                    // TODO: We should find a proper solution for this, but for now I would raher fallback to CPU encoded MP4 rather than nothing at all.
+                    MediaFoundation.SetGuid(attributes, MediaFoundation.ContainerType, MediaFoundation.ContainerMpeg4);
+                    writer = MediaFoundation.CreateSinkWriter(path, attributes);
+                    WritesFragments = false;
+                }
 
                 uint bitrate = VideoEncoders.Bitrate(width, height, fps);
                 outputType = MediaFoundation.CreateVideoType(MediaFoundation.VideoFormatH264, width, height, fps);

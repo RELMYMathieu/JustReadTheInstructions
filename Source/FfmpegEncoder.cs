@@ -26,6 +26,8 @@ namespace JustReadTheInstructions
 
         public string Description { get; }
 
+        public bool WritesFragments => true;
+
         public IAudioEncoder Audio => _audio;
 
         public FfmpegEncoder(string executable, string arguments, string description, int frameBytes, int maxQueuedFrames, FfmpegAudioInput audio)

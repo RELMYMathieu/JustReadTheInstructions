@@ -220,8 +220,15 @@ namespace JustReadTheInstructions
 
         public static IntPtr CreateSinkWriter(string path, IntPtr attributes)
         {
-            Check(MFCreateSinkWriterFromURL(path, IntPtr.Zero, attributes, out var writer), "MFCreateSinkWriterFromURL");
+            Check(TryCreateSinkWriter(path, attributes, out var writer), "MFCreateSinkWriterFromURL");
             return writer;
+        }
+
+        public static int TryCreateSinkWriter(string path, IntPtr attributes, out IntPtr writer)
+        {
+            int hresult = MFCreateSinkWriterFromURL(path, IntPtr.Zero, attributes, out writer);
+            if (hresult < 0) writer = IntPtr.Zero;
+            return hresult;
         }
 
         public static uint AddStream(IntPtr writer, IntPtr outputType)
