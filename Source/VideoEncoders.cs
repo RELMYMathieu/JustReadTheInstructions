@@ -6,6 +6,7 @@ namespace JustReadTheInstructions
     internal interface IVideoEncoder : IDisposable
     {
         string Description { get; }
+        bool WritesFragments { get; }
         object CopyFrame(byte[] bottomUpRgba);
         void Encode(object frame, long frameIndex);
         void ReleaseFrame(object frame);

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Fixed
+
+- In-game recording no longer fails to start when playing KSP through Proton/Wine on Linux (`MFCreateSinkWriterFromURL failed with 0x80070057`). JRTI now falls back to a plain MP4 when the fragmented MP4 writer is not available. TO NOTE: This fix is for Liunx as a temporary fallback as I figure out a better solution for the fragmented MP4 writer on Linux. The fallback is not ideal, as it will not use hardware encoding and will not be fragmented, but at minimum I want to get in-game recording to work under Linux/Proton.
+
+
 ## v2.5.1 - 2026-10-01
 
 ### Fixed

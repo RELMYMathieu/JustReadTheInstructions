@@ -19,6 +19,8 @@ namespace JustReadTheInstructions
 
         public string Description { get; }
 
+        public bool WritesFragments => true;
+
         public FfmpegEncoder(string executable, string arguments, string description, int frameBytes)
         {
             Description = description;
