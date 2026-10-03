@@ -218,14 +218,7 @@ Encoders are tried in the Linux order above, so AMD and Intel cards use VA-API a
 
 **About AV1:** JRTI gives AV1 the same bitrate as H.264, so files are about the same size but keep more detail. Recent VLC, mpv and web browsers play AV1, and Windows needs Microsoft's *AV1 Video Extension* to preview it. Check that your editor imports AV1 before recording anything important with it.
 
-### Legacy browser recorder
-
-Used when in-game recording is unavailable, or when **Record with** is set to *This browser*. The browser picks the first format it supports, and the **Video codec** setting does not apply:
-
-* **Chrome, Edge and other Chromium browsers:** H.264 MP4 → VP9 WebM → VP8 WebM
-* **Firefox:** VP9 WebM → VP8 WebM
-
-This recorder is deprecated and will be removed in v3.0.0.
+If the game cannot record (no encoder found), Record stays off and JRTI's settings window in KSP (Ctrl+Alt+F8) says why. The browser recorder from earlier versions is gone.
 
 ## Known Issues
 

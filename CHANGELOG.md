@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Camera viewer - Adjust is split into Picture and Sound and says first that changes reach every viewer and recording, Auto gain is an Off/On choice with its effect written under it, and Cameras moved next to the camera name at the bottom
 - Offline cameras - Record stays off until the camera is back, and More has Forget this camera to take it off the page
 - Stopping a recording on a camera card says it was saved, with Show to open Recordings, and the card keeps its size as "Saved 1.1 MB"
-- Settings say they are kept in this browser, and "On signal loss while recording" only shows for the browser recorder, the only one it changes
+- Settings say they are kept in this browser
 
 ### Fixed
 
@@ -49,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pressed viewer buttons (Listen, Adjust) no longer turn blank when hovered or tapped
 - Camera names on the main page use the whole top border, so they are no longer cut short on phones
 - Menus can be moved through with the arrow keys
+
+
+### Removed
+
+- Browser recorder - recordings are made in the game only. When the game cannot record, Record stays off and says why instead of recording in the browser, and "Record with", "On signal loss while recording" and the in-game recording toggle are gone. The upload endpoints (`/recordings/<session>/<action>`) and the MP4/WebM fixers went with it
 
 
 ## v2.5.1 - 2026-10-01
