@@ -183,20 +183,11 @@ function trackStatusLineHeight() {
     }).observe(statusline);
 }
 
-function wireLifecycle() {
-    const finalize = () => {
-        for (const card of cards.values()) card.emergencyFinalize();
-    };
-    window.addEventListener('pagehide', finalize);
-    window.addEventListener('beforeunload', finalize);
-}
-
 async function main() {
     mountSettingsUI();
     mountRecordingsUI();
     groups.mount(document.getElementById('groups-bar'));
     trackStatusLineHeight();
-    wireLifecycle();
     await applySession();
     loadOrder();
     restoreKnownCameras();

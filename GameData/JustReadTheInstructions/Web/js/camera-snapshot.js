@@ -1,7 +1,6 @@
 import {
     SNAPSHOT_REFRESH_MS,
     LOS_DELAY_MS,
-    RECORDER_LOS_DELAY_MS,
     LOS_OVERLAY_HTML,
     WAITING_OVERLAY_HTML,
 } from './config.js';
@@ -24,7 +23,6 @@ export class CameraSnapshot {
         this._timer = null;
         this._jitterTimer = null;
         this._offlineSince = 0;
-        this._losSignaled = false;
         this._online = false;
     }
 
@@ -47,12 +45,10 @@ export class CameraSnapshot {
 
     markOnline() {
         this._offlineSince = 0;
-        this._losSignaled = false;
         if (this._online) return;
         this._online = true;
         this._cardEl.classList.remove('offline');
         this._setOverlay(WAITING_OVERLAY_HTML);
-        this._getRecorder()?.handleSignalRestored();
     }
 
     markOffline() {
@@ -60,10 +56,6 @@ export class CameraSnapshot {
         if (!this._offlineSince) this._offlineSince = Date.now();
         this._cardEl.classList.add('offline');
         if (Date.now() - this._offlineSince >= LOS_DELAY_MS) this._setOverlay(LOS_OVERLAY_HTML);
-        if (!this._losSignaled && Date.now() - this._offlineSince >= RECORDER_LOS_DELAY_MS) {
-            this._losSignaled = true;
-            this._getRecorder()?.handleSignalLost();
-        }
     }
 
     showLost() {

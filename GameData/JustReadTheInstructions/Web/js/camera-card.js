@@ -1,8 +1,7 @@
 import { SNAPSHOT_REFRESH_MS, WAITING_OVERLAY_HTML, API, MICS } from './config.js';
 import { checkStatus, setCameraSettings } from './api.js';
-import { CameraRecorder, isRecordingSupported } from './stream-recorder.js';
 import { GameRecorder } from './game-recorder.js';
-import { usesGameRecorder, isInGameRecordingAvailable } from './recorder-settings.js';
+import { isInGameRecordingAvailable } from './recorder-settings.js';
 import { CameraSnapshot } from './camera-snapshot.js';
 import { CameraRecordingUI } from './camera-recording-ui.js';
 import { StreamHub } from './stream-hub.js';
@@ -45,7 +44,6 @@ export class CameraCard {
 
         this._recordingUI = new CameraRecordingUI(this.el, {
             getRecorder: () => this.recorder,
-            getSnapshotImg: () => this._getSnapshotImg(),
             onIdle: () => {
                 this._stopLivenessPolling();
                 this._renderViewerState();
@@ -99,10 +97,6 @@ export class CameraCard {
         this.el.remove();
     }
 
-    emergencyFinalize() {
-        this.recorder?.emergencyFinalize();
-    }
-
     revive(cam) {
         this.destroyed = false;
         this.el.classList.remove('destroyed');
@@ -114,7 +108,7 @@ export class CameraCard {
 
     markDestroyed() {
         this.destroyed = true;
-        if (this.recorder?.inGame) this.recorder.sync(null);
+        this.recorder?.sync(null);
         this._stopLivePreview();
         this._snapshot.stop();
         this._viewerCount = 0;
@@ -257,15 +251,11 @@ export class CameraCard {
         if (this.recorder?.isActive || this.recorder?.state === 'finalizing') return;
         const recBtn = this.el.querySelector('[data-role="record"]');
         const reason = this.destroyed ? 'This camera is offline'
-            : !this._canRecord() ? 'Recording is not available: in-game recording is off and this browser cannot record'
+            : !isInGameRecordingAvailable() ? "The game cannot record right now: JRTI's settings window in KSP (Ctrl+Alt+F8) says why"
             : null;
         recBtn.disabled = reason !== null;
         if (reason) recBtn.title = reason;
         else recBtn.removeAttribute('title');
-    }
-
-    _canRecord() {
-        return isInGameRecordingAvailable() || isRecordingSupported();
     }
 
     _getSnapshotImg() {
@@ -294,14 +284,8 @@ export class CameraCard {
                 this.recorder = null;
                 old.abandon();
             }
-            const preferGame = usesGameRecorder() || !isRecordingSupported();
-            if (preferGame && await this._tryStartGameRecording()) return;
-            if (!isRecordingSupported()) {
+            if (!await this._tryStartGameRecording())
                 toast(`Could not start recording ${this.name} in the game. Is KSP still in a flight?`);
-                return;
-            }
-            if (preferGame) toast(`The game could not record ${this.name}, so this browser records it: keep this tab open`);
-            this._startBrowserRecording();
         } finally {
             this._startingRecording = false;
         }
@@ -319,7 +303,7 @@ export class CameraCard {
         try {
             await recorder.start();
         } catch (err) {
-            console.warn('[JRTI] in-game recording unavailable, recording in the browser instead', err);
+            console.warn('[JRTI] in-game recording could not start', err);
             return false;
         }
         this.recorder = recorder;
@@ -331,32 +315,14 @@ export class CameraCard {
 
     _syncGameRecording(info) {
         if (this.recorder?.isActive) {
-            if (this.recorder.inGame) this.recorder.sync(info);
+            this.recorder.sync(info);
             return;
         }
         if (!info || this.recorder?.state === 'finalizing') return;
-        if (this.recorder?.inGame && this.recorder.filename === info.file) return;
+        if (this.recorder?.filename === info.file) return;
         this.recorder = this._createGameRecorder();
         this.recorder.adopt(info);
         this._updateLivePreview();
-        this._startLivenessPolling();
-    }
-
-    _startBrowserRecording() {
-        this._stopLivePreview();
-
-        const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
-        this.recorder = new CameraRecorder({
-            cameraId: this.id,
-            cameraName: this.name,
-            streamUrl: API.stream(this.id),
-            isLocal,
-            onStateChange: (s) => this._onRecordingState(s),
-            onCanvasReady: (canvas) => this._recordingUI.mountCanvas(canvas),
-        });
-
-        this.recorder.start();
         this._startLivenessPolling();
     }
 
@@ -391,9 +357,7 @@ export class CameraCard {
     }
 
     _updateLivePreview() {
-        const active = this.recorder?.isActive;
-        const browserRecording = active && !this.recorder.inGame;
-        if (!this.destroyed && !browserRecording && (this._viewerCount > 0 || active)) this._startLivePreview();
+        if (!this.destroyed && (this._viewerCount > 0 || this.recorder?.isActive)) this._startLivePreview();
         else this._stopLivePreview();
     }
 

@@ -548,8 +548,7 @@ kbd {
     opacity: 0.1;
 }
 
-.live-preview-feed,
-.rec-live-preview {
+.live-preview-feed {
     position: absolute;
     inset: 0;
     display: block;

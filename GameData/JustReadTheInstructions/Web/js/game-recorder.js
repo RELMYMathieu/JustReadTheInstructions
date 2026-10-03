@@ -5,7 +5,6 @@ export class GameRecorder {
     constructor({ cameraId, onStateChange }) {
         this.cameraId = cameraId;
         this.onStateChange = onStateChange || (() => { });
-        this.inGame = true;
 
         this.state = 'idle';
         this.bytesUploaded = 0;
@@ -59,12 +58,6 @@ export class GameRecorder {
         if (this.state !== 'paused') return;
         await this._send('resume');
     }
-
-    handleSignalLost() { }
-
-    handleSignalRestored() { }
-
-    emergencyFinalize() { }
 
     abandon() {
         this.onStateChange = () => { };
