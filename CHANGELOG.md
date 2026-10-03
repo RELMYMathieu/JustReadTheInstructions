@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- AV1 recordings on Windows - with ffmpeg on the PATH or in `PluginData/ffmpeg/`, the AV1 codec choice records through ffmpeg (graphics card if it encodes AV1, else the CPU). H.264 still uses Windows' own encoder, and falls back to ffmpeg where Media Foundation is missing
 - Record groups (Group on a camera card) - pick G1 to G4 or no group from a menu that shows how many cameras each group holds, instead of clicking through them. The group buttons at the bottom of the page say how many cameras they start or stop
 - Camera card menu (More) - every entry says what it opens or copies. Open viewer is gone, Watch does the same
 - Recordings panel - each recording shows its camera and time first, with the file name below
@@ -39,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- In-game recording works when playing KSP through Proton on Linux - JRTI records through a Linux build of ffmpeg placed in `PluginData/ffmpeg/`, on the graphics card (VA-API, NVENC or Vulkan) like native Linux, instead of failing with `MFCreateSinkWriterFromURL failed`. See the README
 - TUFX no longer blurs camera feeds - its effects run once on the finished image instead of up to four times, and motion blur stays off on JRTI cameras
 - The camera viewer's buttons no longer run off the left edge on phones
 - The main page's tabs and status line no longer hide buttons off screen on phones

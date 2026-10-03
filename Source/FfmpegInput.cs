@@ -6,37 +6,38 @@ using System.Threading;
 
 namespace JustReadTheInstructions
 {
-    internal sealed class FfmpegAudioInput : IAudioEncoder, IDisposable
+    internal sealed class FfmpegInput : IDisposable
     {
         private readonly TcpListener _listener;
-        private readonly BlockingCollection<byte[]> _blocks = new BlockingCollection<byte[]>();
+        private readonly BlockingCollection<byte[]> _blocks;
+        private readonly Action<byte[]> _sent;
         private readonly Thread _thread;
+        private volatile TcpClient _client;
 
         public string Url { get; }
 
-        public FfmpegAudioInput()
+        public FfmpegInput(string name, int maxQueuedBlocks, Action<byte[]> sent)
         {
+            _blocks = maxQueuedBlocks > 0 ? new BlockingCollection<byte[]>(maxQueuedBlocks) : new BlockingCollection<byte[]>();
+            _sent = sent;
             _listener = new TcpListener(IPAddress.Loopback, 0);
             _listener.Start(1);
             Url = $"tcp://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}";
-            _thread = new Thread(Run) { IsBackground = true, Name = "JRTI-FfmpegAudio" };
+            _thread = new Thread(Run) { IsBackground = true, Name = name };
             _thread.Start();
         }
 
-        public void EncodeAudio(byte[] pcm, int offset, int frames, long firstFrame)
-        {
-            var copy = new byte[frames * CameraAudioMixer.BytesPerFrame];
-            Buffer.BlockCopy(pcm, offset, copy, 0, copy.Length);
-            try { _blocks.Add(copy); }
-            catch (InvalidOperationException) { }
-        }
+        public void Add(byte[] block) => _blocks.Add(block);
 
         public void Complete() => _blocks.CompleteAdding();
+
+        public bool WaitUntilSent(int milliseconds) => _thread.Join(milliseconds);
 
         public void Dispose()
         {
             _blocks.CompleteAdding();
             _listener.Stop();
+            _client?.Close();
         }
 
         private void Run()
@@ -46,8 +47,12 @@ namespace JustReadTheInstructions
                 using (var client = _listener.AcceptTcpClient())
                 using (var stream = client.GetStream())
                 {
+                    _client = client;
                     foreach (var block in _blocks.GetConsumingEnumerable())
+                    {
                         stream.Write(block, 0, block.Length);
+                        _sent?.Invoke(block);
+                    }
                 }
             }
             catch (Exception) { }

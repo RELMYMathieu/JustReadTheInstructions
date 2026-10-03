@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
@@ -10,13 +9,17 @@ namespace JustReadTheInstructions
     {
         private const int ProbeTimeoutMs = 10_000;
         private const string RenderNodeFolder = "/dev/dri";
+        private static readonly string ExecutableName = Environment.OSVersion.Platform == PlatformID.Win32NT && !Wine.IsRunning ? "ffmpeg.exe" : "ffmpeg";
+        private static readonly string ProvidedFolder = Path.GetFullPath(KSPUtil.ApplicationRootPath + "GameData/JustReadTheInstructions/PluginData/ffmpeg");
         private static readonly string[] ExtraSearchFolders = { "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin", "/snap/bin" };
 
         private const int ProbeWidth = 256;
         private const int ProbeHeight = 144;
         private const int ProbeFps = 30;
+        private const string StartCheckArguments = "-hide_banner -loglevel error -nostdin -f lavfi -i nullsrc=s=16x16 -frames:v 1 -f null -";
         private const string RawInputOptions = "-probesize 32 -analyzeduration 0 -thread_queue_size 64";
         private const string Bt709Tags = "-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv";
+        private const string VulkanDevice = "-init_hw_device vulkan=vk -filter_hw_device vk";
 
         internal sealed class Encoder
         {
@@ -56,17 +59,9 @@ namespace JustReadTheInstructions
         {
             var encoder = Selected(codec);
             if (encoder == null) throw new InvalidOperationException($"ffmpeg has no working {codec} encoder");
-            var audio = new FfmpegAudioInput();
-            try
-            {
-                return new FfmpegEncoder(_executable, EncodeArguments(encoder, path, width, height, fps, audio.Url),
-                    $"{encoder.Name} (ffmpeg), with sound", width * height * 4, fps, audio);
-            }
-            catch
-            {
-                audio.Dispose();
-                throw;
-            }
+            return new FfmpegEncoder(_executable,
+                (videoUrl, audioUrl) => EncodeArguments(encoder, path, width, height, fps, videoUrl, audioUrl),
+                $"{encoder.Name} (ffmpeg), with sound", width * height * 4, fps);
         }
 
         private static void Probe()
@@ -76,7 +71,15 @@ namespace JustReadTheInstructions
                 _executable = FindExecutable();
                 if (_executable == null)
                 {
-                    _status = "ffmpeg not found: install ffmpeg to record in game (the browser records until then)";
+                    _status = Wine.IsRunning
+                        ? "Proton detected: put a Linux build of ffmpeg in GameData/JustReadTheInstructions/PluginData/ffmpeg/ to record in game (see the README; the browser records until then)"
+                        : "ffmpeg not found: install ffmpeg to record in game (the browser records until then)";
+                    return;
+                }
+
+                if (!Succeeds(StartCheckArguments, out string errors))
+                {
+                    _status = $"ffmpeg did not start ({_executable}): {errors}";
                     return;
                 }
 
@@ -99,7 +102,7 @@ namespace JustReadTheInstructions
         private static Encoder FirstWorking(VideoCodec codec)
         {
             foreach (var encoder in Candidates())
-                if (encoder.Codec == codec && Works(encoder)) return encoder;
+                if (encoder.Codec == codec && Succeeds(ProbeArguments(encoder), out _)) return encoder;
             return null;
         }
 
@@ -116,17 +119,21 @@ namespace JustReadTheInstructions
             var nodes = RenderNodes();
 
             yield return new Encoder(VideoCodec.H264, "h264_nvenc", "", Bt709("nv12"), "-c:v h264_nvenc -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_amf", "", Bt709("nv12"), "-c:v h264_amf -rc vbr_peak -profile:v high");
             foreach (var node in nodes)
                 yield return new Encoder(VideoCodec.H264, "h264_vaapi", $"-vaapi_device {node}", Bt709("nv12") + ",hwupload", "-c:v h264_vaapi -profile:v high");
             yield return new Encoder(VideoCodec.H264, "h264_videotoolbox", "", Bt709("nv12"), "-c:v h264_videotoolbox -profile:v high");
             yield return new Encoder(VideoCodec.H264, "h264_qsv", "", Bt709("nv12"), "-c:v h264_qsv -profile:v high");
+            yield return new Encoder(VideoCodec.H264, "h264_vulkan", VulkanDevice, Bt709("nv12") + ",hwupload", "-c:v h264_vulkan");
             yield return new Encoder(VideoCodec.H264, "libx264", "", Bt709("yuv420p"), "-c:v libx264 -preset veryfast -profile:v high");
             yield return new Encoder(VideoCodec.H264, "libopenh264", "", Bt709("yuv420p"), "-c:v libopenh264");
 
             yield return new Encoder(VideoCodec.AV1, "av1_nvenc", "", Bt709("nv12"), "-c:v av1_nvenc");
+            yield return new Encoder(VideoCodec.AV1, "av1_amf", "", Bt709("nv12"), "-c:v av1_amf -rc vbr_peak");
             foreach (var node in nodes)
                 yield return new Encoder(VideoCodec.AV1, "av1_vaapi", $"-vaapi_device {node}", Bt709("nv12") + ",hwupload", "-c:v av1_vaapi");
             yield return new Encoder(VideoCodec.AV1, "av1_qsv", "", Bt709("nv12"), "-c:v av1_qsv");
+            yield return new Encoder(VideoCodec.AV1, "av1_vulkan", VulkanDevice, Bt709("nv12") + ",hwupload", "-c:v av1_vulkan");
             yield return new Encoder(VideoCodec.AV1, "libsvtav1", "", Bt709("yuv420p"), "-c:v libsvtav1 -preset 10", capsBitrate: false);
         }
 
@@ -135,68 +142,60 @@ namespace JustReadTheInstructions
 
         private static IEnumerable<string> RenderNodes()
         {
-            if (!Directory.Exists(RenderNodeFolder)) return new string[0];
-            var nodes = new List<string>(Directory.GetFiles(RenderNodeFolder, "renderD*"));
+            string folder = Wine.IsRunning ? Wine.WindowsPath(RenderNodeFolder) : RenderNodeFolder;
+            if (folder == null || !Directory.Exists(folder)) return new string[0];
+            var nodes = new List<string>();
+            foreach (var node in Directory.GetFiles(folder, "renderD*"))
+                nodes.Add(RenderNodeFolder + "/" + Path.GetFileName(node));
             nodes.Sort(StringComparer.Ordinal);
             return nodes;
         }
 
-        private static string EncodeArguments(Encoder encoder, string path, int width, int height, int fps, string audioUrl)
+        private static string EncodeArguments(Encoder encoder, string path, int width, int height, int fps, string videoUrl, string audioUrl)
             => Arguments(encoder,
-                         $"{RawInputOptions} -f rawvideo -pix_fmt rgba -video_size {width}x{height} -framerate {fps} -i pipe:0 " +
+                         $"{RawInputOptions} -f rawvideo -pix_fmt rgba -video_size {width}x{height} -framerate {fps} -i {videoUrl} " +
                          $"{RawInputOptions} -f s16le -ar {CameraAudioMixer.SampleRate} -ac {CameraAudioMixer.Channels} -i {audioUrl}",
                          width, height, fps,
                          $"-map 0:v -map 1:a -c:a aac -b:a {VideoEncoders.AudioBitsPerSecond} " +
-                         $"-movflags +frag_keyframe+empty_moov+default_base_moof -f mp4 -y \"{path}\"");
+                         $"-movflags +frag_keyframe+empty_moov+default_base_moof -f mp4 -y \"{PathForFfmpeg(path)}\"");
 
         private static string ProbeArguments(Encoder encoder)
             => Arguments(encoder, $"-f lavfi -i color=c=gray:s={ProbeWidth}x{ProbeHeight}:r={ProbeFps},format=rgba -frames:v 3", ProbeWidth, ProbeHeight, ProbeFps,
                          "-f null -");
 
         private static string Arguments(Encoder encoder, string input, int width, int height, int fps, string output)
-            => $"-hide_banner -loglevel error -nostats {encoder.DeviceArguments} {input} " +
+            => $"-hide_banner -loglevel error -nostats -nostdin {encoder.DeviceArguments} {input} " +
                $"-vf {encoder.Filter} {encoder.EncoderArguments} {Bt709Tags} {RateArguments(encoder, VideoEncoders.Bitrate(width, height, fps))} " +
                $"-g {fps * VideoEncoders.GopSeconds} {output}";
 
         private static string RateArguments(Encoder encoder, uint bitrate)
             => encoder.CapsBitrate ? $"-b:v {bitrate} -maxrate {bitrate * 3 / 2} -bufsize {bitrate * 2}" : $"-b:v {bitrate}";
 
-        private static bool Works(Encoder encoder)
+        private static string PathForFfmpeg(string path) => Wine.IsRunning ? Wine.UnixPath(path) : path;
+
+        private static bool Succeeds(string arguments, out string errors)
         {
             try
             {
-                using (var process = Start(_executable, ProbeArguments(encoder), redirectInput: false))
+                using (var process = FfmpegProcess.Start(_executable, arguments, null))
                 {
-                    process.BeginErrorReadLine();
-                    if (process.WaitForExit(ProbeTimeoutMs)) return process.ExitCode == 0;
-                    process.Kill();
-                    return false;
+                    bool succeeded = process.WaitForExit(ProbeTimeoutMs) && process.ExitCode == 0;
+                    errors = succeeded ? "" : process.ErrorTail;
+                    return succeeded;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                errors = ex.Message;
                 return false;
             }
         }
 
-        internal static Process Start(string executable, string arguments, bool redirectInput)
-        {
-            var info = new ProcessStartInfo(executable, arguments)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = redirectInput,
-                RedirectStandardError = true,
-            };
-            var process = new Process { StartInfo = info };
-            process.ErrorDataReceived += (sender, e) => { };
-            process.Start();
-            return process;
-        }
-
         private static string FindExecutable()
         {
-            string name = Environment.OSVersion.Platform == PlatformID.Win32NT ? "ffmpeg.exe" : "ffmpeg";
+            var provided = FindIn(ProvidedFolder);
+            if (provided != null || Wine.IsRunning) return provided;
+
             var folders = new List<string>((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator));
             folders.AddRange(ExtraSearchFolders);
 
@@ -205,12 +204,22 @@ namespace JustReadTheInstructions
                 if (string.IsNullOrWhiteSpace(folder)) continue;
                 try
                 {
-                    var candidate = Path.Combine(folder.Trim().Trim('"'), name);
+                    var candidate = Path.Combine(folder.Trim().Trim('"'), ExecutableName);
                     if (File.Exists(candidate)) return candidate;
                 }
                 catch (ArgumentException) { }
             }
             return null;
+        }
+
+        private static string FindIn(string folder)
+        {
+            if (!Directory.Exists(folder)) return null;
+            var found = new List<string>();
+            foreach (var file in Directory.GetFiles(folder, "*", SearchOption.AllDirectories))
+                if (string.Equals(Path.GetFileName(file), ExecutableName, StringComparison.OrdinalIgnoreCase)) found.Add(file);
+            found.Sort(StringComparer.Ordinal);
+            return found.Count > 0 ? found[0] : null;
         }
     }
 }

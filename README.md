@@ -185,10 +185,10 @@ Every recording is an MP4 at the camera's render resolution, at a constant frame
 
 | Codec | Windows | Linux | macOS |
 | --- | --- | --- | --- |
-| **H.264** (default) | Media Foundation: graphics card, or Windows' own software encoder | `h264_nvenc` → `h264_vaapi` → `h264_qsv` → `libx264` → `libopenh264` | `h264_videotoolbox` → `libx264` → `libopenh264` |
-| **AV1** | Not available yet | `av1_nvenc` → `av1_vaapi` → `av1_qsv` → `libsvtav1` | `libsvtav1` (Apple chips have no AV1 encoder) |
+| **H.264** (default) | Media Foundation: graphics card, or Windows' own software encoder | `h264_nvenc` → `h264_vaapi` → `h264_qsv` → `h264_vulkan` → `libx264` → `libopenh264` | `h264_videotoolbox` → `libx264` → `libopenh264` |
+| **AV1** | With ffmpeg: `av1_nvenc` → `av1_amf` → `av1_qsv` → `av1_vulkan` → `libsvtav1` | `av1_nvenc` → `av1_vaapi` → `av1_qsv` → `av1_vulkan` → `libsvtav1` | `libsvtav1` (Apple chips have no AV1 encoder) |
 
-Linux and macOS record through [ffmpeg](https://ffmpeg.org/), which must be installed (for example `sudo apt install ffmpeg` or `brew install ffmpeg`). To see which encoders your ffmpeg build has:
+Linux and macOS record through [ffmpeg](https://ffmpeg.org/), which must be installed (for example `sudo apt install ffmpeg` or `brew install ffmpeg`), or placed in `GameData/JustReadTheInstructions/PluginData/ffmpeg/`, which JRTI checks first. On Windows, H.264 needs nothing extra; AV1 needs `ffmpeg.exe`, for example from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) or [BtbN](https://github.com/BtbN/FFmpeg-Builds/releases), on your `PATH` or in the same `PluginData/ffmpeg/` folder. JRTI then also uses it for H.264 if Media Foundation is missing (Windows N editions). To see which encoders your ffmpeg build has:
 
 ```bash
 ffmpeg -hide_banner -encoders | grep -E "264|av1"
@@ -197,10 +197,24 @@ ffmpeg -hide_banner -encoders | grep -E "264|av1"
 | Encoder | Runs on |
 | --- | --- |
 | `*_nvenc` | NVIDIA graphics cards. AV1 needs an RTX 40 series or newer |
+| `*_amf` | AMD graphics cards on Windows. AV1 needs an RX 7000 series or newer |
 | `*_vaapi` | AMD and Intel graphics cards through Mesa or Intel's media driver. AV1 needs an AMD RX 7000 series, Intel Arc, Intel Core Ultra or newer |
 | `*_qsv` | Intel graphics. AV1 needs Intel Arc, Intel Core Ultra or newer |
 | `h264_videotoolbox` | Macs |
+| `*_vulkan` | Graphics cards through Vulkan, when the encoders above are unavailable |
 | `libx264`, `libopenh264`, `libsvtav1` | The CPU. Slower, and can drop frames at high resolutions while KSP is running |
+
+**Fedora:** its stock graphics drivers leave out H.264 hardware encoding, so H.264 falls back to the CPU unless you install RPM Fusion's drivers (`mesa-va-drivers-freeworld`). AV1 still uses the graphics card.
+
+### KSP through Proton (Linux)
+
+Windows' encoder does not exist under Proton, so JRTI records the way native Linux does, through a Linux build of ffmpeg. Proton runs games inside Steam's container, which cannot run the ffmpeg from your package manager, so use a static build:
+
+1. Download `ffmpeg-...-linux64-gpl-....tar.xz` from [BtbN's FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases).
+2. Extract it into `GameData/JustReadTheInstructions/PluginData/ffmpeg/` (the whole folder or just the `ffmpeg` file).
+3. Start KSP. JRTI's in-game settings window lists the encoders it found, for example `av1_vaapi, h264_vaapi (ffmpeg)`.
+
+Encoders are tried in the Linux order above, so AMD and Intel cards use VA-API and NVIDIA cards use NVENC.
 
 **About AV1:** JRTI gives AV1 the same bitrate as H.264, so files are about the same size but keep more detail. Recent VLC, mpv and web browsers play AV1, and Windows needs Microsoft's *AV1 Video Extension* to preview it. Check that your editor imports AV1 before recording anything important with it.
 
