@@ -202,7 +202,7 @@ function sample() {
         jrti_ms_avg: 2.1 + Math.random(), jrti_ms_max: 5 + Math.random() * 3, gc_per_s: 0.2, gc_frame_ms_max: 31, heap_mb: 1840 + Math.random() * 20,
         pool_busy: 3, pool_min: 12, pool_io_busy: 1, stream_clients: cams.reduce((s, c) => s + c.streamClients, 0),
         preview_clients: cams.reduce((s, c) => s + c.previewClients, 0), recordings: cams.filter((c) => c.recording).length,
-        recording_kbps: 0, spread: 1, max_fps: FPS, camera_count: cams.length,
+        spread: 1, max_fps: FPS, camera_count: cams.length,
         audio_cameras: cams.filter((c) => c.audioClients > 0).length, audio_voices: 14, audio_main_ms_avg: 0.12 + Math.random() * 0.05, audio_main_ms_max: 0.3 + Math.random() * 0.2,
         audio_mix_ms_avg: 0.6 + Math.random() * 0.2, audio_mix_ms_max: 1.5 + Math.random(), audio_skipped_sounds: 0,
         cameras: cams.map((c) => ({

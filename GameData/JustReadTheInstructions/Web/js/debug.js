@@ -50,7 +50,7 @@ const TILES = [
     {
         label: 'Recordings',
         value: s => `${s.recordings}`,
-        detail: s => `${fmt(s.recording_kbps, 0)} KB/s received`,
+        detail: () => 'in game',
     },
     {
         label: 'Camera sound',

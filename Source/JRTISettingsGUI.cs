@@ -26,7 +26,6 @@ namespace JustReadTheInstructions
         private string _renderHeight;
         private string _antiAliasing;
         private bool _spreadCaptures;
-        private bool _inGameRecording;
         private bool _enableStreamServer;
         private string _streamPort;
 
@@ -276,12 +275,11 @@ namespace JustReadTheInstructions
             DrawToggle(ref _spreadCaptures, "Spread camera renders across frames (recommended)");
             GUILayout.Label("Cameras take turns instead of all rendering on the same frame, for smoother frame times. Each camera keeps its own frame rate.", _descriptionStyle);
             GUILayout.Space(6);
-            DrawToggle(ref _inGameRecording, "Record in game with the graphics card's video encoder  (recommended)");
-            GUILayout.Label("Recordings are saved as H.264 MP4 at the render resolution, encoded by the graphics card. Windows uses its built-in encoder, plus ffmpeg for AV1 if found; Linux and macOS use ffmpeg if it is installed, and KSP through Proton uses a Linux ffmpeg placed in PluginData/ffmpeg. Turn off to use the legacy browser recorder (removed in v3.0.0).", _descriptionStyle);
+            GUILayout.Label("In-game recording", _labelStyle);
+            GUILayout.Label("Recordings are saved as H.264 MP4 at the render resolution, encoded by the graphics card. Windows uses its built-in encoder, plus ffmpeg for AV1 if found; Linux and macOS use ffmpeg if it is installed, and KSP through Proton uses a Linux ffmpeg placed in PluginData/ffmpeg.", _descriptionStyle);
             VideoEncoders.Prepare();
-            if (_inGameRecording)
-                GUILayout.Label(VideoEncoders.IsAvailable ? VideoEncoders.Status : "⚠ " + VideoEncoders.Status,
-                    VideoEncoders.IsAvailable ? _descriptionStyle : _warningStyle);
+            GUILayout.Label(VideoEncoders.IsAvailable ? VideoEncoders.Status : "⚠ " + VideoEncoders.Status,
+                VideoEncoders.IsAvailable ? _descriptionStyle : _warningStyle);
             GUILayout.Space(6);
             DrawToggle(ref _enableDockingOverlay, "Render overlay with telemetry on docking cameras");
             GUILayout.Space(2);
@@ -487,7 +485,6 @@ namespace JustReadTheInstructions
             if (int.TryParse(_renderHeight, out int h)) JRTISettings.RenderHeight = h;
             if (int.TryParse(_antiAliasing, out int aa)) JRTISettings.AntiAliasing = aa;
             JRTISettings.SpreadCaptures = _spreadCaptures;
-            JRTISettings.InGameRecording = _inGameRecording;
             JRTISettings.EnableStreamServer = _enableStreamServer;
             JRTISettings.EnableDockingOverlay = _enableDockingOverlay;
             JRTISettings.FixedPreviewAspectRatio = _fixedPreviewAspectRatio;
@@ -508,7 +505,6 @@ namespace JustReadTheInstructions
             _renderHeight = JRTISettings.RenderHeight.ToString();
             _antiAliasing = JRTISettings.AntiAliasing.ToString();
             _spreadCaptures = JRTISettings.SpreadCaptures;
-            _inGameRecording = JRTISettings.InGameRecording;
             _enableStreamServer = JRTISettings.EnableStreamServer;
             _enableDockingOverlay = JRTISettings.EnableDockingOverlay;
             _fixedPreviewAspectRatio = JRTISettings.FixedPreviewAspectRatio;

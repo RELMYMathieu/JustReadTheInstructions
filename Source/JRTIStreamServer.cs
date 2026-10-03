@@ -19,20 +19,10 @@ namespace JustReadTheInstructions
 
         private HttpListener _listener;
         private Thread _listenerThread;
-        private Thread _watchdogThread;
         private volatile bool _running;
-
-        private static readonly TimeSpan RecordingIdleTimeout = TimeSpan.FromSeconds(30);
-        private static readonly TimeSpan WatchdogInterval = TimeSpan.FromSeconds(5);
 
         private readonly ConcurrentDictionary<int, CameraStreamState> _states
             = new ConcurrentDictionary<int, CameraStreamState>();
-        private readonly ConcurrentDictionary<string, RecordingSession> _recordings
-            = new ConcurrentDictionary<string, RecordingSession>();
-        private readonly ConcurrentDictionary<string, DateTime> _finalizedSessions
-            = new ConcurrentDictionary<string, DateTime>();
-
-        private static readonly TimeSpan FinalizedRetention = TimeSpan.FromSeconds(60);
 
         private const int PortCheckTimeoutMs = 3000;
         private const string SteamPortHint = "(Steam's web inspector often takes 8080)";
@@ -45,13 +35,11 @@ namespace JustReadTheInstructions
         private bool _boundToAllInterfaces;
         private string[] _lanUrls;
 
-        private static long _recordedBytesTotal;
-        internal static long RecordedBytesTotal => Interlocked.Read(ref _recordedBytesTotal);
         internal int RecordingCount
         {
             get
             {
-                int count = _recordings.Count;
+                int count = 0;
                 foreach (var state in _states.Values)
                     if (state.Recorder != null) count++;
                 return count;
@@ -84,7 +72,6 @@ namespace JustReadTheInstructions
         void OnDestroy()
         {
             StopServer();
-            FinalizeAllRecordings();
             if (Instance == this) Instance = null;
         }
 
@@ -268,8 +255,6 @@ namespace JustReadTheInstructions
             _running = true;
             _listenerThread = new Thread(ListenLoop) { IsBackground = true, Name = "JRTI-StreamServer" };
             _listenerThread.Start();
-            _watchdogThread = new Thread(WatchdogLoop) { IsBackground = true, Name = "JRTI-RecordingWatchdog" };
-            _watchdogThread.Start();
 
             Debug.Log($"[JRTI-Stream]: Web UI at http://localhost:{JRTISettings.StreamPort}/");
         }
@@ -342,77 +327,9 @@ namespace JustReadTheInstructions
             CloseEventClients();
             try { _listener?.Stop(); } catch { }
             _listenerThread?.Join(2000);
-            _watchdogThread?.Join(2000);
             foreach (var state in _states.Values)
                 state.Dispose();
             _states.Clear();
-        }
-
-        private void WatchdogLoop()
-        {
-            while (_running)
-            {
-                try
-                {
-                    Thread.Sleep(WatchdogInterval);
-                    if (!_running) break;
-
-                    PruneFinalizedSessions();
-
-                    var cutoff = DateTime.UtcNow - RecordingIdleTimeout;
-                    foreach (var kv in _recordings)
-                    {
-                        if (kv.Value.LastActivityUtc >= cutoff) continue;
-
-                        _finalizedSessions[kv.Key] = DateTime.UtcNow;
-                        if (_recordings.TryRemove(kv.Key, out var session))
-                        {
-                            try
-                            {
-                                session.Dispose();
-                                if (session.BytesWritten == 0)
-                                {
-                                    try { File.Delete(session.DisplayPath); } catch { }
-                                    Debug.Log($"[JRTI-Stream]: Recording auto-finalized (idle, deleted empty): {session.DisplayPath}");
-                                }
-                                else
-                                {
-                                    if (session.DisplayPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
-                                        FixMp4(session.DisplayPath);
-                                    else if (session.DisplayPath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
-                                        FixWebm(session.DisplayPath);
-                                    Debug.Log($"[JRTI-Stream]: Recording auto-finalized (idle): {session.DisplayPath} ({session.BytesWritten} bytes)");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.LogError($"[JRTI-Stream]: Watchdog finalize error: {ex.Message}");
-                            }
-                        }
-                    }
-                }
-                catch (ThreadInterruptedException) { break; }
-                catch (Exception ex) { if (_running) Debug.LogError($"[JRTI-Stream]: Watchdog error: {ex.Message}"); }
-            }
-        }
-
-        private void PruneFinalizedSessions()
-        {
-            var staleCutoff = DateTime.UtcNow - FinalizedRetention;
-            foreach (var kv in _finalizedSessions)
-            {
-                if (kv.Value < staleCutoff)
-                    _finalizedSessions.TryRemove(kv.Key, out _);
-            }
-        }
-
-        private void FinalizeAllRecordings()
-        {
-            foreach (var kv in _recordings)
-            {
-                try { kv.Value.Dispose(); } catch { }
-            }
-            _recordings.Clear();
         }
 
         private void ListenLoop()
@@ -479,7 +396,7 @@ namespace JustReadTheInstructions
                 if (trimmed == "/program" || trimmed.StartsWith("/program/")) { HandleProgram(ctx, trimmed); return; }
                 if (trimmed == "/layouts" || trimmed.StartsWith("/layouts/")) { HandleLayouts(ctx, trimmed); return; }
                 if (trimmed == "/recordings") { ServeRecordingList(ctx); return; }
-                if (trimmed.StartsWith("/recordings/")) { HandleRecordingEndpoint(ctx, trimmed); return; }
+                if (trimmed.StartsWith("/recordings/")) { ServeRecordingFile(ctx, trimmed.Substring("/recordings/".Length)); return; }
                 if (trimmed.StartsWith("/camera/")) { ServeCameraEndpoint(ctx, trimmed); return; }
 
                 var relative = trimmed.TrimStart('/');
