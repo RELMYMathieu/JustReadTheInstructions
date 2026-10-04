@@ -118,7 +118,7 @@ namespace JustReadTheInstructions
         {
             bool finished = WriteRecording();
             if (_discard || _framesWritten == 0) DeleteFile();
-            else if (finished && _encoder.WritesFragments) MakeSeekable();
+            else if (finished) MakeSeekable();
         }
 
         private bool WriteRecording()
