@@ -50,7 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Camera names on the main page use the whole top border, so they are no longer cut short on phones
 - Menus can be moved through with the arrow keys
 
-
 ### Removed
 
 - Browser recorder - recordings are made in the game only. When the game cannot record, Record stays off and says why instead of recording in the browser, and "Record with", "On signal loss while recording" and the in-game recording toggle are gone. The upload endpoints (`/recordings/<session>/<action>`) and the MP4/WebM fixers went with it
