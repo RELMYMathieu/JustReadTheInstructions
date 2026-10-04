@@ -1,17 +1,18 @@
-import { SNAPSHOT_REFRESH_MS, WAITING_OVERLAY_HTML, API } from './config.js';
-import { checkStatus } from './api.js';
-import { CameraRecorder, isRecordingSupported } from './stream-recorder.js';
+import { SNAPSHOT_REFRESH_MS, WAITING_OVERLAY_HTML, API, MICS } from './config.js';
+import { checkStatus, setCameraSettings } from './api.js';
 import { GameRecorder } from './game-recorder.js';
-import { usesGameRecorder, isInGameRecordingAvailable } from './recorder-settings.js';
+import { isInGameRecordingAvailable } from './recorder-settings.js';
 import { CameraSnapshot } from './camera-snapshot.js';
 import { CameraRecordingUI } from './camera-recording-ui.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
 import { h, icon, button } from './dom.js';
-import { Menu, menuItem, menuSeparator, copyWithToast } from './ui.js';
+import { Menu, menuItem, menuNote, menuSeparator, copyWithToast, toast } from './ui.js';
 import { getSession, lanUrl } from './session.js';
+import { showRecordings } from './recordings-ui.js';
 
 const previewHub = new StreamHub({ preview: true });
+const MIC_SETTLE_MS = 1000;
 
 export class CameraCard {
     constructor(cam) {
@@ -20,8 +21,9 @@ export class CameraCard {
         this.streamUrl = cam.streamUrl;
         this.snapshotBaseUrl = cam.snapshotUrl;
         this.streaming = cam.streaming;
-        this.onCycleGroup = null;
+        this.groupItems = null;
         this.onRecordingChange = null;
+        this.onForget = null;
 
         this.livenessTimer = null;
         this.recorder = null;
@@ -29,6 +31,9 @@ export class CameraCard {
         this._viewerCount = 0;
         this._livePreview = null;
         this._startingRecording = false;
+        this._recState = 'idle';
+        this._mic = null;
+        this._micHeldUntil = 0;
 
         this.el = this._buildDom();
 
@@ -39,7 +44,6 @@ export class CameraCard {
 
         this._recordingUI = new CameraRecordingUI(this.el, {
             getRecorder: () => this.recorder,
-            getSnapshotImg: () => this._getSnapshotImg(),
             onIdle: () => {
                 this._stopLivenessPolling();
                 this._renderViewerState();
@@ -49,10 +53,12 @@ export class CameraCard {
         });
 
         this._snapshot.start();
+        this._syncRecordButton();
 
         this._viewerCount = cam.viewerCount ?? 0;
         this._onViewerCountChange();
         this._syncGameRecording(cam.recording);
+        this._syncMic(cam.mic);
     }
 
     get key() {
@@ -74,6 +80,7 @@ export class CameraCard {
             this._onViewerCountChange();
         }
         this._syncGameRecording(cam.recording);
+        this._syncMic(cam.mic);
     }
 
     dispose() {
@@ -81,15 +88,13 @@ export class CameraCard {
         this._stopLivePreview();
         this._recordingUI.dispose();
         this._moreMenu.dispose();
+        this._groupMenu.dispose();
+        this._micMenu.dispose();
         this._stopLivenessPolling();
         const img = this._getSnapshotImg();
         if (img?.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
         this.recorder?.stop();
         this.el.remove();
-    }
-
-    emergencyFinalize() {
-        this.recorder?.emergencyFinalize();
     }
 
     revive(cam) {
@@ -98,17 +103,19 @@ export class CameraCard {
         this.update(cam);
         this._renderViewerState();
         this._snapshot.start();
+        this._syncRecordButton();
     }
 
     markDestroyed() {
         this.destroyed = true;
-        if (this.recorder?.inGame) this.recorder.sync(null);
+        this.recorder?.sync(null);
         this._stopLivePreview();
         this._snapshot.stop();
         this._viewerCount = 0;
         this.el.classList.add('destroyed');
         this._renderViewerState();
         this._snapshot.showLost();
+        this._syncRecordButton();
     }
 
     setGroup(label) {
@@ -135,15 +142,11 @@ export class CameraCard {
             href: this.streamUrl,
             target: '_blank',
             rel: 'noopener',
-            title: 'Open this camera full screen in a new tab',
+            title: 'Open this camera in a new tab, with its controls',
             dataset: { role: 'watch' },
         }, h('span', { class: 'btn-text' }, 'Watch'));
 
         const recBtn = button({ label: 'Record', className: 'btn btn-rec', role: 'record', onClick: () => this._toggleRecording() });
-        if (!this._canRecord()) {
-            recBtn.disabled = true;
-            recBtn.title = 'Recording is not available: in-game recording is off and this browser cannot record';
-        }
 
         const pauseBtn = button({ label: 'Pause', role: 'pause', onClick: () => this._togglePause() });
         pauseBtn.hidden = true;
@@ -151,48 +154,108 @@ export class CameraCard {
         this._groupBtn = button({
             label: 'Group',
             className: 'btn btn-quiet group-assign-btn',
-            title: 'Assign a record group (G1 to G4). The group buttons in the status line start and stop a whole group at once.',
-            onClick: () => this.onCycleGroup?.(this),
+            title: 'Record group: cameras in a group start and stop recording together',
         });
+        this._groupMenu = new Menu(this._groupBtn, () => this.groupItems?.() ?? []);
 
-        const moreBtn = button({ label: 'More', className: 'btn btn-quiet', title: 'Links and copy options' });
+        const moreBtn = button({ label: 'More', className: 'btn btn-quiet', title: 'Layout, links for OBS and other options' });
         this._moreMenu = new Menu(moreBtn, () => this._moreItems());
 
+        this._micValue = h('span', { class: 'pane-mic-value' });
+        this._micEl = h('button', { type: 'button', class: 'pane-mic', title: 'What this camera hears, in every viewer and recording', hidden: true },
+            h('span', { class: 'pane-mic-key' }, 'Mic'), this._micValue, icon('chevron'));
+        this._micMenu = new Menu(this._micEl, () => this._micItems(), { align: 'start' });
+
         return h('article', { class: 'camera-card offline', dataset: { id: this.id, key: this.name } },
-            h('div', { class: 'pane-title' }, h('span', { class: 'camera-id' }, String(this.id)), this._nameEl),
-            h('div', { class: 'pane-state' }, h('span', { class: 'lamp' }), this._stateEl),
+            h('div', { class: 'pane-head' },
+                h('div', { class: 'pane-title' }, h('span', { class: 'camera-id' }, String(this.id)), this._nameEl),
+                h('div', { class: 'pane-state' }, h('span', { class: 'lamp' }), this._stateEl)),
             preview,
             h('div', { class: 'camera-actions' },
                 watchBtn, recBtn, pauseBtn,
                 h('div', { class: 'actions-end' }, this._groupBtn, moreBtn)),
+            this._micEl,
             h('div', { class: 'pane-foot', dataset: { role: 'rec-size' } }));
     }
 
-    _moreItems() {
-        const items = [
-            menuItem({ label: 'Open viewer', href: this.streamUrl, target: '_blank' }),
-            menuItem({ label: 'Open in a layout', href: `/layout.html?cams=${this.id}`, target: '_blank' }),
-            menuSeparator(),
-            menuItem({ label: 'Copy viewer link', onSelect: () => copyWithToast(location.origin + this.streamUrl) }),
-            menuItem({ label: 'Copy stream URL (OBS, VLC)', onSelect: () => copyWithToast(location.origin + API.stream(this.id), 'Stream URL') }),
+    _syncMic(mic) {
+        this._micEl.hidden = typeof mic !== 'string';
+        if (!this._micEl.hidden && performance.now() >= this._micHeldUntil) this._showMic(mic);
+    }
+
+    _showMic(mic) {
+        this._mic = mic;
+        this._micValue.textContent = MICS.find((m) => m.id === mic)?.label ?? mic;
+    }
+
+    _micItems() {
+        return [
+            menuNote('What this camera hears, for everyone listening and in its recordings.'),
+            ...MICS.map((mic) => menuItem({
+                label: mic.label,
+                description: mic.hint,
+                checked: mic.id === this._mic,
+                onSelect: () => this._setMic(mic.id),
+            })),
         ];
-        const lanItem = menuItem({ label: 'Copy stream URL for other devices', onSelect: async () => {
-            const url = lanUrl(await getSession(), API.stream(this.id));
-            if (url) copyWithToast(url, 'Network stream URL');
-        } });
+    }
+
+    async _setMic(mic) {
+        this._micHeldUntil = Infinity;
+        this._showMic(mic);
+        try {
+            await setCameraSettings(this.id, { mic });
+        } catch {
+            toast(`Could not change the mic of ${this.name}`);
+        }
+        this._micHeldUntil = performance.now() + MIC_SETTLE_MS;
+    }
+
+    _moreItems() {
+        const streamUrl = API.stream(this.id);
+        const lanItem = menuItem({
+            label: 'Copy network stream URL',
+            description: 'The same video, at the address other devices on your network can open',
+            onSelect: async () => {
+                const url = lanUrl(await getSession(), streamUrl);
+                if (url) copyWithToast(url, 'Network stream URL');
+            },
+        });
         lanItem.hidden = true;
         getSession().then((session) => { lanItem.hidden = !lanUrl(session, '/'); });
-        items.push(lanItem);
-        return items;
+
+        return [
+            menuItem({ label: 'Open in a layout', description: 'A new layout tab with this camera, to put others next to it', href: `/layout.html?cams=${this.id}`, target: '_blank' }),
+            menuSeparator(),
+            menuItem({ label: 'Copy viewer link', description: 'This camera\'s page with its controls, what Watch opens', onSelect: () => copyWithToast(location.origin + this.streamUrl) }),
+            menuItem({ label: 'Copy stream URL', description: 'The video alone, for an OBS media source or VLC', onSelect: () => copyWithToast(location.origin + streamUrl, 'Stream URL') }),
+            lanItem,
+            ...(this.destroyed ? [
+                menuSeparator(),
+                menuItem({ label: 'Forget this camera', description: 'Take it off this page. It comes back if it streams again', onSelect: () => this.onForget?.(this) }),
+            ] : []),
+        ];
     }
 
     _onRecordingState(state) {
+        if (this._recState === 'finalizing' && state.state === 'idle') {
+            toast('Recording saved on the KSP computer', { label: 'Show', onAction: showRecordings });
+        }
+        this._recState = state.state;
         this._recordingUI.onStateChange(state);
+        this._syncRecordButton();
         this.onRecordingChange?.(this);
     }
 
-    _canRecord() {
-        return isInGameRecordingAvailable() || isRecordingSupported();
+    _syncRecordButton() {
+        if (this.recorder?.isActive || this.recorder?.state === 'finalizing') return;
+        const recBtn = this.el.querySelector('[data-role="record"]');
+        const reason = this.destroyed ? 'This camera is offline'
+            : !isInGameRecordingAvailable() ? "The game cannot record right now: JRTI's settings window in KSP (Ctrl+Alt+F8) says why"
+            : null;
+        recBtn.disabled = reason !== null;
+        if (reason) recBtn.title = reason;
+        else recBtn.removeAttribute('title');
     }
 
     _getSnapshotImg() {
@@ -213,7 +276,7 @@ export class CameraCard {
     }
 
     async _startRecording() {
-        if (this._startingRecording) return;
+        if (this._startingRecording || this.destroyed) return;
         this._startingRecording = true;
         try {
             if (this.recorder && this.recorder.state !== 'idle') {
@@ -221,9 +284,8 @@ export class CameraCard {
                 this.recorder = null;
                 old.abandon();
             }
-            const preferGame = usesGameRecorder() || !isRecordingSupported();
-            if (preferGame && await this._tryStartGameRecording()) return;
-            if (isRecordingSupported()) this._startBrowserRecording();
+            if (!await this._tryStartGameRecording())
+                toast(`Could not start recording ${this.name} in the game. Is KSP still in a flight?`);
         } finally {
             this._startingRecording = false;
         }
@@ -241,7 +303,7 @@ export class CameraCard {
         try {
             await recorder.start();
         } catch (err) {
-            console.warn('[JRTI] in-game recording unavailable, recording in the browser instead', err);
+            console.warn('[JRTI] in-game recording could not start', err);
             return false;
         }
         this.recorder = recorder;
@@ -253,32 +315,14 @@ export class CameraCard {
 
     _syncGameRecording(info) {
         if (this.recorder?.isActive) {
-            if (this.recorder.inGame) this.recorder.sync(info);
+            this.recorder.sync(info);
             return;
         }
         if (!info || this.recorder?.state === 'finalizing') return;
-        if (this.recorder?.inGame && this.recorder.filename === info.file) return;
+        if (this.recorder?.filename === info.file) return;
         this.recorder = this._createGameRecorder();
         this.recorder.adopt(info);
         this._updateLivePreview();
-        this._startLivenessPolling();
-    }
-
-    _startBrowserRecording() {
-        this._stopLivePreview();
-
-        const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
-        this.recorder = new CameraRecorder({
-            cameraId: this.id,
-            cameraName: this.name,
-            streamUrl: API.stream(this.id),
-            isLocal,
-            onStateChange: (s) => this._onRecordingState(s),
-            onCanvasReady: (canvas) => this._recordingUI.mountCanvas(canvas),
-        });
-
-        this.recorder.start();
         this._startLivenessPolling();
     }
 
@@ -313,9 +357,7 @@ export class CameraCard {
     }
 
     _updateLivePreview() {
-        const active = this.recorder?.isActive;
-        const browserRecording = active && !this.recorder.inGame;
-        if (!this.destroyed && !browserRecording && (this._viewerCount > 0 || active)) this._startLivePreview();
+        if (!this.destroyed && (this._viewerCount > 0 || this.recorder?.isActive)) this._startLivePreview();
         else this._stopLivePreview();
     }
 

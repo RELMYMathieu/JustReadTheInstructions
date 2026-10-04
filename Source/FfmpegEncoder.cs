@@ -1,32 +1,40 @@
 using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.IO;
-using System.Text;
+using System.Collections.Generic;
 
 namespace JustReadTheInstructions
 {
-    internal sealed class FfmpegEncoder : IVideoEncoder
+    internal sealed class FfmpegEncoder : IVideoEncoder, IAudioEncoder
     {
         private const int FinishTimeoutMs = 60_000;
-        private const int ErrorTailChars = 2000;
 
-        private readonly Process _process;
-        private readonly Stream _input;
         private readonly ConcurrentBag<byte[]> _pool = new ConcurrentBag<byte[]>();
-        private readonly StringBuilder _errors = new StringBuilder();
+        private readonly Dictionary<byte[], int> _pendingWrites = new Dictionary<byte[], int>();
+        private readonly HashSet<byte[]> _releasedWhilePending = new HashSet<byte[]>();
         private readonly int _frameBytes;
+        private readonly FfmpegInput _video;
+        private readonly FfmpegInput _audio;
+        private readonly FfmpegProcess _process;
 
         public string Description { get; }
 
-        public FfmpegEncoder(string executable, string arguments, string description, int frameBytes)
+        public IAudioEncoder Audio => this;
+
+        public FfmpegEncoder(string executable, Func<string, string, string> arguments, string description, int frameBytes, int maxQueuedFrames)
         {
             Description = description;
             _frameBytes = frameBytes;
-            _process = Ffmpeg.Start(executable, arguments, redirectInput: true);
-            _process.ErrorDataReceived += (sender, e) => RememberError(e.Data);
-            _process.BeginErrorReadLine();
-            _input = _process.StandardInput.BaseStream;
+            _video = new FfmpegInput("JRTI-FfmpegVideo", maxQueuedFrames, FinishWrite);
+            _audio = new FfmpegInput("JRTI-FfmpegAudio", 0, null);
+            try
+            {
+                _process = FfmpegProcess.Start(executable, arguments(_video.Url, _audio.Url), StopInputs);
+            }
+            catch
+            {
+                StopInputs();
+                throw;
+            }
         }
 
         public object CopyFrame(byte[] bottomUpRgba)
@@ -38,45 +46,71 @@ namespace JustReadTheInstructions
 
         public void Encode(object frame, long frameIndex)
         {
-            try { _input.Write((byte[])frame, 0, _frameBytes); }
-            catch (IOException) { throw new InvalidOperationException($"ffmpeg stopped: {ErrorTail()}"); }
+            var buffer = (byte[])frame;
+            lock (_pendingWrites)
+            {
+                _pendingWrites.TryGetValue(buffer, out int pending);
+                _pendingWrites[buffer] = pending + 1;
+            }
+            try { _video.Add(buffer); }
+            catch (InvalidOperationException) { throw new InvalidOperationException($"ffmpeg stopped: {_process.ErrorTail}"); }
         }
 
-        public void ReleaseFrame(object frame) => _pool.Add((byte[])frame);
+        public void ReleaseFrame(object frame)
+        {
+            var buffer = (byte[])frame;
+            lock (_pendingWrites)
+            {
+                if (_pendingWrites.ContainsKey(buffer)) _releasedWhilePending.Add(buffer);
+                else _pool.Add(buffer);
+            }
+        }
+
+        public void EncodeAudio(byte[] pcm, int offset, int frames, long firstFrame)
+        {
+            var copy = new byte[frames * CameraAudioMixer.BytesPerFrame];
+            Buffer.BlockCopy(pcm, offset, copy, 0, copy.Length);
+            try { _audio.Add(copy); }
+            catch (InvalidOperationException) { }
+        }
 
         public void Finish()
         {
-            _input.Close();
+            _audio.Complete();
+            _video.Complete();
+            if (!_video.WaitUntilSent(FinishTimeoutMs))
+                throw new TimeoutException("ffmpeg did not take the last frames in time");
             if (!_process.WaitForExit(FinishTimeoutMs))
                 throw new TimeoutException("ffmpeg did not finish writing the recording in time");
-            _process.WaitForExit();
             if (_process.ExitCode != 0)
-                throw new InvalidOperationException($"ffmpeg exited with code {_process.ExitCode}: {ErrorTail()}");
+                throw new InvalidOperationException($"ffmpeg exited with code {_process.ExitCode}: {_process.ErrorTail}");
         }
 
         public void Dispose()
         {
-            try
-            {
-                if (!_process.HasExited) _process.Kill();
-            }
-            catch (InvalidOperationException) { }
-            _process.Dispose();
+            StopInputs();
+            _process?.Dispose();
         }
 
-        private void RememberError(string line)
+        private void StopInputs()
         {
-            if (line == null) return;
-            lock (_errors)
-            {
-                _errors.AppendLine(line);
-                if (_errors.Length > ErrorTailChars) _errors.Remove(0, _errors.Length - ErrorTailChars);
-            }
+            _video.Dispose();
+            _audio.Dispose();
         }
 
-        private string ErrorTail()
+        private void FinishWrite(byte[] frame)
         {
-            lock (_errors) return _errors.ToString().Trim();
+            lock (_pendingWrites)
+            {
+                int pending = _pendingWrites[frame] - 1;
+                if (pending > 0)
+                {
+                    _pendingWrites[frame] = pending;
+                    return;
+                }
+                _pendingWrites.Remove(frame);
+                if (_releasedWhilePending.Remove(frame)) _pool.Add(frame);
+            }
         }
     }
 }

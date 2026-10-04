@@ -3,6 +3,7 @@ import { copyToClipboard } from './clipboard.js';
 
 const MENU_GAP = 6;
 const TOAST_MS = 1800;
+const TOAST_MS_PER_CHAR = 60;
 const TOAST_ACTION_MS = 6000;
 
 let openMenu = null;
@@ -14,19 +15,24 @@ document.addEventListener('pointerdown', (e) => {
 }, true);
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && openMenu) {
+    if (!openMenu) return;
+    if (e.key === 'Escape') {
         const anchor = openMenu.anchor;
         openMenu.close();
         anchor.focus();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        openMenu.moveFocus(e.key === 'ArrowDown' ? 1 : -1);
     }
 });
 
 window.addEventListener('resize', () => openMenu?.close());
 
 export class Menu {
-    constructor(anchor, build) {
+    constructor(anchor, build, { align = 'end' } = {}) {
         this.anchor = anchor;
         this._build = build;
+        this._align = align;
         this.el = h('div', { class: 'menu', role: 'menu' });
         document.body.append(this.el);
         anchor.setAttribute('aria-haspopup', 'menu');
@@ -58,6 +64,14 @@ export class Menu {
         return openMenu === this;
     }
 
+    moveFocus(step) {
+        const items = [...this.el.querySelectorAll('.menu-item:not([hidden])')];
+        if (items.length === 0) return;
+        const at = items.indexOf(document.activeElement);
+        const from = at === -1 && step < 0 ? 0 : at;
+        items[(from + step + items.length) % items.length].focus();
+    }
+
     rerender() {
         if (!this.isOpen) return;
         this.el.replaceChildren(...this._build(this));
@@ -74,21 +88,27 @@ export class Menu {
         const { offsetHeight: height, offsetWidth: width } = this.el;
         const below = r.bottom + MENU_GAP + height <= window.innerHeight || r.top < height + MENU_GAP;
         this.el.style.top = below ? `${r.bottom + MENU_GAP}px` : `${Math.max(MENU_GAP, r.top - MENU_GAP - height)}px`;
-        this.el.style.left = `${Math.max(MENU_GAP, Math.min(r.right - width, window.innerWidth - width - MENU_GAP))}px`;
+        const left = this._align === 'start' ? r.left : r.right - width;
+        this.el.style.left = `${Math.max(MENU_GAP, Math.min(left, window.innerWidth - width - MENU_GAP))}px`;
     }
 }
 
-export function menuItem({ label, detail, onSelect, className = '', href, target, download }) {
+export function menuItem({ label, detail, description, checked, onSelect, className = '', href, target, download }) {
     const tag = href ? 'a' : 'button';
+    const classes = ['menu-item', description && 'has-description', checked && 'current', className];
     const item = h(tag, {
-        class: `menu-item ${className}`.replace(/\s+/g, ' ').trim(),
-        role: 'menuitem',
+        class: classes.filter(Boolean).join(' '),
+        role: checked === undefined ? 'menuitem' : 'menuitemradio',
+        'aria-checked': checked === undefined ? null : String(checked),
         type: href ? null : 'button',
         href,
         target,
         download,
         rel: target ? 'noopener' : null,
-    }, h('span', { class: 'menu-label' }, label), detail ? h('span', { class: 'menu-detail' }, detail) : null);
+    },
+        h('span', { class: 'menu-label' }, label),
+        detail ? h('span', { class: 'menu-detail' }, detail) : null,
+        description ? h('span', { class: 'menu-description' }, description) : null);
     item.addEventListener('click', () => {
         openMenu?.close();
         onSelect?.();
@@ -102,6 +122,10 @@ export function menuSeparator() {
 
 export function menuHeading(text) {
     return h('div', { class: 'menu-heading' }, text);
+}
+
+export function menuNote(text) {
+    return h('p', { class: 'menu-note' }, text);
 }
 
 export function isMenuOpen() {
@@ -174,7 +198,8 @@ export function toast(message, action) {
     toastEl.classList.toggle('has-action', Boolean(action));
     toastEl.classList.add('visible');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(hideToast, action ? TOAST_ACTION_MS : TOAST_MS);
+    const readMs = Math.max(TOAST_MS, message.length * TOAST_MS_PER_CHAR);
+    toastTimer = setTimeout(hideToast, action ? Math.max(TOAST_ACTION_MS, readMs) : readMs);
 }
 
 export async function copyWithToast(text, what = 'Link') {

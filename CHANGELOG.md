@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Sound per camera in the camera viewer (Listen, M) - hear the game from where that camera is, with its own distance and left/right placement. `viewer.html?id=<id>&audio=1` starts it on load, so an OBS browser source ("Control audio via OBS") gets that camera's sound. What you hear in the game does not change
+- Sound in in-game recordings - every recording holds its camera's sound (AAC, 48 kHz stereo), in sync with the picture, on Windows as well as Linux and macOS. Pausing cuts both, and a camera with nothing to hear records silence
+- Mic per camera (Adjust in the camera viewer) - Game mix, External or Onboard, plus a sound gain, applied in the game for every viewer and recording. External sound arrives late from far away, changes pitch as things fly past, picks up a ground echo and grit with distance, and stops in vacuum except for the camera's own vessel
+- Sound on the layout page (Listen, M) - hear the spotlight tile, or pick a tile with its speaker button; the choice is saved with the layout. `layout.html?program&audio=1` plays the layout on air in OBS and crossfades on Take
+- Rocket Sound Enhancement support - its enhancements play on cameras with Harmony installed; its ignition, flameout and decoupler sounds are heard too, and a supersonic vessel stays a faint rumble on each camera until its shock arrives with RSE's sonic boom. Cameras on the vessel itself hear a boom each time it crosses Mach 1 in air, either way. Booms are louder and deeper for heavier vessels, as in RSE, and hit hardest on the External mic
+- Camera sound on the Diagnostics page - cameras listened, sounds playing, game-thread and mixer time, with a warning when a sound cannot be read
+- Mic picker on each camera card - set a camera's mic from the main page without opening its viewer, with what each mic hears written under it
+- Big engines carry further - an engine's sound reaches further with its thrust, on every mic, so a pad camera still hears a heavy launch kilometres away
+- Auto gain (Adjust in the camera viewer) - keeps a camera near a steady level, lifting quiet sound up to +24 dB and bringing loud sound down so booms stand out, off by default
+- Mastering (Adjust in the camera viewer) - compresses a camera like the game does with Rocket Sound Enhancement, denser and louder, off by default
+- Cameras remember their sound - each camera keeps its mic, gain, auto gain and mastering across flights, reverts, quickloads and relaunches of the same craft
+- Sonic booms on descent - a boom reaches a camera each time a vessel's speed toward it crosses the speed of sound, after the sound's travel time, so a returning booster can boom several times. Each boom is a double crack from the nose and tail shocks
+- RSE air treatment per sound - each RSE sound keeps the echo, grit and highpass its config gives it, grit is strongest behind a vessel, and a supersonic vessel's sound comes back gradually after its cone passes
+- Re-entry roar per vessel - each vessel's RSE re-entry sound follows its own heating instead of the vessel you fly
+- Stock aero effects on camera feeds - re-entry plasma and Mach effects of the vessel you fly now show in camera feeds without Firefly (Stock Aero Effects in the integration settings)
+
+### Changed
+
+- AV1 recordings on Windows - with ffmpeg on the PATH or in `PluginData/ffmpeg/`, the AV1 codec choice records through ffmpeg (graphics card if it encodes AV1, else the CPU). H.264 still uses Windows' own encoder, and falls back to ffmpeg where Media Foundation is missing
+- Record groups (Group on a camera card) - pick G1 to G4 or no group from a menu that shows how many cameras each group holds, instead of clicking through them. The group buttons at the bottom of the page say how many cameras they start or stop
+- Camera card menu (More) - every entry says what it opens or copies. Open viewer is gone, Watch does the same
+- Recordings panel - each recording shows its camera and time first, with the file name below
+- Camera viewer - Adjust is split into Picture and Sound and says first that changes reach every viewer and recording, Auto gain is an Off/On choice with its effect written under it, and Cameras moved next to the camera name at the bottom
+- Offline cameras - Record stays off until the camera is back, and More has Forget this camera to take it off the page
+- Stopping a recording on a camera card says it was saved, with Show to open Recordings, and the card keeps its size as "Saved 1.1 MB"
+- Settings say they are kept in this browser
+
+### Fixed
+
+- In-game recording works when playing KSP through Proton on Linux - JRTI records through a Linux build of ffmpeg placed in `PluginData/ffmpeg/`, on the graphics card (VA-API, NVENC or Vulkan) like native Linux, instead of failing with `MFCreateSinkWriterFromURL failed`. See the README
+- TUFX no longer blurs camera feeds - its effects run once on the finished image instead of up to four times, and motion blur stays off on JRTI cameras
+- The camera viewer's buttons no longer run off the left edge on phones
+- The main page's tabs and status line no longer hide buttons off screen on phones
+- The camera viewer's Adjust panel now says when a change could not reach the game
+- When the game cannot start a recording, the card says so instead of quietly recording in the browser (or doing nothing)
+- Pressed viewer buttons (Listen, Adjust) no longer turn blank when hovered or tapped
+- Camera names on the main page use the whole top border, so they are no longer cut short on phones
+- Menus can be moved through with the arrow keys
+
+### Removed
+
+- Browser recorder - recordings are made in the game only. When the game cannot record, Record stays off and says why instead of recording in the browser, and "Record with", "On signal loss while recording" and the in-game recording toggle are gone. The upload endpoints (`/recordings/<session>/<action>`) and the MP4/WebM fixers went with it
+
+
 ## v2.5.1 - 2026-10-01
 
 ### Fixed

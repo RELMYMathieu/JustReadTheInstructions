@@ -21,6 +21,12 @@ namespace JustReadTheInstructions
         public RenderTexture TargetTexture { get; private set; }
         public bool IsActive { get; private set; }
         public int InstanceId { get; }
+        public string SoundKey { get; }
+
+        public Transform ViewTransform
+            => _cameras[NearCameraIndex] != null ? _cameras[NearCameraIndex].transform : null;
+
+        public Vessel Vessel => _hullCamera.vessel;
 
         private const int NearCameraIndex = 0;
         private const int FarPqsCameraIndex = 1;
@@ -36,11 +42,13 @@ namespace JustReadTheInstructions
         private bool _farPqsReady;
 
         private DockingCameraOverlay _dockingOverlay;
+        private readonly StockAeroFX _aeroFX;
 
         public HullCameraRenderer(MuMechModuleHullCamera hullCamera)
         {
             _hullCamera = hullCamera ?? throw new ArgumentNullException(nameof(hullCamera));
             InstanceId = GetStableId(hullCamera);
+            SoundKey = CameraSoundMemory.KeyOf(hullCamera.part.persistentId, GetCameraIndex(hullCamera));
 
             if (hullCamera.cameraFoVMax > 0f)
                 hullCamera.cameraFoV = hullCamera.cameraFoVMax;
@@ -49,6 +57,7 @@ namespace JustReadTheInstructions
             SetupCameras();
 
             _dockingOverlay = new DockingCameraOverlay(_hullCamera.vessel, TargetTexture, InstanceId);
+            if (StockAeroFX.IsAvailable) _aeroFX = new StockAeroFX(InstanceId);
 
             IsActive = true;
         }
@@ -96,6 +105,8 @@ namespace JustReadTheInstructions
             CreateCameras();
 
             JRTIStreamServer.Instance?.RegisterCamera(InstanceId, TargetTexture.width, TargetTexture.height);
+            if (CameraSoundMemory.TryRecall(SoundKey, out var sound))
+                JRTIStreamServer.Instance?.RestoreSoundSettings(InstanceId, sound);
             JRTIPerf.Register(InstanceId, GetDisplayName());
 
             Debug.Log($"[JRTI]: Cameras created for '{GetDisplayName()}'");
@@ -201,9 +212,6 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
 
-            if (JRTISettings.EnableTUFX)
-                TUFXIntegration.ApplyToCamera(camera);
-
             if (JRTISettings.EnableParallax)
                 ParallaxIntegration.ApplyToCamera(camera);
 
@@ -261,9 +269,6 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
 
-            if (JRTISettings.EnableTUFX)
-                TUFXIntegration.ApplyToCamera(camera);
-
             if (JRTISettings.EnableEVE)
                 EVEIntegration.ApplyToCamera(camera, mainScaledCam, includeLocalEffects: false);
 
@@ -310,9 +315,6 @@ namespace JustReadTheInstructions
 
             if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
-
-            if (JRTISettings.EnableTUFX)
-                TUFXIntegration.ApplyToCamera(camera);
 
             AddSynchronizer(camObj, GalaxyCameraIndex);
 
@@ -369,6 +371,9 @@ namespace JustReadTheInstructions
                 else
                     camera.Render();
             }
+
+            if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
+                _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
 
             RestoreRaymarchedLightBuffers();
 
@@ -503,7 +508,7 @@ namespace JustReadTheInstructions
 
             UpdateIntegration(
                 JRTISettings.EnableTUFX, ref _tufxApplied,
-                cam => TUFXIntegration.ApplyToCamera(cam),
+                cam => { if (cam == _cameras[NearCameraIndex]) TUFXIntegration.ApplyToCamera(cam); },
                 cam => TUFXIntegration.RemoveFromCamera(cam),
                 "TUFX"
             );
@@ -622,6 +627,7 @@ namespace JustReadTheInstructions
             TargetTexture = null;
 
             _dockingOverlay.Dispose();
+            _aeroFX?.Dispose();
 
             Debug.Log($"[JRTI]: Disposed camera '{GetDisplayName()}'");
         }

@@ -3,6 +3,7 @@ import { fetchCameras, fetchLayouts, deleteLayout, fetchProgram, takeProgram, cl
 import { StreamHub } from './stream-hub.js';
 import { layoutRects } from './layout-grid.js';
 import { LayoutTile } from './layout-tile.js';
+import { CameraAudio } from './camera-audio.js';
 import { CameraTray } from './layout-tray.js';
 import { storeForLocation, savedLayoutStore, saveLayoutAs, LABEL_MODES, COLUMN_CHOICES } from './layout-store.js';
 import { beginDrag, isDragging } from './layout-drag.js';
@@ -21,7 +22,7 @@ const SHORTCUT_LAYOUTS = 9;
 const LAYOUT_NAME_PATTERN = /^[\p{L}\p{N} _-]{1,64}$/u;
 const DIGIT_CODE = /^(?:Digit|Numpad)([0-9])$/;
 const LABEL_TEXT = { auto: 'Names: when idle', always: 'Names: on', never: 'Names: off' };
-const EMPTY_LAYOUT = Object.freeze({ tiles: [], spotlight: null, fill: false, labels: 'auto', columns: null });
+const EMPTY_LAYOUT = Object.freeze({ tiles: [], spotlight: null, fill: false, labels: 'auto', columns: null, sound: null });
 const SAVE_STATES = {
     missing: { text: 'New saved layout: your first change creates it' },
     saving: { text: 'Saving...' },
@@ -37,6 +38,7 @@ const SHORTCUTS = [
     ['G', 'Fill the window edge to edge'],
     ['N', 'Camera names: when idle, on, off'],
     ['L', 'Columns: auto, 1, 2, 3, 4'],
+    ['M', 'Listen in this tab: you hear the spotlight, or the tile picked with its speaker button'],
     ['F', 'Fullscreen'],
     ['Ctrl Z', 'Undo the last change'],
     ['?', 'This list'],
@@ -56,11 +58,14 @@ const columnsBtn = document.getElementById('layout-columns');
 const fullscreenBtn = document.getElementById('layout-fullscreen');
 const switcherBtn = document.getElementById('layout-switcher');
 const takeBtn = document.getElementById('layout-take');
+const soundBtn = document.getElementById('layout-sound');
 const programHint = document.getElementById('program-hint');
 
 const hub = new StreamHub();
+const audio = new CameraAudio();
 const tiles = [];
 let spotlightIndex = null;
+let soundIndex = null;
 let fill = false;
 let labels = 'auto';
 let columns = null;
@@ -107,7 +112,7 @@ function setConnection(text, error = false) {
 }
 
 function currentLayout() {
-    return { tiles: tiles.map((tile) => tile.stored), spotlight: spotlightIndex, fill, labels, columns };
+    return { tiles: tiles.map((tile) => tile.stored), spotlight: spotlightIndex, fill, labels, columns, sound: soundIndex };
 }
 
 function persist() {
@@ -159,6 +164,27 @@ function layoutTiles() {
     placed.rects.forEach((rect, i) => tiles[i].place(rect));
     tiles.forEach((tile, i) => tile.setSpotlit(i === spotlightIndex));
     emptyEl.hidden = tiles.length > 0;
+    updateSound();
+}
+
+function heardIndex() {
+    return tiles.length === 0 ? null : soundIndex ?? spotlightIndex ?? 0;
+}
+
+function updateSound() {
+    const index = heardIndex();
+    tiles.forEach((tile, i) => tile.setHeard(i === index, soundIndex !== null));
+    audio.setCamera(index === null ? null : tiles[index].camera?.id ?? null);
+}
+
+function toggleSound() {
+    audio.toggle();
+    soundBtn?.setAttribute('aria-pressed', String(audio.playing));
+}
+
+function toggleHeardTile(index) {
+    if (index < 0 || index >= tiles.length) return;
+    change(() => { soundIndex = soundIndex === index ? null : index; });
 }
 
 function onFrameSize(width, height) {
@@ -194,6 +220,7 @@ function resolveTiles() {
         tile.setCamera(resolved.get(tile) ?? null);
     }
     tray.setCameras(cameras);
+    updateSound();
 }
 
 async function sync() {
@@ -214,6 +241,7 @@ function createTile(binding) {
         onFrameSize,
         onPick: pickCamera,
         onSpotlight: (t) => toggleSpotlight(tiles.indexOf(t)),
+        onListen: (t) => toggleHeardTile(tiles.indexOf(t)),
         onRemove: removeTile,
         onGrab: grabTile,
     });
@@ -236,6 +264,7 @@ function applyLayout(layout) {
     }
     for (const tile of pool) tile.retire();
     spotlightIndex = layout.spotlight;
+    soundIndex = layout.sound ?? null;
     fill = layout.fill;
     labels = layout.labels;
     columns = layout.columns ?? null;
@@ -306,6 +335,8 @@ function removeTile(tile) {
         tile.retire();
         if (spotlightIndex === index) spotlightIndex = null;
         else if (spotlightIndex !== null && spotlightIndex > index) spotlightIndex--;
+        if (soundIndex === index) soundIndex = null;
+        else if (soundIndex !== null && soundIndex > index) soundIndex--;
     }, `Removed ${tile.label || 'an empty tile'}`);
 }
 
@@ -544,7 +575,7 @@ function lanMenuItem(label, what, link) {
 }
 
 function savedLayoutItems() {
-    if (savedNames.length === 0) return [h('div', { class: 'menu-heading' }, 'None yet: save this one below.')];
+    if (savedNames.length === 0) return [h('div', { class: 'menu-heading' }, 'No layouts saved. You can save this layout below.')];
     return savedNames.map((name, i) => menuItem({
         label: name,
         detail: i < SHORTCUT_LAYOUTS ? `Shift ${i + 1}` : null,
@@ -558,7 +589,7 @@ const switcherMenu = new Menu(switcherBtn, (menu) => {
     items.push(menuSeparator(), menuHeading('Clean feed for OBS (shows the layout on air)'));
     items.push(menuItem({ label: 'Open the clean feed', href: pageLink('program'), target: '_blank' }));
     items.push(menuItem({ label: 'Copy clean feed link', onSelect: () => copyWithToast(pageLink('program'), 'Clean feed link') }));
-    items.push(lanMenuItem('Copy clean feed link for other devices', 'Network clean feed link', (origin) => pageLink('program', origin)));
+    items.push(lanMenuItem('Copy clean feed link for other devices on this network', 'Network clean feed link', (origin) => pageLink('program', origin)));
     if (onAirName) items.push(menuItem({ label: `Take ${onAirName} off air`, onSelect: takeOffAir }));
     items.push(menuSeparator(), menuHeading('This layout'));
     items.push(menuItem({
@@ -567,7 +598,7 @@ const switcherMenu = new Menu(switcherBtn, (menu) => {
         className: store.kind === 'local' ? 'current' : '',
     }));
     items.push(menuItem({ label: 'Copy link', onSelect: () => copyWithToast(shareLink()) }));
-    items.push(lanMenuItem('Copy link for other devices', 'Network link', (origin) => shareLink(origin)));
+    items.push(lanMenuItem('Copy link for other devices on this network', 'Network link', (origin) => shareLink(origin)));
     if (store.kind === 'saved') items.push(menuItem({ label: 'Delete this saved layout', className: 'danger', onSelect: deleteCurrentLayout }));
     return items;
 });
@@ -614,6 +645,7 @@ const KEY_ACTIONS = {
     g: toggleFill,
     n: cycleLabels,
     l: cycleColumns,
+    m: toggleSound,
     f: toggleFullscreen,
     '?': () => helpMenu.open(),
 };
@@ -668,7 +700,10 @@ function wireCommon() {
 function wireProgram() {
     document.body.classList.add('program', 'idle');
     document.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) toggleFullscreen();
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const key = e.key.toLowerCase();
+        if (key === 'f') toggleFullscreen();
+        if (key === 'm') toggleSound();
     });
 }
 
@@ -684,6 +719,7 @@ function wireControls() {
     fillBtn.addEventListener('click', toggleFill);
     labelsBtn.addEventListener('click', cycleLabels);
     columnsBtn.addEventListener('click', cycleColumns);
+    soundBtn.addEventListener('click', toggleSound);
     fullscreenBtn.hidden = !document.fullscreenEnabled;
     fullscreenBtn.addEventListener('click', toggleFullscreen);
     switcherBtn.addEventListener('pointerdown', refreshSavedNames);
@@ -712,6 +748,7 @@ async function main() {
     wireCommon();
     if (programMode) wireProgram();
     else wireControls();
+    if (new URLSearchParams(location.search).get('audio') === '1') toggleSound();
 
     const layout = await loadInitialLayout();
     if (programMode) applyProgramLayout(layout);

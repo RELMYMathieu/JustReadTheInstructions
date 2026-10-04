@@ -215,9 +215,11 @@ namespace JustReadTheInstructions
                 if (server.TryTakePendingFov(kvp.Key, out float fov))
                     renderer.SetFieldOfView(Mathf.Clamp(fov, renderer.GetMinFOV(), renderer.GetMaxFOV()));
 
-                if (publishInfo)
-                    server.PublishCameraInfo(kvp.Key, renderer.GetDisplayName(),
-                        renderer.GetFOV(), renderer.GetMinFOV(), renderer.GetMaxFOV());
+                if (!publishInfo) continue;
+                server.PublishCameraInfo(kvp.Key, renderer.GetDisplayName(),
+                    renderer.GetFOV(), renderer.GetMinFOV(), renderer.GetMaxFOV());
+                if (server.TryGetSoundSettings(kvp.Key, out var sound))
+                    CameraSoundMemory.Remember(renderer.SoundKey, sound);
             }
         }
 
@@ -368,6 +370,16 @@ namespace JustReadTheInstructions
         public int GetOpenCameraCount() => _renderers.Count;
 
         public bool HasWindow(int stableId) => _windows.ContainsKey(stableId);
+
+        public bool TryGetListener(int stableId, out Transform view, out Vessel vessel)
+        {
+            view = null;
+            vessel = null;
+            if (!_renderers.TryGetValue(stableId, out var renderer)) return false;
+            view = renderer.ViewTransform;
+            vessel = renderer.Vessel;
+            return view != null;
+        }
 
         public void UpdateAllCameraVisualEffects()
         {

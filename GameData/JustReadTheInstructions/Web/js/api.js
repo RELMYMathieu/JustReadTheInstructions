@@ -33,41 +33,6 @@ export async function checkStatus(cameraId) {
     }
 }
 
-export async function uploadRecordingChunk(sessionId, filename, blob, mimeType) {
-    const res = await fetch(API.recordingAppend(sessionId, filename), {
-        method: 'POST',
-        headers: { 'Content-Type': mimeType },
-        body: blob,
-    });
-    if (!res.ok) throw new Error(`upload chunk failed: ${res.status}`);
-}
-
-export async function heartbeatRecording(sessionId, filename) {
-    try {
-        const res = await fetch(API.recordingHeartbeat(sessionId, filename), { method: 'POST' });
-        return res.status;
-    } catch {
-        return 0;
-    }
-}
-
-export async function finalizeRecording(sessionId, filename) {
-    const res = await fetch(API.recordingFinalize(sessionId, filename), {
-        method: 'POST',
-        keepalive: true,
-    });
-    if (!res.ok) throw new Error(`finalize failed: ${res.status}`);
-}
-
-export function finalizeRecordingBeacon(sessionId, filename) {
-    try {
-        fetch(API.recordingFinalize(sessionId, filename), {
-            method: 'POST',
-            keepalive: true,
-        }).catch(() => { });
-    } catch { }
-}
-
 export async function gameRecording(cameraId, action, codec) {
     const res = await send(API.gameRecording(cameraId, action, codec), 'POST', null, `in-game recording ${action}`);
     return res.json();

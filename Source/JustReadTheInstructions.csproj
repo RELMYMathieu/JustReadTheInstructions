@@ -1,43 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-		<ProjectGuid>{1BC4D6DA-69AF-41FD-8F12-9BCC1E70CC97}</ProjectGuid>
-		<OutputType>Library</OutputType>
-		<AppDesignerFolder>Properties</AppDesignerFolder>
-		<RootNamespace>JustReadTheInstructions</RootNamespace>
-		<AssemblyName>JustReadTheInstructions</AssemblyName>
-		<TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-		<FileAlignment>512</FileAlignment>
-		<Deterministic>true</Deterministic>
+		<TargetFramework>net48</TargetFramework>
+		<Version>2.5.1.1</Version>
+		<Description>KSP Mod, inspired by OCISLY, as a spiritual successor.</Description>
+		<Copyright>MIT</Copyright>
 		<KSPBT_ModRoot>$(MSBuildThisFileDirectory)../GameData/JustReadTheInstructions</KSPBT_ModRoot>
 		<KSPBT_ModPluginFolder>Plugins</KSPBT_ModPluginFolder>
 	</PropertyGroup>
 
-	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-		<DebugSymbols>true</DebugSymbols>
-		<DebugType>full</DebugType>
-		<Optimize>false</Optimize>
-		<OutputPath>bin\Debug\</OutputPath>
-		<DefineConstants>DEBUG;TRACE</DefineConstants>
-		<ErrorReport>prompt</ErrorReport>
-		<WarningLevel>4</WarningLevel>
-	</PropertyGroup>
-
-	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-		<DebugType>pdbonly</DebugType>
-		<Optimize>true</Optimize>
-		<OutputPath>bin\Release\</OutputPath>
-		<DefineConstants>TRACE</DefineConstants>
-		<ErrorReport>prompt</ErrorReport>
-		<WarningLevel>4</WarningLevel>
-	</PropertyGroup>
-
-	<PropertyGroup>
-		<SignAssembly>false</SignAssembly>
+	<!-- KSPBT's CKAN auto-install uses a shell input redirect that cmd.exe can't parse, so it silently does nothing on Windows -->
+	<PropertyGroup Condition="$([MSBuild]::IsOsPlatform('Windows'))">
+		<KSPBT_InstallCKANDependencies>false</KSPBT_InstallCKANDependencies>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -53,55 +27,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Compile Include="CameraLookup.cs" />
-		<Compile Include="CameraSynchronizer.cs" />
-		<Compile Include="CameraTelemetry.cs" />
-		<Compile Include="CanvasFix.cs" />
-		<Compile Include="HullCameraManager.cs" />
-		<Compile Include="HullCameraRenderer.cs" />
-		<Compile Include="HullCameraWindow.cs" />
-		<Compile Include="JRTISettingsGUI.cs" />
-		<Compile Include="ParallaxIntegration.cs" />
-		<Compile Include="ScattererIntegration.cs" />
-		<Compile Include="HullcamFilterIntegration.cs" />
-		<Compile Include="HullcamDockingOverlay.cs" />
-		<Compile Include="ScattererCameraSwap.cs" />
-		<Compile Include="ScattererScaledCameraSwap.cs" />
-		<Compile Include="TUFXIntegration.cs" />
-		<Compile Include="FireflyIntegration.cs" />
-		<Compile Include="EVEIntegration.cs" />
-		<Compile Include="DeferredIntegration.cs" />
-		<Compile Include="JRTIMainGUI.cs" />
-		<Compile Include="JRTISettings.cs" />
-		<Compile Include="JRTIPerf.cs" />
-		<Compile Include="JRTIPerfLog.cs" />
-		<Compile Include="JRTIPerfMonitor.cs" />
-		<Compile Include="JRTIPerfSnapshot.cs" />
-		<Compile Include="JRTIStreamServer.cs" />
-		<Compile Include="JRTIStreamServer.GameRecording.cs" />
-		<Compile Include="MediaFoundation.cs" />
-		<Compile Include="Mp4Recorder.cs" />
-		<Compile Include="Mp4Remuxer.cs" />
-		<Compile Include="ConstantRateClock.cs" />
-		<Compile Include="FrameSchedule.cs" />
-		<Compile Include="VideoEncoders.cs" />
-		<Compile Include="MediaFoundationEncoder.cs" />
-		<Compile Include="Ffmpeg.cs" />
-		<Compile Include="FfmpegEncoder.cs" />
-		<Compile Include="JRTIStreamServer.Http.cs" />
-		<Compile Include="JRTIStreamServer.Recording.cs" />
-		<Compile Include="JRTIStreamServer.RecordingFiles.cs" />
-		<Compile Include="JRTIStreamServer.Layouts.cs" />
-		<Compile Include="JRTIStreamServer.Program.cs" />
-		<Compile Include="JRTIStreamServer.Mp4.cs" />
-		<Compile Include="JRTIStreamServer.Webm.cs" />
-		<Compile Include="JRTIStreamServer.Types.cs" />
-		<Compile Include="JRTICameraConfigModule.cs" />
-		<Compile Include="JRTICameraRuntime.cs" />
-		<Compile Include="CameraImageAdjust.cs" />
-		<Compile Include="JustReadTheInstructions.cs" />
-		<Compile Include="Properties\AssemblyInfo.cs" />
+		<KSPVersionFile Include=".">
+			<Destination>$(KSPBT_ModRoot)/JustReadTheInstructions.version</Destination>
+			<Name>Just Read The Instructions</Name>
+			<URL>https://raw.githubusercontent.com/RELMYMathieu/JustReadTheInstructions/main/GameData/JustReadTheInstructions/JustReadTheInstructions.version</URL>
+			<Download>https://github.com/RELMYMathieu/JustReadTheInstructions/releases/latest</Download>
+			<KSP_Version>1.12.5</KSP_Version>
+			<KSP_Version_Min>1.12.0</KSP_Version_Min>
+			<KSP_Version_Max>1.12.99</KSP_Version_Max>
+		</KSPVersionFile>
 	</ItemGroup>
 
-	<Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

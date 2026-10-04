@@ -1,24 +1,6 @@
-import { LOS_BEHAVIORS, RECORDERS, VIDEO_CODECS } from './config.js';
-import {
-    getSettings,
-    updateSettings,
-    isInGameRecordingAvailable,
-    usesGameRecorder,
-    getGameCodecs,
-    selectedGameCodec,
-} from './recorder-settings.js';
+import { VIDEO_CODECS } from './config.js';
+import { updateSettings, isInGameRecordingAvailable, getGameCodecs, selectedGameCodec } from './recorder-settings.js';
 import { Sheet } from './ui.js';
-
-const LOS_LABELS = {
-    [LOS_BEHAVIORS.AUTO_SAVE]: 'Save what was recorded so far',
-    [LOS_BEHAVIORS.PAUSE]: 'Pause until the signal returns',
-    [LOS_BEHAVIORS.DISCARD]: 'Discard the recording',
-};
-
-const RECORDER_LABELS = {
-    [RECORDERS.GAME]: 'The game (graphics card, MP4)',
-    [RECORDERS.BROWSER]: 'This browser (legacy, removed in v3.0.0)',
-};
 
 const CODEC_LABELS = {
     [VIDEO_CODECS.H264]: 'H.264 (default, plays everywhere)',
@@ -45,22 +27,17 @@ function availableCodecLabels() {
 }
 
 function render(controls) {
-    const { losBehavior, recorder } = getSettings();
     const codec = selectedGameCodec();
-    renderOptions(controls.los, LOS_LABELS, losBehavior);
-    renderOptions(controls.recorder, RECORDER_LABELS, recorder);
     renderOptions(controls.codec, availableCodecLabels(), codec);
-    document.getElementById('settings-recorder-row').hidden = !isInGameRecordingAvailable();
-    document.getElementById('settings-codec-row').hidden = !usesGameRecorder();
-    document.getElementById('settings-codec-warning').hidden = !usesGameRecorder() || codec === VIDEO_CODECS.H264;
+    document.getElementById('settings-codec-row').hidden = !isInGameRecordingAvailable();
+    document.getElementById('settings-unavailable').hidden = isInGameRecordingAvailable();
+    document.getElementById('settings-codec-warning').hidden = codec === VIDEO_CODECS.H264;
 }
 
 export function mountSettingsUI() {
     const openBtn = document.getElementById('settings-btn');
     const sheetEl = document.getElementById('settings-sheet');
     const controls = {
-        los: document.getElementById('settings-los'),
-        recorder: document.getElementById('settings-recorder'),
         codec: document.getElementById('settings-codec'),
     };
 
@@ -70,15 +47,6 @@ export function mountSettingsUI() {
     render(controls);
 
     openBtn.addEventListener('click', () => sheet.toggle(openBtn));
-
-    controls.los.addEventListener('change', () => {
-        updateSettings({ losBehavior: controls.los.value });
-    });
-
-    controls.recorder.addEventListener('change', () => {
-        updateSettings({ recorder: controls.recorder.value });
-        render(controls);
-    });
 
     controls.codec.addEventListener('change', () => {
         const codec = controls.codec.value;

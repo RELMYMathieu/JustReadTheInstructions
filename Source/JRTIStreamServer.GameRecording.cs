@@ -12,7 +12,7 @@ namespace JustReadTheInstructions
     {
         private static readonly Regex UnsafeFileNameChars = new Regex(@"[\\/:*?""<>|\s]+");
 
-        internal static bool InGameRecordingAvailable => JRTISettings.InGameRecording && VideoEncoders.IsAvailable;
+        internal static bool InGameRecordingAvailable => VideoEncoders.IsAvailable;
 
         private static void HandleGameRecording(HttpListenerContext ctx, int cameraId, CameraStreamState state, string action)
         {
@@ -56,7 +56,7 @@ namespace JustReadTheInstructions
             {
                 if (state.Recorder == null)
                 {
-                    var path = RecordingSession.ResolveUniquePath(Path.Combine(RecordingsRoot, RecordingFileName(state.DisplayName, cameraId)));
+                    var path = UniquePath(Path.Combine(RecordingsRoot, RecordingFileName(state.DisplayName, cameraId)));
                     int width = state.FrameWidth, height = state.FrameHeight, fps = JRTISettings.StreamMaxFps;
                     try
                     {
@@ -64,6 +64,7 @@ namespace JustReadTheInstructions
                             () => VideoEncoders.Create(codec, path, width, height, fps),
                             message => Debug.LogWarning($"[JRTI-Stream]: {message}"));
                         state.SetRecorder(recorder);
+                        CameraAudio.Instance?.Subscribe(cameraId, recorder);
                         Debug.Log($"[JRTI-Stream]: In-game recording started with {recorder.EncoderDescription}: {path}");
                     }
                     catch (Exception ex)
@@ -89,6 +90,23 @@ namespace JustReadTheInstructions
                           $"({recorder.FramesWritten} frames, {recorder.FramesDropped} dropped)");
             }
             ServeText(ctx, RecordingJson(state), "application/json");
+        }
+
+        private static string UniquePath(string requested)
+        {
+            if (!File.Exists(requested)) return requested;
+
+            var dir = Path.GetDirectoryName(requested);
+            var baseName = Path.GetFileNameWithoutExtension(requested);
+            var ext = Path.GetExtension(requested);
+
+            for (int i = 1; i < 10000; i++)
+            {
+                var candidate = Path.Combine(dir, $"{baseName}_{i}{ext}");
+                if (!File.Exists(candidate)) return candidate;
+            }
+
+            return Path.Combine(dir, $"{baseName}_{Guid.NewGuid():N}{ext}");
         }
 
         private static string RecordingFileName(string cameraName, int cameraId)

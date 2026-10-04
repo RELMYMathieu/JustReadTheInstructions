@@ -13,6 +13,8 @@ const PORT = Number(process.env.PORT || 8099);
 const FPS = 30;
 const LOOP_FRAMES = 90;
 const BOUNDARY = 'jrtiboundary';
+const AUDIO_RATE = 48000;
+const AUDIO_TICK_MS = 20;
 
 const FEEDS = [
     [10, 'screenshot-3.png', 'crop=2320:1305:160:100'],
@@ -45,7 +47,7 @@ const cameras = new Map([
     [13, { name: 'Kerbal X.Booster Sep' }],
     [14, { name: 'Kerbal X.Docking Port Cam with a rather long name for overflow' }],
 ]);
-for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90 } });
+for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, mic: 'game', soundGain: 0, autoGain: false, mastering: false }, audioClients: 0 });
 
 const launchId = 'mock' + Date.now().toString(16);
 const layouts = new Map();
@@ -117,7 +119,7 @@ function recordingInfo(cam) {
 function cameraList() {
     return [...cameras.values()].filter((c) => c.online).map((c) => ({
         id: c.id, name: c.name, streaming: true, viewerCount: c.streamClients,
-        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, recording: recordingInfo(c),
+        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, recording: recordingInfo(c),
     }));
 }
 
@@ -147,6 +149,52 @@ function stream(req, res, ids, preview) {
     req.on('close', done);
 }
 
+function wavStreamHeader() {
+    const header = Buffer.alloc(44);
+    header.write('RIFF', 0);
+    header.writeUInt32LE(0xffffffff, 4);
+    header.write('WAVEfmt ', 8);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(2, 22);
+    header.writeUInt32LE(AUDIO_RATE, 24);
+    header.writeUInt32LE(AUDIO_RATE * 4, 28);
+    header.writeUInt16LE(4, 32);
+    header.writeUInt16LE(16, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(0xffffffff, 40);
+    return header;
+}
+
+function audio(req, res, cam) {
+    res.writeHead(200, { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-cache' });
+    res.write(wavStreamHeader());
+    cam.audioClients++;
+    const pitch = 40 + (cam.id % 5) * 12;
+    const startedAt = performance.now();
+    let frame = 0;
+    let rumble = 0;
+    const timer = setInterval(() => {
+        const due = Math.floor((performance.now() - startedAt) * AUDIO_RATE / 1000);
+        const frames = due - frame;
+        if (frames <= 0) return;
+        const block = Buffer.alloc(frames * 4);
+        for (let i = 0; i < frames; i++, frame++) {
+            const t = frame / AUDIO_RATE;
+            rumble = rumble * 0.985 + (Math.random() * 2 - 1) * 0.015;
+            const sample = Math.sin(2 * Math.PI * pitch * t) * 0.15 + rumble * 2;
+            const pan = Math.sin(2 * Math.PI * 0.1 * t);
+            block.writeInt16LE(Math.round(sample * (1 - pan) * 0.5 * 32767), i * 4);
+            block.writeInt16LE(Math.round(sample * (1 + pan) * 0.5 * 32767), i * 4 + 2);
+        }
+        res.write(block);
+    }, AUDIO_TICK_MS);
+    req.on('close', () => {
+        clearInterval(timer);
+        cam.audioClients--;
+    });
+}
+
 function sample() {
     const cams = [...cameras.values()].filter((c) => c.online);
     return {
@@ -154,7 +202,9 @@ function sample() {
         jrti_ms_avg: 2.1 + Math.random(), jrti_ms_max: 5 + Math.random() * 3, gc_per_s: 0.2, gc_frame_ms_max: 31, heap_mb: 1840 + Math.random() * 20,
         pool_busy: 3, pool_min: 12, pool_io_busy: 1, stream_clients: cams.reduce((s, c) => s + c.streamClients, 0),
         preview_clients: cams.reduce((s, c) => s + c.previewClients, 0), recordings: cams.filter((c) => c.recording).length,
-        recording_kbps: 0, spread: 1, max_fps: FPS, camera_count: cams.length,
+        spread: 1, max_fps: FPS, camera_count: cams.length,
+        audio_cameras: cams.filter((c) => c.audioClients > 0).length, audio_voices: 14, audio_main_ms_avg: 0.12 + Math.random() * 0.05, audio_main_ms_max: 0.3 + Math.random() * 0.2,
+        audio_mix_ms_avg: 0.6 + Math.random() * 0.2, audio_mix_ms_max: 1.5 + Math.random(), audio_skipped_sounds: 0,
         cameras: cams.map((c) => ({
             camera_id: c.id, camera: c.name, mode: c.id % 2 ? 'window' : 'stream', renders_per_s: 29.5 + Math.random(), render_ms_avg: 3 + Math.random() * 2, render_ms_max: 7 + Math.random() * 4,
             stream_fps: c.streamClients + c.previewClients > 0 ? 28 + Math.random() * 2 : 0, capture_ms_avg: 0.05, capture_ms_max: 0.1, readback_ms_avg: 21, readback_ms_max: 38,
@@ -211,7 +261,7 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname.replace(/\/+$/, '') || '/';
     const parts = p.split('/').filter(Boolean);
     try {
-        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.0', lanUrls: [`http://192.168.1.42:${PORT}/`] });
+        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.1.1', lanUrls: [`http://192.168.1.42:${PORT}/`] });
         if (p === '/cameras') return json(res, cameraList());
         if (p === '/debug/stats') return json(res, sample());
         if (p === '/events') return events(req, res);
@@ -274,6 +324,7 @@ const server = http.createServer(async (req, res) => {
                 case 'snapshot': { const jpeg = frameFor(cam.id); res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': jpeg.length }); return res.end(jpeg); }
                 case 'stream': return stream(req, res, [cam.id], false);
                 case 'preview': return stream(req, res, [cam.id], true);
+                case 'audio': return audio(req, res, cam);
                 case 'status': return text(res, 200, 'ok');
                 case 'settings':
                     if (req.method === 'POST') { Object.assign(cam.settings, JSON.parse(await readBody(req))); res.writeHead(200); return res.end(); }

@@ -49,21 +49,12 @@ installed (for example "sudo apt install ffmpeg" or "brew install ffmpeg").
 
 "Video codec" in Settings picks the recording codec. Keep H.264 unless you
 know your tools handle something else: it opens everywhere. AV1 is offered
-on Linux and macOS when ffmpeg has an AV1 encoder; many editors, older
-players and phones cannot open AV1 files.
+when ffmpeg has an AV1 encoder (on Windows, add ffmpeg for it); many
+editors, older players and phones cannot open AV1 files. "Video codec" is
+in the Settings panel (top right).
 
-"Video codec" and the other recorder options are in the Settings panel (top right).
-
-If in-game recording cannot start, the legacy browser recorder takes over. It
-is deprecated and will be removed in v3.0.0. "Record with" in Settings picks
-one; in-game recording can also be turned off in JRTI's settings window.
-
-You can choose what happens when a camera loses signal while recording.
-Open the Settings button on the main page to pick one of:
-
-    Auto-save       Stop and save what was recorded so far  (default)
-    Pause           Pause the recording and resume if signal returns
-    Discard         Stop and delete the recording
+If the game cannot record, Record stays off and JRTI's settings window in
+KSP (Ctrl+Alt+F8) says why.
 
 
 CAMERA LAYOUT
@@ -129,9 +120,7 @@ REMOTE RECORDING
 
 When you open the web page from a different machine than the one running KSP,
 recordings are still made by the game and saved on the KSP machine. Use
-Recordings, then Download, to copy one to YOUR machine. The legacy browser
-recorder (picked in Settings) can still save straight to your machine with a
-Save-As dialog; that option goes away with the legacy recorder in v3.0.0.
+Recordings, then Download, to copy one to YOUR machine.
 
 
 FOLDER STRUCTURE

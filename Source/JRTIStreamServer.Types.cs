@@ -118,6 +118,10 @@ namespace JustReadTheInstructions
             public float Brightness;
             public float Contrast = 1f;
             public float Gamma = 1f;
+            public volatile CameraMic Mic = CameraMic.Game;
+            public float SoundGainDb;
+            public volatile bool AutoGain;
+            public volatile bool Mastering;
 
             private byte[] _lut;
             private float _lutBrightness;
@@ -257,91 +261,6 @@ namespace JustReadTheInstructions
                 if (recorder == null) return;
                 recorder.Stop();
                 Debug.Log($"[JRTI-Stream]: In-game recording saved (camera closed): {recorder.FilePath}");
-            }
-        }
-
-        internal sealed class RecordingSession : IDisposable
-        {
-            public string SessionId { get; }
-            public string DisplayPath { get; }
-            public long BytesWritten { get; private set; }
-            public DateTime LastActivityUtc { get; private set; }
-
-            private readonly FileStream _stream;
-            private readonly object _writeLock = new object();
-            private bool _disposed;
-
-            private RecordingSession(string sessionId, string path, FileStream stream)
-            {
-                SessionId = sessionId;
-                DisplayPath = path;
-                _stream = stream;
-                LastActivityUtc = DateTime.UtcNow;
-            }
-
-            public static RecordingSession Create(string sessionId, string path)
-            {
-                var dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir))
-                    Directory.CreateDirectory(dir);
-
-                var finalPath = ResolveUniquePath(path);
-                var stream = new FileStream(finalPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 65536);
-                return new RecordingSession(sessionId, finalPath, stream);
-            }
-
-            internal static string ResolveUniquePath(string requested)
-            {
-                if (!File.Exists(requested)) return requested;
-
-                var dir = Path.GetDirectoryName(requested);
-                var baseName = Path.GetFileNameWithoutExtension(requested);
-                var ext = Path.GetExtension(requested);
-
-                for (int i = 1; i < 10000; i++)
-                {
-                    var candidate = Path.Combine(dir, $"{baseName}_{i}{ext}");
-                    if (!File.Exists(candidate)) return candidate;
-                }
-
-                return Path.Combine(dir, $"{baseName}_{Guid.NewGuid():N}{ext}");
-            }
-
-            public void AppendFromStream(Stream input)
-            {
-                var buffer = new byte[16 * 1024];
-                lock (_writeLock)
-                {
-                    if (_disposed) throw new ObjectDisposedException(nameof(RecordingSession));
-                    int read;
-                    while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        _stream.Write(buffer, 0, read);
-                        BytesWritten += read;
-                        Interlocked.Add(ref _recordedBytesTotal, read);
-                    }
-                    _stream.Flush();
-                    LastActivityUtc = DateTime.UtcNow;
-                }
-            }
-
-            public void Touch() => LastActivityUtc = DateTime.UtcNow;
-
-            public void Dispose()
-            {
-                lock (_writeLock)
-                {
-                    if (_disposed) return;
-                    _disposed = true;
-                    try { _stream.Flush(); } catch { }
-                    try { _stream.Dispose(); } catch { }
-                }
-            }
-
-            public void DisposeAndDelete()
-            {
-                Dispose();
-                try { if (File.Exists(DisplayPath)) File.Delete(DisplayPath); } catch { }
             }
         }
     }

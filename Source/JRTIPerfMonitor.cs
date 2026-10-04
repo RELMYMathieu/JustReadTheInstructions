@@ -33,7 +33,6 @@ namespace JustReadTheInstructions
         private bool _previousFrameCollected;
         private int _lastGcCount;
         private int _gcBaseline;
-        private long _recordedBytesBaseline;
 
         private JRTIPerfLog _log;
         private bool _overlayVisible;
@@ -176,7 +175,6 @@ namespace JustReadTheInstructions
                 previewClients += camera.PreviewClients;
             }
 
-            long recordedBytes = JRTIStreamServer.RecordedBytesTotal;
 
             return new PerfSnapshot
             {
@@ -194,10 +192,10 @@ namespace JustReadTheInstructions
                 StreamClients = streamClients,
                 PreviewClients = previewClients,
                 Recordings = server?.RecordingCount ?? 0,
-                RecordingKbps = seconds > 0.0 ? (recordedBytes - _recordedBytesBaseline) / 1024.0 / seconds : 0.0,
                 SpreadCaptures = JRTISettings.SpreadCaptures,
                 MaxFps = JRTISettings.StreamMaxFps,
-                Cameras = cameras
+                Cameras = cameras,
+                Audio = AudioPerf.Take()
             };
         }
 
@@ -210,7 +208,6 @@ namespace JustReadTheInstructions
             _gcFrameMaxMs = 0.0;
             _lastGcCount = GC.CollectionCount(0);
             _gcBaseline = _lastGcCount;
-            _recordedBytesBaseline = JRTIStreamServer.RecordedBytesTotal;
         }
 
         private void BuildOverlay(PerfSnapshot s)
@@ -221,7 +218,7 @@ namespace JustReadTheInstructions
                 $"JRTI main thread {s.JrtiMs.Average:0.00} ms/frame (max {s.JrtiMs.Max:0.00})",
                 $"GC {s.GcCollections} in {s.Seconds:0.0}s (worst GC frame {s.GcFrameMaxMs:0} ms)    heap {s.HeapMb:0} MB    " +
                 $"pool threads busy {s.PoolBusy} (min {s.PoolMin}, IO {s.PoolIoBusy})",
-                $"Clients {s.StreamClients} stream + {s.PreviewClients} preview    recordings {s.Recordings} ({s.RecordingKbps:0} KB/s)    " +
+                $"Clients {s.StreamClients} stream + {s.PreviewClients} preview    recordings {s.Recordings}    " +
                 $"Max FPS {s.MaxFps}"
             };
 

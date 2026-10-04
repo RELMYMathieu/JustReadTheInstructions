@@ -39,8 +39,6 @@ namespace JustReadTheInstructions
                 var recorder = state.Recorder;
                 if (recorder != null) paths.Add(Path.GetFullPath(recorder.FilePath));
             }
-            foreach (var session in _recordings.Values)
-                paths.Add(Path.GetFullPath(session.DisplayPath));
             return paths;
         }
 

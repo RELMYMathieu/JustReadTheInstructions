@@ -7,6 +7,7 @@ namespace JustReadTheInstructions
     {
         private const double EarlyTolerance = 0.6;
 
+        private readonly int _fps;
         private readonly double _framesPerTick;
         private readonly long _maxRepeats;
         private bool _started;
@@ -16,9 +17,18 @@ namespace JustReadTheInstructions
 
         public ConstantRateClock(int fps, double maxGapSeconds)
         {
+            _fps = fps;
             _framesPerTick = fps / (double)Stopwatch.Frequency;
             _maxRepeats = (long)(fps * maxGapSeconds);
         }
+
+        public bool TryGetSeconds(long ticks, out double seconds)
+        {
+            seconds = _started ? ((ticks - _firstTicks) * _framesPerTick - _skippedFrames) / _fps : 0;
+            return _started;
+        }
+
+        public double FrameEndSeconds(long frame) => (frame + 1) / (double)_fps;
 
         public bool TryPlace(long ticks, out long repeats, out long frame)
         {

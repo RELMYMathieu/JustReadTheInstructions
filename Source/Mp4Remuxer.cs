@@ -34,18 +34,42 @@ namespace JustReadTheInstructions
             public readonly List<uint> Durations = new List<uint>();
             public readonly List<long> CompositionOffsets = new List<long>();
             public readonly List<int> SyncSamples = new List<int>();
-            public readonly List<long> ChunkStarts = new List<long>();
-            public readonly List<long> ChunkLengths = new List<long>();
+            public readonly List<Chunk> Chunks = new List<Chunk>();
             public readonly List<int> ChunkSampleCounts = new List<int>();
             public uint DefaultDuration;
             public uint DefaultSize;
             public uint DefaultFlags;
-            public long MovieTimescale;
             public long TrackTimescale;
             public long TrackDuration;
+
+            public long MovieDuration(long movieTimescale)
+                => TrackTimescale == 0 ? 0 : TrackDuration * movieTimescale / TrackTimescale;
+        }
+
+        private sealed class Chunk
+        {
+            public long Start;
+            public long Length;
+            public long Offset;
+        }
+
+        private sealed class Movie
+        {
+            public readonly Dictionary<uint, Track> Tracks = new Dictionary<uint, Track>();
+            public readonly List<Chunk> Chunks = new List<Chunk>();
+            public long Timescale;
             public long DataBytes;
 
-            public long MovieDuration => TrackTimescale == 0 ? 0 : TrackDuration * MovieTimescale / TrackTimescale;
+            public long Duration
+            {
+                get
+                {
+                    long duration = 0;
+                    foreach (var track in Tracks.Values)
+                        duration = Math.Max(duration, track.MovieDuration(Timescale));
+                    return duration;
+                }
+            }
         }
 
         public static void MakeProgressive(string path)
@@ -55,10 +79,10 @@ namespace JustReadTheInstructions
             {
                 using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize))
                 {
-                    var track = new Track();
-                    ReadFragmentedFile(input, track, out var ftyp, out var moov);
+                    var movie = new Movie();
+                    ReadFragmentedFile(input, movie, out var ftyp, out var moov);
                     using (var output = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, CopyBufferSize))
-                        WriteProgressiveFile(input, output, ftyp, moov, track);
+                        WriteProgressiveFile(input, output, ftyp, moov, movie);
                 }
                 File.Replace(temp, path, null);
             }
@@ -69,7 +93,7 @@ namespace JustReadTheInstructions
             }
         }
 
-        private static void ReadFragmentedFile(Stream input, Track track, out byte[] ftyp, out byte[] moov)
+        private static void ReadFragmentedFile(Stream input, Movie movie, out byte[] ftyp, out byte[] moov)
         {
             ftyp = null;
             moov = null;
@@ -87,54 +111,71 @@ namespace JustReadTheInstructions
                 else if (type == Moov)
                 {
                     moov = ReadBox(input, position, size);
-                    ReadTrackInfo(moov, track);
+                    ReadTrackInfo(moov, movie);
                 }
-                else if (type == Moof) ReadFragment(ReadBox(input, position, size), position, track);
+                else if (type == Moof) ReadFragment(ReadBox(input, position, size), position, movie);
 
                 position += size;
             }
 
-            if (ftyp == null || moov == null || track.Sizes.Count == 0)
-                throw new InvalidDataException("Not a fragmented MP4 with video samples");
+            if (ftyp == null || moov == null || movie.Chunks.Count == 0)
+                throw new InvalidDataException("Not a fragmented MP4 with samples");
         }
 
-        private static void ReadTrackInfo(byte[] moov, Track track)
+        private static void ReadTrackInfo(byte[] moov, Movie movie)
         {
-            if (CountChildren(moov, 8, moov.Length, Trak) != 1)
-                throw new InvalidDataException("Expected exactly one track");
-
             int mvhd = FindChild(moov, 8, moov.Length, Mvhd);
-            int trak = FindChild(moov, 8, moov.Length, Trak);
-            int mdia = FindChild(moov, trak + 8, End(moov, trak), Mdia);
-            int mdhd = FindChild(moov, mdia + 8, End(moov, mdia), Mdhd);
-            track.MovieTimescale = ReadTimescale(moov, mvhd);
-            track.TrackTimescale = ReadTimescale(moov, mdhd);
+            movie.Timescale = ReadTimescale(moov, mvhd);
+
+            for (int trak = 8; trak + 8 <= moov.Length; trak += (int)U32(moov, trak))
+            {
+                if (U32(moov, trak) < 8) break;
+                if (U32(moov, trak + 4) != Trak) continue;
+
+                int mdia = FindChild(moov, trak + 8, End(moov, trak), Mdia);
+                int mdhd = FindChild(moov, mdia + 8, End(moov, mdia), Mdhd);
+                movie.Tracks[TrackId(moov, trak)] = new Track { TrackTimescale = ReadTimescale(moov, mdhd) };
+            }
 
             int mvex = FindChild(moov, 8, moov.Length, Mvex);
             if (mvex < 0) throw new InvalidDataException("Missing mvex: the file is not fragmented");
-            int trex = FindChild(moov, mvex + 8, End(moov, mvex), Trex);
-            if (trex < 0) return;
-            track.DefaultDuration = U32(moov, trex + 20);
-            track.DefaultSize = U32(moov, trex + 24);
-            track.DefaultFlags = U32(moov, trex + 28);
-        }
-
-        private static void ReadFragment(byte[] moof, long moofStart, Track track)
-        {
-            for (int i = 8; i + 8 <= moof.Length; i += (int)U32(moof, i))
+            for (int trex = mvex + 8; trex + 8 <= End(moov, mvex); trex += (int)U32(moov, trex))
             {
-                if (U32(moof, i) < 8) break;
-                if (U32(moof, i + 4) == Traf) ReadTrackFragment(moof, i + 8, End(moof, i), moofStart, track);
+                if (U32(moov, trex) < 8) break;
+                if (U32(moov, trex + 4) != Trex || !movie.Tracks.TryGetValue(U32(moov, trex + 12), out var track)) continue;
+                track.DefaultDuration = U32(moov, trex + 20);
+                track.DefaultSize = U32(moov, trex + 24);
+                track.DefaultFlags = U32(moov, trex + 28);
             }
         }
 
-        private static void ReadTrackFragment(byte[] b, int start, int end, long moofStart, Track track)
+        private static uint TrackId(byte[] b, int trak)
         {
+            int tkhd = FindChild(b, trak + 8, End(b, trak), Tkhd);
+            return U32(b, tkhd + (b[tkhd + 8] == 0 ? 20 : 28));
+        }
+
+        private static void ReadFragment(byte[] moof, long moofStart, Movie movie)
+        {
+            long previousDataEnd = moofStart;
+            for (int i = 8; i + 8 <= moof.Length; i += (int)U32(moof, i))
+            {
+                if (U32(moof, i) < 8) break;
+                if (U32(moof, i + 4) == Traf)
+                    previousDataEnd = ReadTrackFragment(moof, i + 8, End(moof, i), moofStart, previousDataEnd, movie);
+            }
+        }
+
+        private static long ReadTrackFragment(byte[] b, int start, int end, long moofStart, long previousDataEnd, Movie movie)
+        {
+            int tfhd = FindChild(b, start, end, Tfhd);
+            if (tfhd < 0 || !movie.Tracks.TryGetValue(U32(b, tfhd + 12), out var track)) return previousDataEnd;
+
             uint defaultDuration = track.DefaultDuration;
             uint defaultSize = track.DefaultSize;
             uint defaultFlags = track.DefaultFlags;
-            long baseOffset = moofStart;
-            long nextData = moofStart;
+            long baseOffset = previousDataEnd;
+            long nextData = previousDataEnd;
 
             for (int i = start; i + 8 <= end; i += (int)U32(b, i))
             {
@@ -146,6 +187,7 @@ namespace JustReadTheInstructions
                 {
                     int p = i + 16;
                     if ((flags & 0x01) != 0) { baseOffset = (long)U64(b, p); p += 8; }
+                    else if ((flags & 0x020000) != 0) baseOffset = moofStart;
                     if ((flags & 0x02) != 0) p += 4;
                     if ((flags & 0x08) != 0) { defaultDuration = U32(b, p); p += 4; }
                     if ((flags & 0x10) != 0) { defaultSize = U32(b, p); p += 4; }
@@ -186,44 +228,50 @@ namespace JustReadTheInstructions
                         chunkLength += size;
                     }
 
-                    track.ChunkStarts.Add(dataStart);
-                    track.ChunkLengths.Add(chunkLength);
-                    track.ChunkSampleCounts.Add(count);
-                    track.DataBytes += chunkLength;
+                    if (count > 0)
+                    {
+                        var chunk = new Chunk { Start = dataStart, Length = chunkLength };
+                        track.Chunks.Add(chunk);
+                        track.ChunkSampleCounts.Add(count);
+                        movie.Chunks.Add(chunk);
+                        movie.DataBytes += chunkLength;
+                    }
                     nextData = dataStart + chunkLength;
                 }
             }
+            return nextData;
         }
 
-        private static void WriteProgressiveFile(Stream input, Stream output, byte[] ftyp, byte[] moov, Track track)
+        private static void WriteProgressiveFile(Stream input, Stream output, byte[] ftyp, byte[] moov, Movie movie)
         {
-            int mdatHeader = track.DataBytes + 8 > uint.MaxValue ? 16 : 8;
-            bool co64 = false;
-            long dataStart = ftyp.Length + BuildMoov(moov, track, false, 0).Length + mdatHeader;
-            if (dataStart + track.DataBytes > uint.MaxValue)
+            int mdatHeader = movie.DataBytes + 8 > uint.MaxValue ? 16 : 8;
+            bool co64 = ftyp.Length + BuildMoov(moov, movie, false).Length + mdatHeader + movie.DataBytes > uint.MaxValue;
+
+            long offset = ftyp.Length + BuildMoov(moov, movie, co64).Length + mdatHeader;
+            foreach (var chunk in movie.Chunks)
             {
-                co64 = true;
-                dataStart = ftyp.Length + BuildMoov(moov, track, true, 0).Length + mdatHeader;
+                chunk.Offset = offset;
+                offset += chunk.Length;
             }
 
-            var newMoov = BuildMoov(moov, track, co64, dataStart);
+            var newMoov = BuildMoov(moov, movie, co64);
             output.Write(ftyp, 0, ftyp.Length);
             output.Write(newMoov, 0, newMoov.Length);
-            WriteMdatHeader(output, track.DataBytes, mdatHeader);
+            WriteMdatHeader(output, movie.DataBytes, mdatHeader);
 
             var buffer = new byte[CopyBufferSize];
-            for (int c = 0; c < track.ChunkStarts.Count; c++)
-                CopyRange(input, output, track.ChunkStarts[c], track.ChunkLengths[c], buffer);
+            foreach (var chunk in movie.Chunks)
+                CopyRange(input, output, chunk.Start, chunk.Length, buffer);
         }
 
-        private static byte[] BuildMoov(byte[] moov, Track track, bool co64, long dataStart)
+        private static byte[] BuildMoov(byte[] moov, Movie movie, bool co64)
         {
             var writer = new BoxWriter();
-            RewriteBoxes(moov, 0, moov.Length, writer, track, co64, dataStart);
+            RewriteBoxes(moov, 0, moov.Length, writer, movie, null, co64);
             return writer.ToArray();
         }
 
-        private static void RewriteBoxes(byte[] src, int start, int end, BoxWriter w, Track track, bool co64, long dataStart)
+        private static void RewriteBoxes(byte[] src, int start, int end, BoxWriter w, Movie movie, Track track, bool co64)
         {
             for (int i = start; i + 8 <= end; i += (int)U32(src, i))
             {
@@ -234,8 +282,9 @@ namespace JustReadTheInstructions
                 if (type == Mvex) continue;
                 if (type == Moov || type == Trak || type == Mdia || type == Minf)
                 {
+                    var inner = type == Trak ? movie.Tracks[TrackId(src, i)] : track;
                     int box = w.Begin(type);
-                    RewriteBoxes(src, i + 8, i + size, w, track, co64, dataStart);
+                    RewriteBoxes(src, i + 8, i + size, w, movie, inner, co64);
                     w.End(box);
                 }
                 else if (type == Stbl)
@@ -243,19 +292,21 @@ namespace JustReadTheInstructions
                     int box = w.Begin(Stbl);
                     int stsd = FindChild(src, i + 8, i + size, Stsd);
                     w.WriteBytes(src, stsd, (int)U32(src, stsd));
-                    WriteSampleTables(w, track, co64, dataStart);
+                    WriteSampleTables(w, track, co64);
                     w.End(box);
                 }
-                else if (type == Mvhd || type == Mdhd)
-                    w.WriteBoxWithDuration(src, i, size, src[i + 8] == 0 ? 24 : 32, type == Mvhd ? track.MovieDuration : track.TrackDuration);
+                else if (type == Mvhd)
+                    w.WriteBoxWithDuration(src, i, size, src[i + 8] == 0 ? 24 : 32, movie.Duration);
+                else if (type == Mdhd)
+                    w.WriteBoxWithDuration(src, i, size, src[i + 8] == 0 ? 24 : 32, track.TrackDuration);
                 else if (type == Tkhd)
-                    w.WriteBoxWithDuration(src, i, size, src[i + 8] == 0 ? 28 : 36, track.MovieDuration);
+                    w.WriteBoxWithDuration(src, i, size, src[i + 8] == 0 ? 28 : 36, track.MovieDuration(movie.Timescale));
                 else
                     w.WriteBytes(src, i, size);
             }
         }
 
-        private static void WriteSampleTables(BoxWriter w, Track track, bool co64, long dataStart)
+        private static void WriteSampleTables(BoxWriter w, Track track, bool co64)
         {
             int count = track.Sizes.Count;
 
@@ -320,13 +371,11 @@ namespace JustReadTheInstructions
             w.End(stsz);
 
             int stco = w.BeginFull(co64 ? "co64" : "stco", 0);
-            w.WriteU32((uint)track.ChunkLengths.Count);
-            long offset = dataStart;
-            foreach (long chunkLength in track.ChunkLengths)
+            w.WriteU32((uint)track.Chunks.Count);
+            foreach (var chunk in track.Chunks)
             {
-                if (co64) w.WriteU64((ulong)offset);
-                else w.WriteU32((uint)offset);
-                offset += chunkLength;
+                if (co64) w.WriteU64((ulong)chunk.Offset);
+                else w.WriteU32((uint)chunk.Offset);
             }
             w.End(stco);
         }
@@ -410,17 +459,6 @@ namespace JustReadTheInstructions
                 if (U32(b, i + 4) == type) return i;
             }
             return -1;
-        }
-
-        private static int CountChildren(byte[] b, int start, int end, uint type)
-        {
-            int count = 0;
-            for (int i = start; i + 8 <= end; i += (int)U32(b, i))
-            {
-                if (U32(b, i) < 8) break;
-                if (U32(b, i + 4) == type) count++;
-            }
-            return count;
         }
 
         private static uint Fourcc(string name) => U32(Encoding.ASCII.GetBytes(name), 0);

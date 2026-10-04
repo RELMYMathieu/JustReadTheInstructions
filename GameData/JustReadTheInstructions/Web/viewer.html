@@ -14,7 +14,11 @@
 
     <div class="viewer-hud viewer-chrome" id="viewer-hud">
         <span class="tally-chip" id="viewer-tally"><span class="lamp"></span><span id="viewer-tally-text">Live</span></span>
-        <span class="viewer-hud-name" id="viewer-name"></span>
+        <span class="viewer-crumbs">
+            <a class="viewer-back" href="/" title="Back to all cameras">Cameras</a>
+            <span class="viewer-crumb-sep" aria-hidden="true">/</span>
+            <span class="viewer-hud-name" id="viewer-name"></span>
+        </span>
         <span class="camera-id" id="viewer-id"></span>
     </div>
 
@@ -22,12 +26,14 @@
         <div class="viewer-tool-row">
             <button type="button" class="btn overlay-btn btn-rec" id="viewer-record" title="Record this camera in the game" hidden>Record</button>
             <button type="button" class="btn overlay-btn" id="viewer-pause" hidden>Pause</button>
-            <a class="btn overlay-btn" href="/" title="All cameras">Cameras</a>
-            <button type="button" class="btn overlay-btn" id="viewer-copy" title="Copy the stream URL for OBS or VLC">Copy URL</button>
+            <button type="button" class="btn overlay-btn" id="viewer-copy" title="Copy the address of this video alone, for an OBS media source or VLC">Copy stream URL</button>
+            <button type="button" class="btn overlay-btn" id="viewer-sound" title="Play this camera's sound in this tab only" aria-pressed="false">Listen <kbd>M</kbd></button>
             <button type="button" class="btn overlay-btn" id="viewer-fullscreen" title="Show only the camera (Esc to leave)">Fullscreen <kbd>F</kbd></button>
-            <button type="button" class="btn overlay-btn" id="controls-toggle" title="Brightness, contrast, gamma and field of view" aria-expanded="false">Adjust</button>
+            <button type="button" class="btn overlay-btn" id="controls-toggle" title="Picture and sound of this camera, for everyone" aria-expanded="false">Adjust</button>
         </div>
         <div id="controls-panel" class="controls-panel" hidden>
+            <p class="hint ctrl-intro">Changes apply in the game, so every viewer, stream and recording of this camera gets them.</p>
+            <h2 class="section-title ctrl-heading">Picture</h2>
             <div class="ctrl-row">
                 <label class="ctrl-label" for="ctrl-brightness">Brightness</label>
                 <input type="range" id="ctrl-brightness" class="ctrl-slider" min="-1" max="1" step="0.01" value="0">
@@ -47,12 +53,41 @@
                 <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="gamma" data-default="1" title="Reset gamma">Reset</button>
             </div>
             <div class="ctrl-row" id="fov-row" hidden>
-                <label class="ctrl-label" for="ctrl-fov">FOV</label>
+                <label class="ctrl-label" for="ctrl-fov">Field of view</label>
                 <input type="range" id="ctrl-fov" class="ctrl-slider" min="1" max="180" step="1" value="60">
                 <span class="ctrl-val" id="val-fov">60°</span>
-                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="fov" title="Reset field of view">Reset</button>
+                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="fov" title="Back to the field of view this page opened with">Reset</button>
             </div>
-            <p class="hint">Changes apply in the game, so every viewer and recording of this camera sees them.</p>
+            <div id="sound-group" hidden>
+                <h2 class="section-title ctrl-heading">Sound</h2>
+                <div class="ctrl-row">
+                    <label class="ctrl-label" for="ctrl-mic">Mic</label>
+                    <select id="ctrl-mic" class="input ctrl-select"></select>
+                </div>
+                <p class="hint ctrl-note" id="mic-hint"></p>
+                <div class="ctrl-row">
+                    <label class="ctrl-label" for="ctrl-sound-gain">Gain</label>
+                    <input type="range" id="ctrl-sound-gain" class="ctrl-slider" min="-24" max="24" step="1" value="0">
+                    <span class="ctrl-val" id="val-sound-gain">0 dB</span>
+                    <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="soundGain" data-default="0" title="Reset gain">Reset</button>
+                </div>
+                <div class="ctrl-row">
+                    <span class="ctrl-label" id="auto-gain-label">Auto gain</span>
+                    <div class="ctrl-choice" role="group" aria-labelledby="auto-gain-label">
+                        <button type="button" class="btn" data-toggle="autoGain" data-on="false" aria-pressed="true">Off</button>
+                        <button type="button" class="btn" data-toggle="autoGain" data-on="true" aria-pressed="false">On</button>
+                    </div>
+                </div>
+                <p class="hint ctrl-note">On top of Gain, keeps this camera near a steady level: slowly lifts quiet sound (up to +24 dB) and brings loud sound down, so booms and ignitions still stand out. Wind and background noise rise with it.</p>
+                <div class="ctrl-row">
+                    <span class="ctrl-label" id="mastering-label">Mastering</span>
+                    <div class="ctrl-choice" role="group" aria-labelledby="mastering-label">
+                        <button type="button" class="btn" data-toggle="mastering" data-on="false" aria-pressed="true">Off</button>
+                        <button type="button" class="btn" data-toggle="mastering" data-on="true" aria-pressed="false">On</button>
+                    </div>
+                </div>
+                <p class="hint ctrl-note">Compresses like the game does with Rocket Sound Enhancement: denser and louder, with less difference between quiet and loud.</p>
+            </div>
         </div>
     </div>
 

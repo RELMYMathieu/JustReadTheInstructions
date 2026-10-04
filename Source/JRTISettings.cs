@@ -34,7 +34,6 @@ namespace JustReadTheInstructions
         public static int StreamJpegQuality { get; internal set; } = 90;
         public static int StreamMaxFps { get; internal set; } = 30;
         public static bool SpreadCaptures { get; internal set; } = true;
-        public static bool InGameRecording { get; internal set; } = true;
 
         public static float FramePeriod => 1f / Mathf.Max(1, StreamMaxFps);
 
@@ -43,6 +42,7 @@ namespace JustReadTheInstructions
         public static bool EnableEVE { get; internal set; } = true;
         public static bool EnableParallax { get; internal set; } = false;
         public static bool EnableFirefly { get; internal set; } = true;
+        public static bool EnableStockAeroFX { get; internal set; } = true;
         public static bool EnableScatterer { get; internal set; } = true;
         public static bool EnableHullcamFilter { get; internal set; } = true;
 
@@ -115,13 +115,13 @@ namespace JustReadTheInstructions
                 StreamJpegQuality = ParseInt(settings, "StreamJpegQuality", StreamJpegQuality);
                 StreamMaxFps = ParseInt(settings, "StreamMaxFps", StreamMaxFps);
                 SpreadCaptures = ParseBool(settings, "SpreadCaptures", SpreadCaptures);
-                InGameRecording = ParseBool(settings, "InGameRecording", InGameRecording);
 
                 EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
                 EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
                 EnableEVE = ParseBool(settings, "EnableEVE", EnableEVE);
                 EnableParallax = ParseBool(settings, "EnableParallax", EnableParallax);
                 EnableFirefly = ParseBool(settings, "EnableFirefly", EnableFirefly);
+                EnableStockAeroFX = ParseBool(settings, "EnableStockAeroFX", EnableStockAeroFX);
                 EnableScatterer = ParseBool(settings, "EnableScatterer", EnableScatterer);
                 EnableHullcamFilter = ParseBool(settings, "EnableHullcamFilter", EnableHullcamFilter);
 
@@ -176,13 +176,13 @@ namespace JustReadTheInstructions
                 settings.AddValue("StreamJpegQuality", StreamJpegQuality);
                 settings.AddValue("StreamMaxFps", StreamMaxFps);
                 settings.AddValue("SpreadCaptures", SpreadCaptures);
-                settings.AddValue("InGameRecording", InGameRecording);
 
                 settings.AddValue("EnableDeferred", EnableDeferred);
                 settings.AddValue("EnableTUFX", EnableTUFX);
                 settings.AddValue("EnableEVE", EnableEVE);
                 settings.AddValue("EnableParallax", EnableParallax);
                 settings.AddValue("EnableFirefly", EnableFirefly);
+                settings.AddValue("EnableStockAeroFX", EnableStockAeroFX);
                 settings.AddValue("EnableScatterer", EnableScatterer);
                 settings.AddValue("EnableHullcamFilter", EnableHullcamFilter);
 

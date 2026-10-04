@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace JustReadTheInstructions
 {
@@ -97,10 +98,13 @@ namespace JustReadTheInstructions
         public static void Unregister(int cameraId) => Cameras.TryRemove(cameraId, out _);
 
         public static void RecordMainThread(int cameraId, CameraMetric metric, long startTicks)
+            => Record(cameraId, metric, RecordMainThread(startTicks));
+
+        public static double RecordMainThread(long startTicks)
         {
             double ms = MsSince(startTicks);
             _frameMainThreadMs += ms;
-            Record(cameraId, metric, ms);
+            return ms;
         }
 
         public static void RecordSince(int cameraId, CameraMetric metric, long startTicks)
@@ -140,6 +144,52 @@ namespace JustReadTheInstructions
         {
             if (Cameras.TryGetValue(cameraId, out var counters))
                 counters.Add(metric, ms);
+        }
+    }
+
+    internal sealed class AudioPerfSample
+    {
+        public int Cameras;
+        public int Voices;
+        public int SkippedSounds;
+        public PerfStat MainMs;
+        public PerfStat MixMs;
+    }
+
+    internal static class AudioPerf
+    {
+        private static readonly object Lock = new object();
+        private static AudioPerfSample _current = new AudioPerfSample();
+        private static int _skippedSounds;
+
+        public static void RecordSnapshot(long startTicks, int cameras, int voices)
+        {
+            double ms = JRTIPerf.RecordMainThread(startTicks);
+            lock (Lock)
+            {
+                _current.MainMs.Add(ms);
+                _current.Cameras = cameras;
+                _current.Voices = voices;
+            }
+        }
+
+        public static void RecordMix(long startTicks)
+        {
+            double ms = JRTIPerf.MsSince(startTicks);
+            lock (Lock) _current.MixMs.Add(ms);
+        }
+
+        public static void RecordSkippedSound() => Interlocked.Increment(ref _skippedSounds);
+
+        public static AudioPerfSample Take()
+        {
+            lock (Lock)
+            {
+                var sample = _current;
+                sample.SkippedSounds = Volatile.Read(ref _skippedSounds);
+                _current = new AudioPerfSample { Cameras = sample.Cameras, Voices = sample.Voices };
+                return sample;
+            }
         }
     }
 }

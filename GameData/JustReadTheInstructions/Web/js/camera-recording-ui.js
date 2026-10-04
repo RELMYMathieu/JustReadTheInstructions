@@ -29,10 +29,9 @@ const REC_STATES = {
 };
 
 export class CameraRecordingUI {
-    constructor(cardEl, { getRecorder, getSnapshotImg, onIdle }) {
+    constructor(cardEl, { getRecorder, onIdle }) {
         this._el = cardEl;
         this._getRecorder = getRecorder;
-        this._getSnapshotImg = getSnapshotImg;
         this._onIdle = onIdle;
 
         this._clockTimer = null;
@@ -59,41 +58,20 @@ export class CameraRecordingUI {
         if (state === 'recording') this._startClock(startedAt);
         else this._stopClock(spec.status);
 
-        if (state === 'idle') {
-            this._unmountCanvas();
-            this._onIdle(this._statusEl);
-        }
+        if (state === 'idle') this._onIdle(this._statusEl);
 
         this._updateSize(state, bytesUploaded);
-    }
-
-    mountCanvas(canvas) {
-        canvas.className = 'rec-live-preview';
-        const snapshotImg = this._getSnapshotImg();
-        const preview = snapshotImg.closest('.preview');
-        preview.querySelector('.offline-overlay').style.display = 'none';
-        snapshotImg.hidden = true;
-        preview.insertBefore(canvas, preview.querySelector('.offline-overlay'));
     }
 
     dispose() {
         this._stopClock(null);
     }
 
-    _unmountCanvas() {
-        const canvas = this._el.querySelector('.rec-live-preview');
-        if (!canvas) return;
-        canvas.remove();
-        const snapshotImg = this._getSnapshotImg();
-        snapshotImg.closest('.preview').querySelector('.offline-overlay').style.display = '';
-        snapshotImg.hidden = false;
-    }
-
     _updateSize(state, bytes) {
         const active = state === 'recording' || state === 'paused' || state === 'finalizing';
         if (active) this._lastBytes = bytes;
         const shown = active ? bytes : this._lastBytes;
-        this._sizeEl.textContent = shown > 0 ? (active ? formatBytes(shown) : `Last ${formatBytes(shown)}`) : '';
+        this._sizeEl.textContent = shown > 0 ? (active ? formatBytes(shown) : `Saved ${formatBytes(shown)}`) : '';
     }
 
     _startClock(startedAt) {

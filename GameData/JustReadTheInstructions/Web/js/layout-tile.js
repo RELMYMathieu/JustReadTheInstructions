@@ -13,7 +13,7 @@ const SIGNAL_OVERLAYS = Object.freeze({
 });
 
 export class LayoutTile {
-    constructor({ id = null, name = null }, { subscribe, onFrameSize, onPick, onSpotlight, onRemove, onGrab }) {
+    constructor({ id = null, name = null }, { subscribe, onFrameSize, onPick, onSpotlight, onListen, onRemove, onGrab }) {
         this.id = id;
         this.name = name;
         this.bound = false;
@@ -32,7 +32,7 @@ export class LayoutTile {
             onDraw: () => this._onFrameDrawn(),
             onResize: onFrameSize,
         });
-        this.el = this._buildDom({ onPick, onSpotlight, onRemove, onGrab });
+        this.el = this._buildDom({ onPick, onSpotlight, onListen, onRemove, onGrab });
         this.el.classList.add('entering');
         this._renderLabel();
         this._setSignal('waiting');
@@ -84,6 +84,15 @@ export class LayoutTile {
         const title = spotlit ? 'Back to the grid' : 'Spotlight: make this tile large';
         this._spotlightBtn.title = title;
         this._spotlightBtn.setAttribute('aria-label', title);
+    }
+
+    setHeard(heard, chosen) {
+        this._soundBtn.setAttribute('aria-pressed', String(heard));
+        const title = !heard ? 'Hear this camera'
+            : chosen ? 'You hear this camera. Click to hear the spotlight again'
+            : 'You hear this camera because it is the spotlight (or the first tile)';
+        this._soundBtn.title = title;
+        this._soundBtn.setAttribute('aria-label', title);
     }
 
     place({ x, y, width, height }) {
@@ -169,7 +178,7 @@ export class LayoutTile {
         this._picker.value = this.camera ? String(this.id) : offline ? OFFLINE_OPTION_VALUE : '';
     }
 
-    _buildDom({ onPick, onSpotlight, onRemove, onGrab }) {
+    _buildDom({ onPick, onSpotlight, onListen, onRemove, onGrab }) {
         this._overlay = h('div', { class: 'offline-overlay' });
         this._nameText = h('span');
         this._nameEl = h('div', { class: 'layout-tile-name' }, h('span', { class: 'lamp' }), this._nameText);
@@ -185,10 +194,11 @@ export class LayoutTile {
         grip.addEventListener('pointerdown', (e) => onGrab(this, e));
 
         this._spotlightBtn = button({ icon: 'spotlight', className: 'btn overlay-btn', title: 'Spotlight: make this tile large', pressed: false, onClick: () => onSpotlight(this) });
+        this._soundBtn = button({ icon: 'sound', className: 'btn overlay-btn', title: 'Hear this camera', pressed: false, onClick: () => onListen(this) });
         const removeBtn = button({ icon: 'close', className: 'btn overlay-btn', title: 'Remove this tile', onClick: () => onRemove(this) });
 
         const bar = h('div', { class: 'layout-tile-bar layout-chrome' },
-            grip, this._picker, h('div', { class: 'tile-bar-end' }, this._spotlightBtn, removeBtn));
+            grip, this._picker, h('div', { class: 'tile-bar-end' }, this._soundBtn, this._spotlightBtn, removeBtn));
 
         const tile = h('div', { class: 'layout-tile' }, this._feed.el, this._overlay, this._nameEl, bar);
         tile.addEventListener('dblclick', (e) => {

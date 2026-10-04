@@ -26,7 +26,6 @@ namespace JustReadTheInstructions
         private string _renderHeight;
         private string _antiAliasing;
         private bool _spreadCaptures;
-        private bool _inGameRecording;
         private bool _enableStreamServer;
         private string _streamPort;
 
@@ -276,12 +275,11 @@ namespace JustReadTheInstructions
             DrawToggle(ref _spreadCaptures, "Spread camera renders across frames (recommended)");
             GUILayout.Label("Cameras take turns instead of all rendering on the same frame, for smoother frame times. Each camera keeps its own frame rate.", _descriptionStyle);
             GUILayout.Space(6);
-            DrawToggle(ref _inGameRecording, "Record in game with the graphics card's video encoder  (recommended)");
-            GUILayout.Label("Recordings are saved as H.264 MP4 at the render resolution, encoded by the graphics card. Windows uses its built-in encoder; Linux and macOS use ffmpeg if it is installed. Turn off to use the legacy browser recorder (removed in v3.0.0).", _descriptionStyle);
+            GUILayout.Label("In-game recording", _labelStyle);
+            GUILayout.Label("Recordings are saved as H.264 MP4 at the render resolution, encoded by the graphics card. Windows uses its built-in encoder, plus ffmpeg for AV1 if found; Linux and macOS use ffmpeg if it is installed, and KSP through Proton uses a Linux ffmpeg placed in PluginData/ffmpeg.", _descriptionStyle);
             VideoEncoders.Prepare();
-            if (_inGameRecording)
-                GUILayout.Label(VideoEncoders.IsAvailable ? VideoEncoders.Status : "⚠ " + VideoEncoders.Status,
-                    VideoEncoders.IsAvailable ? _descriptionStyle : _warningStyle);
+            GUILayout.Label(VideoEncoders.IsAvailable ? VideoEncoders.Status : "⚠ " + VideoEncoders.Status,
+                VideoEncoders.IsAvailable ? _descriptionStyle : _warningStyle);
             GUILayout.Space(6);
             DrawToggle(ref _enableDockingOverlay, "Render overlay with telemetry on docking cameras");
             GUILayout.Space(2);
@@ -311,7 +309,7 @@ namespace JustReadTheInstructions
                 JRTISettings.EnableTUFX,
                 v => JRTISettings.EnableTUFX = v,
                 TUFXIntegration.IsAvailable,
-                "TUFX post-processing effects (bloom, tone-mapping, etc.)"
+                "TUFX post-processing effects (bloom, tone-mapping, etc.), without motion blur"
             );
             GUILayout.Space(5);
             DrawIntegrationToggle(
@@ -344,6 +342,14 @@ namespace JustReadTheInstructions
                 v => JRTISettings.EnableFirefly = v,
                 FireflyIntegration.IsAvailable,
                 "Firefly - atmospheric re-entry plasma effects near camera"
+            );
+            GUILayout.Space(5);
+            DrawIntegrationToggle(
+                "Stock Aero Effects",
+                JRTISettings.EnableStockAeroFX,
+                v => JRTISettings.EnableStockAeroFX = v,
+                StockAeroFX.IsAvailable,
+                "Stock re-entry and Mach effects of the vessel you fly (Firefly replaces them)"
             );
             GUILayout.Space(8);
             DrawIntegrationToggle(
@@ -479,7 +485,6 @@ namespace JustReadTheInstructions
             if (int.TryParse(_renderHeight, out int h)) JRTISettings.RenderHeight = h;
             if (int.TryParse(_antiAliasing, out int aa)) JRTISettings.AntiAliasing = aa;
             JRTISettings.SpreadCaptures = _spreadCaptures;
-            JRTISettings.InGameRecording = _inGameRecording;
             JRTISettings.EnableStreamServer = _enableStreamServer;
             JRTISettings.EnableDockingOverlay = _enableDockingOverlay;
             JRTISettings.FixedPreviewAspectRatio = _fixedPreviewAspectRatio;
@@ -500,7 +505,6 @@ namespace JustReadTheInstructions
             _renderHeight = JRTISettings.RenderHeight.ToString();
             _antiAliasing = JRTISettings.AntiAliasing.ToString();
             _spreadCaptures = JRTISettings.SpreadCaptures;
-            _inGameRecording = JRTISettings.InGameRecording;
             _enableStreamServer = JRTISettings.EnableStreamServer;
             _enableDockingOverlay = JRTISettings.EnableDockingOverlay;
             _fixedPreviewAspectRatio = JRTISettings.FixedPreviewAspectRatio;
@@ -519,6 +523,7 @@ namespace JustReadTheInstructions
             Debug.Log($"[JRTI-Diag]: EVE:      Available={EVEIntegration.IsAvailable}, Enabled={JRTISettings.EnableEVE}");
             Debug.Log($"[JRTI-Diag]: Parallax: Available={ParallaxIntegration.IsAvailable}, Enabled={JRTISettings.EnableParallax}");
             Debug.Log($"[JRTI-Diag]: Firefly:  Available={FireflyIntegration.IsAvailable}, Enabled={JRTISettings.EnableFirefly}");
+            Debug.Log($"[JRTI-Diag]: Stock aero FX: Available={StockAeroFX.IsAvailable}, Enabled={JRTISettings.EnableStockAeroFX}");
             Debug.Log($"[JRTI-Diag]: Scatterer:Available={ScattererIntegration.IsAvailable}, Enabled={JRTISettings.EnableScatterer}");
             Debug.Log($"[JRTI-Diag]: HullcamFilter: Available={HullcamFilterIntegration.IsAvailable}, Enabled={JRTISettings.EnableHullcamFilter}");
             if (ParallaxIntegration.IsAvailable)

@@ -22,10 +22,10 @@ namespace JustReadTheInstructions
         public int StreamClients;
         public int PreviewClients;
         public int Recordings;
-        public double RecordingKbps;
         public bool SpreadCaptures;
         public int MaxFps;
         public List<CameraPerfSample> Cameras;
+        public AudioPerfSample Audio;
 
         public double PerSecond(double count) => Seconds > 0.0 ? count / Seconds : 0.0;
     }
@@ -65,10 +65,16 @@ namespace JustReadTheInstructions
             Global("stream_clients", s => s.StreamClients),
             Global("preview_clients", s => s.PreviewClients),
             Global("recordings", s => s.Recordings),
-            Global("recording_kbps", s => s.RecordingKbps),
             Global("spread", s => s.SpreadCaptures ? 1 : 0),
             Global("max_fps", s => s.MaxFps),
             Global("camera_count", s => s.Cameras.Count),
+            Global("audio_cameras", s => s.Audio.Cameras),
+            Global("audio_voices", s => s.Audio.Voices),
+            Global("audio_main_ms_avg", s => s.Audio.MainMs.Average),
+            Global("audio_main_ms_max", s => s.Audio.MainMs.Max),
+            Global("audio_mix_ms_avg", s => s.Audio.MixMs.Average),
+            Global("audio_mix_ms_max", s => s.Audio.MixMs.Max),
+            Global("audio_skipped_sounds", s => s.Audio.SkippedSounds),
         };
 
         public static readonly PerfColumn<CameraPerfSample>[] CameraColumns =

@@ -1,20 +1,23 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
 namespace JustReadTheInstructions
 {
-    internal sealed class Mp4Recorder : IDisposable
+    internal sealed class Mp4Recorder : IAudioSink, IDisposable
     {
         private const int MaxQueuedFrames = 8;
+        private const int MaxQueuedAudioBlocks = 50;
         private const double MaxRepeatedGapSeconds = 2;
         private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(10);
 
         private struct QueuedFrame
         {
             public object Frame;
+            public byte[] Audio;
             public long Ticks;
         }
 
@@ -23,6 +26,7 @@ namespace JustReadTheInstructions
         public int FramesDropped => _framesDropped;
         public string Error => _error;
         public bool IsPaused => Interlocked.Read(ref _pausedAt) != 0;
+        public bool IsOpen => _stopping == 0 && _error == null;
         public string EncoderDescription => _encoder?.Description ?? "";
 
         private readonly int _fps;
@@ -33,6 +37,9 @@ namespace JustReadTheInstructions
         private readonly ManualResetEventSlim _started = new ManualResetEventSlim(false);
         private readonly Thread _thread;
         private volatile IVideoEncoder _encoder;
+        private volatile bool _recordsAudio;
+        private int _queuedFrames;
+        private int _queuedAudioBlocks;
         private volatile string _error;
         private volatile bool _discard;
         private int _stopping;
@@ -66,7 +73,7 @@ namespace JustReadTheInstructions
             var encoder = _encoder;
             if (encoder == null || _stopping != 0 || _error != null || IsPaused || bottomUpRgba.Length != _frameBytes) return;
 
-            if (_queue.Count >= MaxQueuedFrames)
+            if (Volatile.Read(ref _queuedFrames) >= MaxQueuedFrames)
             {
                 Interlocked.Increment(ref _framesDropped);
                 return;
@@ -76,6 +83,7 @@ namespace JustReadTheInstructions
             try
             {
                 frame = encoder.CopyFrame(bottomUpRgba);
+                Interlocked.Increment(ref _queuedFrames);
                 _queue.Add(new QueuedFrame { Frame = frame, Ticks = timestamp - Interlocked.Read(ref _pausedTicks) });
             }
             catch (InvalidOperationException) when (_stopping != 0)
@@ -88,6 +96,16 @@ namespace JustReadTheInstructions
                 _error = ex.Message;
                 Stop();
             }
+        }
+
+        public void Push(AudioBlock block)
+        {
+            if (!_recordsAudio || !IsOpen || IsPaused) return;
+            if (Volatile.Read(ref _queuedAudioBlocks) >= MaxQueuedAudioBlocks) return;
+
+            Interlocked.Increment(ref _queuedAudioBlocks);
+            try { _queue.Add(new QueuedFrame { Audio = block.Pcm, Ticks = block.Ticks - Interlocked.Read(ref _pausedTicks) }); }
+            catch (InvalidOperationException) { }
         }
 
         public void Pause() => Interlocked.CompareExchange(ref _pausedAt, Stopwatch.GetTimestamp(), 0);
@@ -130,18 +148,38 @@ namespace JustReadTheInstructions
             {
                 encoder = _createEncoder();
                 _encoder = encoder;
+                var audio = encoder.Audio != null ? new RecordingAudioTrack(encoder.Audio) : null;
+                _recordsAudio = audio != null;
                 _started.Set();
 
                 var clock = new ConstantRateClock(_fps, MaxRepeatedGapSeconds);
+                var audioBeforeFirstFrame = new List<QueuedFrame>();
+                long lastFrame = -1;
                 foreach (var queued in _queue.GetConsumingEnumerable())
                 {
+                    if (queued.Audio != null)
+                    {
+                        Interlocked.Decrement(ref _queuedAudioBlocks);
+                        if (lastFrame >= 0)
+                        {
+                            WriteAudio(audio, clock, queued);
+                            continue;
+                        }
+                        if (audioBeforeFirstFrame.Count == MaxQueuedAudioBlocks) audioBeforeFirstFrame.RemoveAt(0);
+                        audioBeforeFirstFrame.Add(queued);
+                        continue;
+                    }
+
+                    Interlocked.Decrement(ref _queuedFrames);
                     current = queued.Frame;
                     if (clock.TryPlace(queued.Ticks, out long repeats, out long frameIndex))
                     {
+                        if (lastFrame < 0 && audio != null) StartAudio(audio, clock, audioBeforeFirstFrame, frameIndex);
                         for (long repeat = repeats; repeat > 0; repeat--)
-                            encoder.Encode(previous, frameIndex - repeat);
-                        encoder.Encode(current, frameIndex);
+                            EncodeFrame(encoder, audio, clock, previous, frameIndex - repeat);
+                        EncodeFrame(encoder, audio, clock, current, frameIndex);
                         Interlocked.Increment(ref _framesWritten);
+                        lastFrame = frameIndex;
                     }
                     else
                     {
@@ -153,6 +191,7 @@ namespace JustReadTheInstructions
                     current = null;
                 }
 
+                if (lastFrame >= 0) audio?.FillUntil(clock.FrameEndSeconds(lastFrame));
                 encoder.Finish();
                 return true;
             }
@@ -162,7 +201,7 @@ namespace JustReadTheInstructions
                 _started.Set();
                 Stop();
                 while (_queue.TryTake(out var queued))
-                    encoder?.ReleaseFrame(queued.Frame);
+                    if (queued.Frame != null) encoder?.ReleaseFrame(queued.Frame);
                 return false;
             }
             finally
@@ -171,6 +210,24 @@ namespace JustReadTheInstructions
                 if (previous != null) encoder?.ReleaseFrame(previous);
                 encoder?.Dispose();
             }
+        }
+
+        private static void EncodeFrame(IVideoEncoder encoder, RecordingAudioTrack audio, ConstantRateClock clock, object frame, long frameIndex)
+        {
+            audio?.KeepUpWith(clock.FrameEndSeconds(frameIndex));
+            encoder.Encode(frame, frameIndex);
+        }
+
+        private static void StartAudio(RecordingAudioTrack audio, ConstantRateClock clock, List<QueuedFrame> early, long firstFrame)
+        {
+            foreach (var queued in early) WriteAudio(audio, clock, queued);
+            early.Clear();
+            audio.FillUntil(clock.FrameEndSeconds(firstFrame));
+        }
+
+        private static void WriteAudio(RecordingAudioTrack audio, ConstantRateClock clock, QueuedFrame queued)
+        {
+            if (clock.TryGetSeconds(queued.Ticks, out double seconds)) audio.Write(queued.Audio, seconds);
         }
 
         private void MakeSeekable()

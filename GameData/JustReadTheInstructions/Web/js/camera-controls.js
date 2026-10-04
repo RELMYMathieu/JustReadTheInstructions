@@ -1,7 +1,10 @@
 import { getCameraSettings, setCameraSettings } from './api.js';
+import { MICS } from './config.js';
+import { toast } from './ui.js';
 
-const DEFAULTS = { brightness: 0, contrast: 1, gamma: 1 };
+const DEFAULTS = { brightness: 0, contrast: 1, gamma: 1, soundGain: 0 };
 const POST_DELAY_MS = 300;
+const SOUND_TOGGLES = ['autoGain', 'mastering'];
 
 let panel = null;
 
@@ -14,10 +17,27 @@ export function initControls(cameraId) {
     panel = document.getElementById('controls-panel');
     if (!toggle || !panel) return;
 
+    const controls = {
+        brightness: { slider: document.getElementById('ctrl-brightness'), display: document.getElementById('val-brightness'), fmt: v => (+v).toFixed(2) },
+        contrast: { slider: document.getElementById('ctrl-contrast'), display: document.getElementById('val-contrast'), fmt: v => (+v).toFixed(2) },
+        gamma: { slider: document.getElementById('ctrl-gamma'), display: document.getElementById('val-gamma'), fmt: v => (+v).toFixed(2) },
+        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), fmt: v => `${Math.round(+v)}°` },
+        soundGain: { slider: document.getElementById('ctrl-sound-gain'), display: document.getElementById('val-sound-gain'), fmt: v => `${+v > 0 ? '+' : ''}${Math.round(+v)} dB` },
+    };
+    const sound = {
+        group: document.getElementById('sound-group'),
+        mic: document.getElementById('ctrl-mic'),
+        toggles: [...document.querySelectorAll('[data-toggle]')],
+    };
+    sound.mic.append(...MICS.map((mic) => new Option(mic.label, mic.id)));
+    const sent = {};
+    const load = () => loadSettings(cameraId, controls, sound, sent);
+
     const setOpen = (open) => {
         panel.hidden = !open;
         toggle.setAttribute('aria-expanded', String(open));
         toggle.classList.toggle('active', open);
+        if (open) load();
     };
 
     toggle.addEventListener('click', (e) => {
@@ -36,18 +56,23 @@ export function initControls(cameraId) {
         }
     });
 
-    const controls = {
-        brightness: { slider: document.getElementById('ctrl-brightness'), display: document.getElementById('val-brightness'), fmt: v => (+v).toFixed(2) },
-        contrast: { slider: document.getElementById('ctrl-contrast'), display: document.getElementById('val-contrast'), fmt: v => (+v).toFixed(2) },
-        gamma: { slider: document.getElementById('ctrl-gamma'), display: document.getElementById('val-gamma'), fmt: v => (+v).toFixed(2) },
-        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), fmt: v => `${Math.round(+v)}°` },
-    };
-
     let debounce;
     const schedulePost = () => {
         clearTimeout(debounce);
-        debounce = setTimeout(() => postSettings(cameraId, controls), POST_DELAY_MS);
+        debounce = setTimeout(() => postChanges(cameraId, readValues(controls, sound), sent), POST_DELAY_MS);
     };
+
+    sound.mic.addEventListener('change', () => {
+        showMicHint(sound.mic.value);
+        schedulePost();
+    });
+
+    for (const btn of sound.toggles) {
+        btn.addEventListener('click', () => {
+            setToggle(sound, btn.dataset.toggle, btn.dataset.on === 'true');
+            schedulePost();
+        });
+    }
 
     for (const ctrl of Object.values(controls)) {
         if (!ctrl.slider) continue;
@@ -71,30 +96,57 @@ export function initControls(cameraId) {
         });
     });
 
-    loadSettings(cameraId, controls);
+    load();
 }
 
-async function loadSettings(cameraId, controls) {
+function showMicHint(value) {
+    const hint = document.getElementById('mic-hint');
+    if (hint) hint.textContent = MICS.find((mic) => mic.id === value)?.hint ?? '';
+}
+
+function setToggle(sound, key, on) {
+    for (const btn of sound.toggles)
+        if (btn.dataset.toggle === key) btn.setAttribute('aria-pressed', String((btn.dataset.on === 'true') === on));
+}
+
+function isToggleOn(sound, key) {
+    return sound.toggles.some((btn) => btn.dataset.toggle === key && btn.dataset.on === 'true' && btn.getAttribute('aria-pressed') === 'true');
+}
+
+async function loadSettings(cameraId, controls, sound, sent) {
     try {
         const s = await getCameraSettings(cameraId);
         setSlider(controls.brightness, s.brightness ?? 0);
         setSlider(controls.contrast, s.contrast ?? 1);
         setSlider(controls.gamma, s.gamma ?? 1);
 
+        const hasSound = typeof s.mic === 'string';
+        sound.group.hidden = !hasSound;
+        if (hasSound) {
+            sound.mic.value = s.mic;
+            showMicHint(s.mic);
+            setSlider(controls.soundGain, s.soundGain ?? 0);
+            for (const key of SOUND_TOGGLES) setToggle(sound, key, s[key] === true);
+        }
+
         const fovRow = document.getElementById('fov-row');
-        if (s.fov != null && s.fovMax > s.fovMin) {
+        if (s.fov != null && s.fovMax > s.fovMin && controls.fov?.slider) {
             const c = controls.fov;
-            if (!c?.slider) return;
             c.slider.min = s.fovMin;
             c.slider.max = s.fovMax;
-            document.querySelector('[data-reset="fov"]').dataset.default = s.fov;
+            const fovReset = document.querySelector('[data-reset="fov"]');
+            fovReset.dataset.default ??= s.fov;
             setSlider(c, s.fov);
             if (fovRow) fovRow.hidden = false;
         } else if (fovRow) {
             fovRow.hidden = true;
         }
+
+        for (const key of Object.keys(sent)) delete sent[key];
+        Object.assign(sent, readValues(controls, sound));
     } catch (err) {
         console.warn('[JRTI] Failed to load camera settings:', err);
+        toast('Could not load the settings of this camera from the game');
     }
 }
 
@@ -104,16 +156,30 @@ function setSlider(ctrl, value) {
     ctrl.display.textContent = ctrl.fmt(value);
 }
 
-async function postSettings(cameraId, controls) {
+function readValues(controls, sound) {
+    const values = {
+        brightness: +controls.brightness.slider.value,
+        contrast: +controls.contrast.slider.value,
+        gamma: +controls.gamma.slider.value,
+    };
+    if (!document.getElementById('fov-row')?.hidden && controls.fov?.slider)
+        values.fov = +controls.fov.slider.value;
+    if (!sound.group.hidden) {
+        values.mic = sound.mic.value;
+        values.soundGain = +controls.soundGain.slider.value;
+        for (const key of SOUND_TOGGLES) values[key] = isToggleOn(sound, key);
+    }
+    return values;
+}
+
+async function postChanges(cameraId, values, sent) {
+    const changes = Object.fromEntries(Object.entries(values).filter(([key, value]) => sent[key] !== value));
+    if (Object.keys(changes).length === 0) return;
+    Object.assign(sent, changes);
     try {
-        const payload = {
-            brightness: +controls.brightness.slider.value,
-            contrast: +controls.contrast.slider.value,
-            gamma: +controls.gamma.slider.value,
-        };
-        const fovRow = document.getElementById('fov-row');
-        if (!fovRow?.hidden && controls.fov?.slider)
-            payload.fov = +controls.fov.slider.value;
-        await setCameraSettings(cameraId, payload);
-    } catch { }
+        await setCameraSettings(cameraId, changes);
+    } catch {
+        for (const key of Object.keys(changes)) delete sent[key];
+        toast('Could not apply the change in the game. Is KSP still in a flight?');
+    }
 }
