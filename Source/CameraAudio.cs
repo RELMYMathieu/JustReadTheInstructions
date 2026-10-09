@@ -14,7 +14,6 @@ namespace JustReadTheInstructions
         private const float SourceRefreshSeconds = 0.25f;
         private const float MinPanDistance = 0.001f;
         private const float MinVoiceVolume = 0.0001f;
-        private const float DefaultSpeedOfSound = 343f;
         private const float MaxBoomControlMach = 4f;
         private const long FirstOneShotId = (long)int.MaxValue + 1;
         private const long FirstShipLayerId = 1L << 48;
@@ -119,16 +118,14 @@ namespace JustReadTheInstructions
                 if (listeners[i].View != null) _boomListeners.Add(new BoomListener(cameraIds[i], listeners[i].View.position, listeners[i].Vessel));
 
             _boomHits.Clear();
-            _boomDetector.Update(_boomListeners, _boomHits);
+            _boomDetector.Update(_boomListeners, _boomHits, Time.unscaledTime);
             float exterior = RSEIntegration.ExteriorVolume() * GameSettings.SHIP_VOLUME;
             foreach (var hit in _boomHits)
             {
                 var source = hit.Source;
                 if (!HasShipSounds(source)) continue;
                 var listener = listeners[Array.IndexOf(cameraIds, hit.CameraId)];
-                float soundSpeed = SpeedOfSoundBetween(source, listener);
-                float arrival = hit.OwnVessel ? 0f : hit.Distance / soundSpeed;
-                float tailShock = hit.OwnVessel ? 0f : SoundPaths.TailShockDelay(source.vesselSize.magnitude, (float)(source.srfSpeed / soundSpeed), hit.Distance, soundSpeed);
+                float tailShock = SoundPaths.TailShockDelay(source.vesselSize.magnitude, (float)(source.srfSpeed / hit.SpeedOfSound), hit.Distance, hit.SpeedOfSound);
                 float pan = PanOf(hit.SourcePosition - listener.View.position, hit.Distance, listener.View, 1f);
                 float control = Mathf.Min(RSEIntegration.EffectiveMach(source), MaxBoomControlMach);
                 float mass = (float)source.totalMass;
@@ -142,18 +139,11 @@ namespace JustReadTheInstructions
 
                     var path = SoundPaths.Boom(listener.Mic, gain, pan, listener.AirFactor);
                     float pitch = layer.Pitch(control, mass);
-                    float startsAt = Time.unscaledTime + arrival;
+                    float startsAt = Time.unscaledTime + hit.TravelSeconds;
                     _booms.Add(new Boom(_nextOneShotId++, hit.CameraId, pcm, pitch, path, startsAt));
                     if (tailShock > 0f) _booms.Add(new Boom(_nextOneShotId++, hit.CameraId, pcm, pitch, path, startsAt + tailShock));
                 }
             }
-        }
-
-        private static float SpeedOfSoundBetween(Vessel source, Listener listener)
-        {
-            float atSource = (float)source.speedOfSound;
-            if (atSource <= 1f) return DefaultSpeedOfSound;
-            return listener.SpeedOfSound > 1f ? (atSource + listener.SpeedOfSound) * 0.5f : atSource;
         }
 
         private static Listener[] Listeners(int[] cameraIds, out CameraMix[] cameras)
@@ -283,8 +273,9 @@ namespace JustReadTheInstructions
         private void AddVoice(long id, Emitter emitter, ClipPcm pcm, int timeSamples, float pitch, bool loop, Listener[] listeners)
         {
             var paths = new VoicePath[listeners.Length];
+            float now = Time.unscaledTime;
             for (int i = 0; i < listeners.Length; i++)
-                paths[i] = emitter.PathTo(listeners[i]);
+                paths[i] = emitter.PathTo(listeners[i], _boomDetector, now);
             _voices.Add(new VoiceState(id, pcm, timeSamples, pitch * pcm.Frequency, loop, paths));
         }
 
@@ -371,7 +362,7 @@ namespace JustReadTheInstructions
                 => new Emitter(entry, entry.Source.transform.position, entry.Vessel, volume, entry.Source.spatialBlend, entry.IsInterior,
                     entry.Source.mute, entry.ThrustKn, entry.LoudnessScalesWithThrust, entry.AirSim);
 
-            public VoicePath PathTo(Listener listener)
+            public VoicePath PathTo(Listener listener, SonicBoomDetector shocks, float now)
             {
                 if (listener.View == null) return VoicePath.Silent;
 
@@ -399,7 +390,7 @@ namespace JustReadTheInstructions
                     Behind = 1f - viewAngle / 180f,
                     AheadOfCone = SoundPaths.AheadOfCone(viewAngle, _mach),
                     Mach = _mach,
-                    ShockMuffle = SoundPaths.ShockMuffle(viewAngle, _mach),
+                    AheadOfShock = _vessel != null && shocks.Silences(_vessel, listener.CameraId, now),
                 });
             }
         }

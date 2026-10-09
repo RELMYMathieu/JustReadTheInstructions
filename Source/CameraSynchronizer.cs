@@ -15,7 +15,7 @@ namespace JustReadTheInstructions
             if (SourceCamera == null || SourceCamera.transform == null || transform == null)
                 return;
 
-            transform.position = ScaledSpace.LocalToScaledSpace(SourceCamera.transform.localPosition);
+            transform.position = ScaledSpace.LocalToScaledSpace(SourceCamera.transform.position);
             transform.rotation = SourceCamera.transform.rotation;
         }
     }

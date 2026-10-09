@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cameras reach their Max FPS while watched - the next frame no longer waits for the previous stream picture to be encoded, so a recorded or streamed camera at high JPEG quality no longer stalls around 30 fps
 - Streams no longer lag after switching back to the browser - the viewer, layout and camera cards pause their streams while the tab is hidden and reconnect live when it is shown, and big frames are read with much less copying
+- Moving parts no longer flicker on camera feeds - feeds are now drawn once every part has finished moving for the frame, as the game view is, so landing leg struts (example: KRE landing legs) stop jumping between deployed and stowed and animated parts stop shaking
+- Part details close to a surface no longer shimmer - feeds now get the same high-precision depth as the game view (32 bits instea of 24) so we get less odd "shimmering" on the edges of parts (unsure how to describe it with words haha)
+- No more stray wet-surface patterns on camera feeds with EVE - each feed now draws its own wet surfaces instead of reusing the game view's, which put a strange dotted pattern on the feed that moved with the game camera.
+- Sky and planets seen from the camera's own position - planets, atmosphere and stars on a feed were drawn from the active vessel's position, so a ground camera filming a launch showed the sky as seen from the rocket
+- Stars fade per camera - each feed now dims the star skybox for its own air, daylight and sun glare, instead of reusing the game view's, so a ground camera keeps a daytime sky while the game view is in space or zoomed far out (this is an experimental fix, for now!)
+- No sonic boom on a vessel's own cameras - a camera onboard a vessel no longer hears a boom when the vessel crosses Mach 1, since its shock trails behind and never reaches it (hi physics!)
+- Nothing heard from a vessel before its boom - a vessel coming toward a camera faster than sound stays silent there on the External mic type (a faint rumble on Game mix, as should be the case) until its boom arrives, so a landing booster's engines no longer light up before its boom is heard, note that this is something that will be tweaked with more time to make the sound replication more accurate, I am not perfect at this...
 
 
 ## v3.0.0 - 2026-10-04

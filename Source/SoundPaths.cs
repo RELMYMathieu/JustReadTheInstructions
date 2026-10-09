@@ -107,13 +107,13 @@ namespace JustReadTheInstructions
         public float Behind;
         public float AheadOfCone;
         public float Mach;
-        public float ShockMuffle;
+        public bool AheadOfShock;
     }
 
     internal static class SoundPaths
     {
         private const float SeaLevelDensity = 1.225f;
-        private const float DefaultSpeedOfSound = 343f;
+        public const float DefaultSpeedOfSound = 343f;
         private const float ReferenceDistance = 15f;
         private const float ReferenceThrustKn = 60f;
         private const float PhysicalReachExponent = 0.5f;
@@ -155,8 +155,6 @@ namespace JustReadTheInstructions
 
         public static float MachAngleDegrees(float mach) => mach > 1f ? (float)(Math.Asin(1.0 / mach) * 180.0 / Math.PI) : 90f;
 
-        public static float ShockMuffle(float viewAngle, float mach) => mach > 1f ? Clamp01(viewAngle / MachAngleDegrees(mach)) : 0f;
-
         public static float AheadOfCone(float viewAngle, float mach)
         {
             float cone = MachAngleDegrees(mach);
@@ -184,8 +182,8 @@ namespace JustReadTheInstructions
         public static VoicePath For(CameraMic mic, PathInputs input)
         {
             var path = ForMic(mic, input);
-            if (input.SameVessel || input.ShockMuffle <= 0f) return path;
-            return path.Muffled(Lerp(1f, ShockMuffledGain, input.ShockMuffle), LogLerp(VoicePath.OpenCutoff, ShockMuffledCutoff, input.ShockMuffle));
+            if (!input.AheadOfShock) return path;
+            return mic == CameraMic.Game ? path.Muffled(ShockMuffledGain, ShockMuffledCutoff) : VoicePath.Silent;
         }
 
         private static VoicePath ForMic(CameraMic mic, PathInputs input)
@@ -264,8 +262,6 @@ namespace JustReadTheInstructions
         }
 
         private static float Lerp(float a, float b, float t) => a + (b - a) * t;
-
-        private static float LogLerp(float a, float b, float t) => (float)Math.Exp(Math.Log(a) + (Math.Log(b) - Math.Log(a)) * t);
 
         private static float Clamp01(float value) => value < 0f ? 0f : value > 1f ? 1f : value;
     }

@@ -90,7 +90,7 @@ namespace JustReadTheInstructions
             TargetTexture = new RenderTexture(
                 JRTISettings.RenderWidth,
                 JRTISettings.RenderHeight,
-                24,
+                32,
                 RenderTextureFormat.ARGB32
             )
             {
@@ -368,6 +368,8 @@ namespace JustReadTheInstructions
 
                 if (i == NearCameraIndex && filterActive)
                     HullcamFilterIntegration.RenderWithFilter(camera, _hullCamera);
+                else if (i == GalaxyCameraIndex)
+                    GalaxySkyboxFade.Render(camera, _cameras[NearCameraIndex]);
                 else
                     camera.Render();
             }
@@ -663,7 +665,8 @@ namespace JustReadTheInstructions
             var info = $"=== {GetDisplayName()} ===\n";
             info += $"Instance ID: {InstanceId}\n";
             info += $"Active: {IsActive}\n";
-            info += $"Valid: {IsValid()}\n\n";
+            info += $"Valid: {IsValid()}\n";
+            info += $"Depth buffer: {TargetTexture?.depth ?? 0} bits\n\n";
 
             foreach (var camera in _cameras)
             {
@@ -672,6 +675,7 @@ namespace JustReadTheInstructions
                     info += $"--- {camera.name} ---\n";
                     info += $"Enabled: {camera.enabled}\n";
                     info += $"FOV: {camera.fieldOfView}\n";
+                    info += $"Clip planes: {camera.nearClipPlane} - {camera.farClipPlane}\n";
                     info += $"allowMSAA: {camera.allowMSAA}\n";
                     info += DeferredIntegration.GetDiagnosticInfo(camera);
                     info += TUFXIntegration.GetDiagnosticInfo(camera);

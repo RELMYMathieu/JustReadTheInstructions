@@ -12,6 +12,8 @@ namespace JustReadTheInstructions
         private static Assembly _eveAssembly;
 
         private static Type _wetSurfacesRendererType;
+        private static FieldInfo _wetSurfacesMaterialField;
+        private static MethodInfo _wetSurfacesSetMaterial;
         private static Type _screenSpaceShadowsRendererType;
         private static Type _volumetricCloudsRendererType;
         private static Type _particleFieldRendererType;
@@ -64,6 +66,8 @@ namespace JustReadTheInstructions
                     Debug.Log($"[JRTI-EVE]: Found EVE assembly: {_eveAssembly.GetName().Name}");
 
                     _wetSurfacesRendererType = _eveAssembly.GetType("Atmosphere.WetSurfacesPerCameraRenderer");
+                    _wetSurfacesMaterialField = _wetSurfacesRendererType?.GetField("mat", BindingFlags.NonPublic | BindingFlags.Instance);
+                    _wetSurfacesSetMaterial = _wetSurfacesRendererType?.GetMethod("SetMaterial", new[] { typeof(Material) });
                     _screenSpaceShadowsRendererType = _eveAssembly.GetType("Atmosphere.ScreenSpaceShadowsRenderer");
                     _volumetricCloudsRendererType = _eveAssembly.GetType("Atmosphere.DeferredRaymarchedVolumetricCloudsRenderer");
                     _particleFieldRendererType = _eveAssembly.GetType("Atmosphere.ParticleField+ParticleFieldRenderer");
@@ -125,13 +129,24 @@ namespace JustReadTheInstructions
         private static void ApplyNewEve(Camera targetCamera, Camera referenceCamera, bool includeLocalEffects)
         {
             if (includeLocalEffects)
-            {
-                AddEVEComponent(targetCamera, referenceCamera, _wetSurfacesRendererType, "WetSurfacesRenderer");
-                AddEVEComponent(targetCamera, referenceCamera, _particleFieldRendererType, "ParticleFieldRenderer");
-            }
+                ShareWetSurfacesMaterial(targetCamera, referenceCamera);
+        }
 
-            AddEVEComponent(targetCamera, referenceCamera, _volumetricCloudsRendererType, "VolumetricCloudsRenderer");
-            CopyEVECommandBuffers(referenceCamera, targetCamera, NewEveEvents, namedOnly: true);
+        private static void ShareWetSurfacesMaterial(Camera targetCamera, Camera referenceCamera)
+        {
+            if (_wetSurfacesMaterialField == null || _wetSurfacesSetMaterial == null)
+                return;
+
+            var referenceRenderer = referenceCamera.GetComponent(_wetSurfacesRendererType);
+            if (referenceRenderer == null || !(_wetSurfacesMaterialField.GetValue(referenceRenderer) is Material material))
+                return;
+
+            var renderer = targetCamera.GetComponent(_wetSurfacesRendererType);
+            if (renderer == null)
+                renderer = targetCamera.gameObject.AddComponent(_wetSurfacesRendererType);
+
+            _wetSurfacesSetMaterial.Invoke(renderer, new object[] { material });
+            Debug.Log($"[JRTI-EVE]: Shared wet surfaces material with {targetCamera.name}");
         }
 
         private static void ApplyOldEve(Camera targetCamera, Camera referenceCamera)

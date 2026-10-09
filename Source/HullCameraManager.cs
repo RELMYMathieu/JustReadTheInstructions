@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using HullcamVDS;
@@ -34,6 +35,8 @@ namespace JustReadTheInstructions
             }
         }
 
+        private static readonly WaitForEndOfFrame EndOfFrame = new WaitForEndOfFrame();
+
         private readonly List<DueRender> _dueRenders = new List<DueRender>();
         private readonly HashSet<int> _deferredRenders = new HashSet<int>();
         private readonly Dictionary<int, FrameSchedule> _windowSchedules = new Dictionary<int, FrameSchedule>();
@@ -50,6 +53,8 @@ namespace JustReadTheInstructions
             Debug.Log("[JRTI]: Camera Manager initialized");
         }
 
+        void Start() => StartCoroutine(RenderAfterFrameSettles());
+
         void OnDestroy()
         {
             if (Instance == this)
@@ -65,7 +70,6 @@ namespace JustReadTheInstructions
         {
             RebuildCamerasAfterMapView();
             AutoStreamNewCameras();
-            UpdateAllRenderers();
             SyncStreamServerState();
             if (Time.frameCount % 60 == 0)
                 CleanupInvalidCameras();
@@ -89,6 +93,15 @@ namespace JustReadTheInstructions
             _rebuildCamerasAt = -1f;
             foreach (var renderer in _renderers.Values)
                 renderer.RebuildCameras();
+        }
+
+        private IEnumerator RenderAfterFrameSettles()
+        {
+            while (true)
+            {
+                yield return EndOfFrame;
+                UpdateAllRenderers();
+            }
         }
 
         private void UpdateAllRenderers()
