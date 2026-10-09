@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Sound per camera in the camera viewer (Listen, M) - hear the game from where that camera is, with its own distance and left/right placement. `viewer.html?id=<id>&audio=1` starts it on load, so an OBS browser source ("Control audio via OBS") gets that camera's sound. What you hear in the game does not change
-- Sound in in-game recordings - every recording holds its camera's sound (AAC, 48 kHz stereo), in sync with the picture, on Windows as well as Linux and macOS. Pausing cuts both, and a camera with nothing to hear records silence
+- Sound within the in-game recordings - every recording holds its camera's sound (AAC, 48 kHz stereo), in sync with the picture, on Windows as well as Linux and macOS. Pausing cuts both, and a camera with nothing to hear records silence
 - Mic per camera (Adjust in the camera viewer) - Game mix, External or Onboard, plus a sound gain, applied in the game for every viewer and recording. External sound arrives late from far away, changes pitch as things fly past, picks up a ground echo and grit with distance, and stops in vacuum except for the camera's own vessel
 - Sound on the layout page (Listen, M) - hear the spotlight tile, or pick a tile with its speaker button; the choice is saved with the layout. `layout.html?program&audio=1` plays the layout on air in OBS and crossfades on Take
 - Rocket Sound Enhancement support - its enhancements play on cameras with Harmony installed; its ignition, flameout and decoupler sounds are heard too, and a supersonic vessel stays a faint rumble on each camera until its shock arrives with RSE's sonic boom. Cameras on the vessel itself hear a boom each time it crosses Mach 1 in air, either way. Booms are louder and deeper for heavier vessels, as in RSE, and hit hardest on the External mic
@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Camera viewer - Adjust is split into Picture and Sound and says first that changes reach every viewer and recording, Auto gain is an Off/On choice with its effect written under it, and Cameras moved next to the camera name at the bottom
 - Offline cameras - Record stays off until the camera is back, and More has Forget this camera to take it off the page
 - Stopping a recording on a camera card says it was saved, with Show to open Recordings, and the card keeps its size as "Saved 1.1 MB"
-- Settings say they are kept in this browser
+- Small hint popup when settings are saved
 
 ### Fixed
 
