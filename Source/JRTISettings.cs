@@ -34,6 +34,7 @@ namespace JustReadTheInstructions
         public static int StreamJpegQuality { get; internal set; } = 90;
         public static int StreamMaxFps { get; internal set; } = 30;
         public static bool SpreadCaptures { get; internal set; } = true;
+        public static bool AutoStreamCameras { get; internal set; } = false;
 
         public static float FramePeriod => 1f / Mathf.Max(1, StreamMaxFps);
 
@@ -115,6 +116,7 @@ namespace JustReadTheInstructions
                 StreamJpegQuality = ParseInt(settings, "StreamJpegQuality", StreamJpegQuality);
                 StreamMaxFps = ParseInt(settings, "StreamMaxFps", StreamMaxFps);
                 SpreadCaptures = ParseBool(settings, "SpreadCaptures", SpreadCaptures);
+                AutoStreamCameras = ParseBool(settings, "AutoStreamCameras", AutoStreamCameras);
 
                 EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
                 EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
@@ -176,6 +178,7 @@ namespace JustReadTheInstructions
                 settings.AddValue("StreamJpegQuality", StreamJpegQuality);
                 settings.AddValue("StreamMaxFps", StreamMaxFps);
                 settings.AddValue("SpreadCaptures", SpreadCaptures);
+                settings.AddValue("AutoStreamCameras", AutoStreamCameras);
 
                 settings.AddValue("EnableDeferred", EnableDeferred);
                 settings.AddValue("EnableTUFX", EnableTUFX);

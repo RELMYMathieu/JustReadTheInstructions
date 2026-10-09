@@ -222,7 +222,15 @@ namespace JustReadTheInstructions
 
         private void DrawActionButtons(int openCount)
         {
-            if (_cachedAvailableCameras.Count > 1)
+            bool autoStream = JRTISettings.AutoStreamCameras;
+            if (GUILayout.Button(autoStream ? "● Auto-stream every camera: On" : "○ Auto-stream every camera: Off",
+                    autoStream ? _streamBtnStyle : _buttonStyle))
+                HullCameraManager.Instance?.SetAutoStream(!autoStream);
+            if (autoStream)
+                GUILayout.Label("Every camera, and each new one, shows up in the browser on its own", _dimLabelStyle);
+            GUILayout.Space(4);
+
+            if (!autoStream && _cachedAvailableCameras.Count > 1)
             {
                 if (GUILayout.Button("Stream All", _buttonStyle))
                     StreamAllCameras();

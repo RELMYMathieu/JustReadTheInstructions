@@ -46,13 +46,6 @@ export async function setCameraSettings(cameraId, settings) {
     await send(API.settings(cameraId), 'POST', settings, 'settings update');
 }
 
-export function abortRecording(sessionId, filename) {
-    return fetch(`/recordings/${sessionId}/abort?name=${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        keepalive: true,
-    }).catch(() => { });
-}
-
 export function fetchRecordings() {
     return getJson(API.recordings, 'recordings');
 }

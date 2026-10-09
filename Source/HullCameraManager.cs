@@ -13,10 +13,12 @@ namespace JustReadTheInstructions
         private readonly Dictionary<int, HullCameraRenderer> _renderers = new Dictionary<int, HullCameraRenderer>();
         private readonly Dictionary<int, HullCameraWindow> _windows = new Dictionary<int, HullCameraWindow>();
         private readonly HashSet<int> _streamOnlyRenderers = new HashSet<int>();
+        private readonly HashSet<int> _stoppedByUser = new HashSet<int>();
         private int _nextWindowId = 2000;
 
         private const float FrameTimeSmoothing = 0.1f;
         private const float MapExitRebuildDelaySeconds = 0.5f;
+        private const float AutoStreamIntervalSeconds = 1f;
 
         private readonly struct DueRender
         {
@@ -37,6 +39,7 @@ namespace JustReadTheInstructions
         private readonly Dictionary<int, FrameSchedule> _windowSchedules = new Dictionary<int, FrameSchedule>();
         private float _smoothedFrameTime;
         private float _rebuildCamerasAt = -1f;
+        private float _nextAutoStreamAt;
 
         void Awake()
         {
@@ -61,6 +64,7 @@ namespace JustReadTheInstructions
         void Update()
         {
             RebuildCamerasAfterMapView();
+            AutoStreamNewCameras();
             UpdateAllRenderers();
             SyncStreamServerState();
             if (Time.frameCount % 60 == 0)
@@ -343,12 +347,36 @@ namespace JustReadTheInstructions
 
         public void StopStream(int stableId)
         {
-            if (_streamOnlyRenderers.Contains(stableId))
-                CloseCamera(stableId);
+            if (!_streamOnlyRenderers.Contains(stableId)) return;
+            _stoppedByUser.Add(stableId);
+            CloseCamera(stableId);
+        }
+
+        public void SetAutoStream(bool enabled)
+        {
+            JRTISettings.AutoStreamCameras = enabled;
+            JRTISettings.Save();
+            _stoppedByUser.Clear();
+            _nextAutoStreamAt = 0f;
+        }
+
+        private void AutoStreamNewCameras()
+        {
+            if (!JRTISettings.AutoStreamCameras || JRTIStreamServer.Instance == null || Time.unscaledTime < _nextAutoStreamAt)
+                return;
+            _nextAutoStreamAt = Time.unscaledTime + AutoStreamIntervalSeconds;
+
+            foreach (var camera in GetAllAvailableCameras())
+            {
+                if (_renderers.Count >= JRTISettings.MaxOpenCameras) return;
+                if (camera?.vessel == null || _stoppedByUser.Contains(HullCameraRenderer.GetStableId(camera))) continue;
+                StreamCamera(camera);
+            }
         }
 
         public void CloseAllCameras()
         {
+            _stoppedByUser.UnionWith(_renderers.Keys);
             foreach (var id in _renderers.Keys.ToList())
                 CloseCamera(id);
 

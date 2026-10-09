@@ -8,6 +8,7 @@ export class StreamHub {
         this._reader = null;
         this._streamKey = '';
         this._syncQueued = false;
+        document.addEventListener('visibilitychange', () => this._queueSync());
     }
 
     subscribe(cameraId, onFrame) {
@@ -33,7 +34,7 @@ export class StreamHub {
     }
 
     _sync() {
-        const ids = [...this._listeners.keys()].sort((a, b) => a - b);
+        const ids = document.hidden ? [] : [...this._listeners.keys()].sort((a, b) => a - b);
         const key = ids.join(',');
         if (key === this._streamKey) return;
 

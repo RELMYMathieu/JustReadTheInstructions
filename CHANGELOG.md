@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Auto-stream every camera (main JRTI window) - streams every camera on loaded vessels to the browser, and each new one as it appears (staging, docking, a vessel coming into range), without pressing Stream. This setting isOff by default.
+
+### Fixed
+
+- Cameras reach their Max FPS while watched - the next frame no longer waits for the previous stream picture to be encoded, so a recorded or streamed camera at high JPEG quality no longer stalls around 30 fps
+- Streams no longer lag after switching back to the browser - the viewer, layout and camera cards pause their streams while the tab is hidden and reconnect live when it is shown, and big frames are read with much less copying
+
+
 ## v3.0.0 - 2026-10-04
 
 ### Added

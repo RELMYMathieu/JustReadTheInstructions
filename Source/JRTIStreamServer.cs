@@ -167,7 +167,7 @@ namespace JustReadTheInstructions
             {
                 if (request.hasError || !_states.ContainsKey(cameraId))
                 {
-                    state.EndCapture(null);
+                    state.EndCapture();
                     return;
                 }
 
@@ -204,26 +204,40 @@ namespace JustReadTheInstructions
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
+                long started = JRTIPerf.Now();
+                bool encodeJpeg = false;
                 try
                 {
-                    long started = JRTIPerf.Now();
-                    if (lut != null) CameraImageAdjust.Apply(frame.Raw, lut);
-                    if (frame.Rgba) state.Recorder?.Write(frame.Raw, frame.CapturedAt);
-                    if (!state.NeedsJpeg) return;
+                    try
+                    {
+                        if (lut != null) CameraImageAdjust.Apply(frame.Raw, lut);
+                        if (frame.Rgba) state.Recorder?.Write(frame.Raw, frame.CapturedAt);
+                        encodeJpeg = state.NeedsJpeg && state.TryBeginJpeg();
+                    }
+                    finally
+                    {
+                        state.EndCapture();
+                    }
 
-                    var jpeg = ImageConversion.EncodeArrayToJPG(
-                        frame.Raw, frame.Format,
-                        (uint)frame.Width, (uint)frame.Height, 0, JRTISettings.StreamJpegQuality);
-
-                    if (jpeg == null) return;
-                    state.PushFrame(jpeg, frame.Sequence);
-                    JRTIPerf.RecordEncode(cameraId, queued, started, jpeg.Length);
+                    if (encodeJpeg) PublishJpeg(cameraId, state, frame, queued, started);
                 }
                 finally
                 {
-                    state.EndCapture(frame.Raw);
+                    if (encodeJpeg) state.EndJpeg();
+                    state.ReturnFrameBuffer(frame.Raw);
                 }
             });
+        }
+
+        private static void PublishJpeg(int cameraId, CameraStreamState state, CapturedFrame frame, long queued, long started)
+        {
+            var jpeg = ImageConversion.EncodeArrayToJPG(
+                frame.Raw, frame.Format,
+                (uint)frame.Width, (uint)frame.Height, 0, JRTISettings.StreamJpegQuality);
+
+            if (jpeg == null) return;
+            state.PushFrame(jpeg, frame.Sequence);
+            JRTIPerf.RecordEncode(cameraId, queued, started, jpeg.Length);
         }
 
         private void StartServer()

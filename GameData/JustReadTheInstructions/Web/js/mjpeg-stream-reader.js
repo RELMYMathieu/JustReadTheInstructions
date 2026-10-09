@@ -1,16 +1,49 @@
 import { STREAM_RETRY_MIN_MS, STREAM_RETRY_MAX_MS, STREAM_STALL_MS } from './config.js';
 
 const headerDecoder = new TextDecoder();
+const MAX_HEADER_BYTES = 1024;
 
 function withCacheBuster(url) {
     return `${url}${url.includes('?') ? '&' : '?'}r=${Date.now()}`;
 }
 
-function concat(a, b) {
-    const joined = new Uint8Array(a.length + b.length);
-    joined.set(a);
-    joined.set(b, a.length);
-    return joined;
+class ByteQueue {
+    constructor() {
+        this._chunks = [];
+        this.length = 0;
+    }
+
+    push(chunk) {
+        this._chunks.push(chunk);
+        this.length += chunk.length;
+    }
+
+    peek(count) {
+        const first = this._chunks[0];
+        if (first && first.length >= count) return first.subarray(0, count);
+        return this._copy(count, false);
+    }
+
+    take(count) {
+        return this._copy(count, true);
+    }
+
+    _copy(count, consume) {
+        const out = new Uint8Array(count);
+        let written = 0;
+        let index = 0;
+        while (written < count) {
+            const chunk = this._chunks[index];
+            const used = Math.min(chunk.length, count - written);
+            out.set(chunk.subarray(0, used), written);
+            written += used;
+            if (!consume) index++;
+            else if (used === chunk.length) this._chunks.shift();
+            else this._chunks[0] = chunk.subarray(used);
+        }
+        if (consume) this.length -= count;
+        return out;
+    }
 }
 
 function indexOfHeaderEnd(buf) {
@@ -78,27 +111,26 @@ export class MjpegStreamReader {
     }
 
     async _readParts(reader, controller) {
-        let buf = new Uint8Array(0);
+        const queue = new ByteQueue();
         let part = null;
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) return;
             this._armStallWatchdog(controller);
-            buf = concat(buf, value);
+            queue.push(value);
 
             while (true) {
                 if (!part) {
-                    const headerEnd = indexOfHeaderEnd(buf);
+                    const head = queue.peek(Math.min(queue.length, MAX_HEADER_BYTES));
+                    const headerEnd = indexOfHeaderEnd(head);
                     if (headerEnd === -1) break;
-                    part = parsePartHeaders(buf.subarray(0, headerEnd));
-                    buf = buf.subarray(headerEnd + 4);
+                    part = parsePartHeaders(queue.take(headerEnd + 4).subarray(0, headerEnd));
                 }
-                if (buf.length < part.length) break;
+                if (queue.length < part.length) break;
 
-                const frame = buf.slice(0, part.length);
+                const frame = queue.take(part.length);
                 const { cameraId } = part;
-                buf = buf.subarray(part.length);
                 part = null;
                 this._retryMs = STREAM_RETRY_MIN_MS;
 

@@ -172,8 +172,10 @@ namespace JustReadTheInstructions
 
             public void MarkSnapshotInterest() => _snapshotPending = true;
 
-            private const int MaxCapturesInFlight = 2;
+            private const int MaxCapturesInFlight = 3;
+            private const int MaxJpegsInFlight = 2;
             private int _capturesInFlight;
+            private int _jpegsInFlight;
             private long _nextCaptureSequence;
             private long _lastPublishedSequence = -1;
             private readonly FrameSchedule _captureSchedule = new FrameSchedule();
@@ -181,9 +183,11 @@ namespace JustReadTheInstructions
             private Texture2D _readbackTexture;
 
             public float CaptureOverdue(float now)
+                => PipelineFull ? float.NegativeInfinity : _captureSchedule.Overdue(now);
+
+            private bool PipelineFull
                 => Volatile.Read(ref _capturesInFlight) >= MaxCapturesInFlight
-                    ? float.NegativeInfinity
-                    : _captureSchedule.Overdue(now);
+                    || (Recorder == null && Volatile.Read(ref _jpegsInFlight) >= MaxJpegsInFlight);
 
             public long BeginCapture(float now, float period, bool rephase)
             {
@@ -192,11 +196,20 @@ namespace JustReadTheInstructions
                 return _nextCaptureSequence++;
             }
 
-            public void EndCapture(byte[] frameBuffer)
+            public void EndCapture() => Interlocked.Decrement(ref _capturesInFlight);
+
+            public bool TryBeginJpeg()
             {
-                if (frameBuffer != null)
-                    lock (_freeFrameBuffers) _freeFrameBuffers.Push(frameBuffer);
-                Interlocked.Decrement(ref _capturesInFlight);
+                if (Interlocked.Increment(ref _jpegsInFlight) <= MaxJpegsInFlight) return true;
+                Interlocked.Decrement(ref _jpegsInFlight);
+                return false;
+            }
+
+            public void EndJpeg() => Interlocked.Decrement(ref _jpegsInFlight);
+
+            public void ReturnFrameBuffer(byte[] frameBuffer)
+            {
+                lock (_freeFrameBuffers) _freeFrameBuffers.Push(frameBuffer);
             }
 
             public byte[] RentFrameBuffer(int size)
