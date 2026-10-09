@@ -15,6 +15,9 @@ namespace JustReadTheInstructions
         private const float MinPanDistance = 0.001f;
         private const float MinVoiceVolume = 0.0001f;
         private const float MaxBoomControlMach = 4f;
+        private const float BoomPitchJitter = 0.04f;
+        private const float MinBoomPitch = 0.7f;
+        private const float MaxBoomPitch = 1.3f;
         private const long FirstOneShotId = (long)int.MaxValue + 1;
         private const long FirstShipLayerId = 1L << 48;
         private static readonly AirSimProfile ShipEffectsAirSim = new AirSimProfile(0f, 1f, 0f);
@@ -30,6 +33,7 @@ namespace JustReadTheInstructions
         private readonly List<BoomListener> _boomListeners = new List<BoomListener>();
         private readonly List<BoomHit> _boomHits = new List<BoomHit>();
         private readonly List<Boom> _booms = new List<Boom>();
+        private readonly VesselLengths _lengths = new VesselLengths();
         private readonly Dictionary<long, double> _loopPositions = new Dictionary<long, double>();
         private readonly HashSet<long> _liveLoops = new HashSet<long>();
         private readonly List<long> _endedLoops = new List<long>();
@@ -125,23 +129,31 @@ namespace JustReadTheInstructions
                 var source = hit.Source;
                 if (!HasShipSounds(source)) continue;
                 var listener = listeners[Array.IndexOf(cameraIds, hit.CameraId)];
-                float tailShock = SoundPaths.TailShockDelay(source.vesselSize.magnitude, (float)(source.srfSpeed / hit.SpeedOfSound), hit.Distance, hit.SpeedOfSound);
                 float pan = PanOf(hit.SourcePosition - listener.View.position, hit.Distance, listener.View, 1f);
                 float control = Mathf.Min(RSEIntegration.EffectiveMach(source), MaxBoomControlMach);
                 float mass = (float)source.totalMass;
+                float length = _lengths.Of(source);
+                float stretch = SoundPaths.BoomStretch(length, hit.Distance);
+                float spacing = SoundPaths.ShockSpacing(length, (float)(source.srfSpeed / hit.SpeedOfSound), hit.Distance, hit.SpeedOfSound);
+                int shocks = SoundPaths.ShockCount(length);
+                float arrival = Time.unscaledTime + hit.TravelSeconds;
                 bool physicalMic = listener.Mic != CameraMic.Game;
+                var layers = RSEIntegration.ShipLayers(source, RSEIntegration.SonicBoomGroup);
 
-                foreach (var layer in RSEIntegration.ShipLayers(source, RSEIntegration.SonicBoomGroup))
+                for (int shock = 0; shock < shocks; shock++)
                 {
-                    var pcm = ReadClip(layer.Clips[UnityEngine.Random.Range(0, layer.Clips.Length)]);
-                    float gain = layer.Volume(control, mass) * layer.Rolloff(hit.Distance, physicalMic) * exterior;
-                    if (pcm == null || gain <= MinVoiceVolume) continue;
+                    float jitter = UnityEngine.Random.Range(1f - BoomPitchJitter, 1f + BoomPitchJitter);
+                    float startsAt = arrival + SoundPaths.ShockDelay(shock, spacing);
+                    foreach (var layer in layers)
+                    {
+                        var pcm = ReadClip(layer.Clips[UnityEngine.Random.Range(0, layer.Clips.Length)]);
+                        float gain = layer.Volume(control, mass) * layer.Rolloff(hit.Distance, physicalMic) * exterior * SoundPaths.ShockGain(shock);
+                        if (pcm == null || gain <= MinVoiceVolume) continue;
 
-                    var path = SoundPaths.Boom(listener.Mic, gain, pan, listener.AirFactor);
-                    float pitch = layer.Pitch(control, mass);
-                    float startsAt = Time.unscaledTime + hit.TravelSeconds;
-                    _booms.Add(new Boom(_nextOneShotId++, hit.CameraId, pcm, pitch, path, startsAt));
-                    if (tailShock > 0f) _booms.Add(new Boom(_nextOneShotId++, hit.CameraId, pcm, pitch, path, startsAt + tailShock));
+                        var path = SoundPaths.Boom(listener.Mic, gain, pan, listener.AirFactor);
+                        float pitch = Mathf.Clamp(layer.Pitch(control, mass) / stretch, MinBoomPitch, MaxBoomPitch) * jitter;
+                        _booms.Add(new Boom(_nextOneShotId++, hit.CameraId, pcm, pitch, path, startsAt));
+                    }
                 }
             }
         }
@@ -335,6 +347,7 @@ namespace JustReadTheInstructions
             private readonly float _reach;
             private readonly AirSimProfile _airSim;
             private readonly float _airFactor;
+            private readonly float _speedOfSound;
             private readonly Vector3 _heading;
             private readonly float _mach;
 
@@ -353,6 +366,7 @@ namespace JustReadTheInstructions
                 _reach = SoundPaths.Reach(thrustKn, loudnessScalesWithThrust);
                 _airSim = airSim;
                 _airFactor = vessel != null ? SoundPaths.AirFactor(vessel.atmDensity) : 1f;
+                _speedOfSound = vessel != null ? (float)vessel.speedOfSound : 0f;
                 bool moving = vessel != null && vessel.srfSpeed > MinHeadingSpeed;
                 _heading = moving ? ((Vector3)vessel.srf_velocity).normalized : Vector3.zero;
                 _mach = moving ? RSEIntegration.EffectiveMach(vessel) : 0f;
@@ -382,7 +396,7 @@ namespace JustReadTheInstructions
                     LoudnessScalesWithThrust = _loudnessScalesWithThrust,
                     Pan = PanOf(offset, distance, listener.View, _spatialBlend) * (1f - _shape.Width(distance)),
                     AirFactor = _vessel != null ? Mathf.Min(listener.AirFactor, _airFactor) : listener.AirFactor,
-                    SpeedOfSound = listener.SpeedOfSound,
+                    SpeedOfSound = SoundPaths.SpeedOfSoundBetween(_speedOfSound, listener.SpeedOfSound),
                     SameVessel = _vessel != null && _vessel == listener.Vessel,
                     Interior = _interior,
                     Muted = _muted,

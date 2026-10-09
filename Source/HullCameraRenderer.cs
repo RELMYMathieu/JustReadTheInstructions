@@ -316,7 +316,7 @@ namespace JustReadTheInstructions
             if (JRTISettings.EnableDeferred)
                 DeferredIntegration.ApplyToCamera(camera, 10);
 
-            AddSynchronizer(camObj, GalaxyCameraIndex);
+            AddSynchronizer(camObj, GalaxyCameraIndex, rotationOnly: true);
 
             camObj.AddComponent<CanvasFix>();
 
@@ -324,10 +324,11 @@ namespace JustReadTheInstructions
             camera.enabled = false;
         }
 
-        private void AddSynchronizer(GameObject camObj, int cameraIndex)
+        private void AddSynchronizer(GameObject camObj, int cameraIndex, bool rotationOnly = false)
         {
             var synchronizer = camObj.AddComponent<CameraSynchronizer>();
             synchronizer.SourceCamera = _cameras[NearCameraIndex];
+            synchronizer.RotationOnly = rotationOnly;
             _synchronizers[cameraIndex] = synchronizer;
         }
 

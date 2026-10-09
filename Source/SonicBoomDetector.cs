@@ -86,7 +86,7 @@ namespace JustReadTheInstructions
                     }
                     if (outruns == shock.Outruns) continue;
 
-                    var hit = new BoomHit(listener.CameraId, vessel, position, distance, SpeedOfSoundBetween(vessel, listener.Vessel));
+                    var hit = new BoomHit(listener.CameraId, vessel, position, distance, SoundPaths.SpeedOfSoundBetween(soundSpeed, listener.Vessel != null ? (float)listener.Vessel.speedOfSound : 0f));
                     float arrival = now + hit.TravelSeconds;
                     shock.Outruns = outruns;
                     if (outruns)
@@ -105,14 +105,6 @@ namespace JustReadTheInstructions
                 if (!_seen.Contains(key)) _stale.Add(key);
             foreach (long key in _stale)
                 _shocks.Remove(key);
-        }
-
-        private static float SpeedOfSoundBetween(Vessel source, Vessel listener)
-        {
-            float atSource = (float)source.speedOfSound;
-            if (atSource <= 1f) return SoundPaths.DefaultSpeedOfSound;
-            float atListener = listener != null ? (float)listener.speedOfSound : 0f;
-            return atListener > 1f ? (atSource + atListener) * 0.5f : atSource;
         }
 
         private static bool InAir(Vessel vessel)

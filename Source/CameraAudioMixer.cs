@@ -14,7 +14,9 @@ namespace JustReadTheInstructions
         private const int BytesPerSample = 2;
         public const int BytesPerFrame = Channels * BytesPerSample;
         public const int BlockFrames = SampleRate / 50;
-        public const float MaxDelaySeconds = 8f;
+        public const float MaxDelaySeconds = 18f;
+        private const int HistoryBlocks = 1024;
+        private const int HistoryMask = HistoryBlocks - 1;
         private const int MaxLagFrames = SampleRate / 4;
         private const int IdleSleepMs = 50;
         private const int TickSleepMs = 5;
@@ -153,7 +155,7 @@ namespace JustReadTheInstructions
         private void MixBlock(long blockStart, long blockTicks)
         {
             long blockEnd = blockStart + BlockFrames;
-            ApplyLatestSnapshot();
+            ApplyLatestSnapshot(blockStart, blockTicks);
             SyncBuses();
 
             var mastering = _applied?.Mastering ?? MasteringSettings.RseDefault;
@@ -188,13 +190,14 @@ namespace JustReadTheInstructions
             }
         }
 
-        private void ApplyLatestSnapshot()
+        private void ApplyLatestSnapshot(long blockStart, long blockTicks)
         {
             var snapshot = Volatile.Read(ref _latest);
             if (snapshot == null || snapshot == _applied) return;
             _applied = snapshot;
 
             double elapsedSeconds = (Stopwatch.GetTimestamp() - snapshot.Ticks) / (double)Stopwatch.Frequency;
+            double takenAt = blockStart + (snapshot.Ticks - blockTicks) * (double)SampleRate / Stopwatch.Frequency;
 
             foreach (var voice in _voices.Values)
                 voice.MarkEnding();
@@ -203,7 +206,7 @@ namespace JustReadTheInstructions
             {
                 if (!_voices.TryGetValue(state.VoiceId, out var voice) || voice.Clip != state.Clip)
                     _voices[state.VoiceId] = voice = new MixVoice(state.Clip);
-                voice.Sync(state, snapshot.CameraIds, elapsedSeconds);
+                voice.Sync(state, snapshot.CameraIds, elapsedSeconds, takenAt);
             }
         }
 
@@ -243,8 +246,6 @@ namespace JustReadTheInstructions
         private sealed class MixVoice
         {
             private const double ResyncSeconds = 0.1;
-            private const int HistoryBlocks = 512;
-            private const int HistoryMask = HistoryBlocks - 1;
             private const double BlocksPerFrame = 1.0 / BlockFrames;
 
             private struct Segment
@@ -271,10 +272,13 @@ namespace JustReadTheInstructions
 
             public MixVoice(ClipPcm clip) => Clip = clip;
 
+            public double TakenAt { get; private set; }
+
             public void MarkEnding() => _ending = true;
 
-            public void Sync(VoiceState state, int[] cameraIds, double elapsedSeconds)
+            public void Sync(VoiceState state, int[] cameraIds, double elapsedSeconds, double takenAt)
             {
+                TakenAt = takenAt;
                 _ending = false;
                 _silentFrom = -1;
                 _loop = state.Loop;
@@ -361,40 +365,70 @@ namespace JustReadTheInstructions
 
         private sealed class PathState
         {
-            private const double MaxDelaySlewPerFrame = 0.5;
-            private const double SnapDelayFrames = SampleRate;
             private const double CutoffSmoothing = 0.5;
             private const float DistortionDrive = 3f;
+            private const double SilentBelowRate = 0.1;
+            private const double FullFromRate = 0.2;
+            private const double FullUpToRate = 3.0;
+            private const double SilentAboveRate = 6.0;
+            private static readonly float CentrePan = (float)Math.Sqrt(0.5);
+
+            private struct Emission
+            {
+                public long Block;
+                public float Delay;
+                public float Level;
+
+                public double Arrival => (Block + 1) * (double)BlockFrames + Delay;
+            }
 
             private readonly Biquad _filter = new Biquad();
             private readonly Biquad _highpass = new Biquad();
-            private float _left;
-            private float _right;
+            private readonly Emission[] _emissions = new Emission[HistoryBlocks];
+            private readonly DelayCurve _delays = new DelayCurve();
+            private long _first;
+            private long _lastAudible = long.MinValue;
+            private long _lastFold = long.MinValue;
+            private long _guessedFrom = long.MaxValue;
+            private float _panLeft;
+            private float _panRight;
+            private float _panTargetLeft = CentrePan;
+            private float _panTargetRight = CentrePan;
             private float _cutoff;
             private float _highpassCutoff;
-            private double _delay;
             private double _echoDelay;
             private float _echoMix;
             private float _distortion;
 
-            public PathState(VoicePath initial)
+            public PathState(VoicePath initial, double takenAt, long blockStart)
             {
                 _cutoff = initial.Cutoff;
                 _highpassCutoff = initial.Highpass;
-                _delay = DelayFrames(initial);
                 _echoDelay = EchoFrames(initial);
+                double delay = DelayFrames(initial);
+                _delays.Add(takenAt, delay);
+                long block = blockStart / BlockFrames;
+                long inFlight = Math.Min(HistoryBlocks - 2, (long)(delay / BlockFrames) + 2);
+                for (long b = block - inFlight; b < block; b++)
+                    Record(b, initial, delay);
+                _first = block - inFlight + 1;
+                _guessedFrom = block - 1;
             }
 
-            public void Mix(MixVoice voice, VoicePath target, long blockStart, float[] mix)
+            public void Mix(MixVoice voice, VoicePath target, long blockStart, float[] dry, float[] mix)
             {
-                double targetDelay = DelayFrames(target);
-                if (Math.Abs(targetDelay - _delay) > SnapDelayFrames) _delay = targetDelay;
-                double slope = Math.Max(-MaxDelaySlewPerFrame, Math.Min(MaxDelaySlewPerFrame, (targetDelay - _delay) / BlockFrames));
+                long block = blockStart / BlockFrames;
+                _delays.Add(voice.TakenAt, DelayFrames(target));
+                if (!_delays.HasSlope) _guessedFrom = Math.Min(_guessedFrom, block);
+                else RetimeGuesses(block);
+                Record(block, target, _delays.At((block + 1) * (double)BlockFrames));
+                AimPan(target);
 
                 double targetEcho = EchoFrames(target);
-                if (_left == 0f && _right == 0f && target.IsSilent)
+                if (!Gather(voice, block, blockStart, targetEcho, target.EchoMix, dry))
                 {
-                    _delay += slope * BlockFrames;
+                    _panLeft = 0f;
+                    _panRight = 0f;
                     _cutoff = target.Cutoff;
                     _echoDelay = targetEcho;
                     _echoMix = target.EchoMix;
@@ -412,42 +446,188 @@ namespace JustReadTheInstructions
                 bool thinned = _highpassCutoff > Biquad.HighpassOffHz;
                 if (thinned) _highpass.SetHighpass(_highpassCutoff);
 
-                bool echoed = _echoMix > 0f || target.EchoMix > 0f;
                 bool distorted = _distortion > 0f || target.Distortion > 0f;
                 float step = 1f / BlockFrames;
                 for (int i = 0; i < BlockFrames; i++)
                 {
                     float t = i * step;
-                    double read = blockStart + i - (_delay + slope * i);
-                    float x = voice.Read(read);
-                    if (echoed)
-                        x += voice.Read(read - (_echoDelay + (targetEcho - _echoDelay) * t)) * (_echoMix + (target.EchoMix - _echoMix) * t);
-
-                    float y = filtered ? _filter.Process(x) : _filter.Pass(x);
+                    float y = filtered ? _filter.Process(dry[i]) : _filter.Pass(dry[i]);
                     y = thinned ? _highpass.Process(y) : _highpass.Pass(y);
                     if (distorted)
                         y /= 1f + (_distortion + (target.Distortion - _distortion) * t) * DistortionDrive * Math.Abs(y);
 
-                    mix[i * 2] += y * (_left + (target.Left - _left) * t);
-                    mix[i * 2 + 1] += y * (_right + (target.Right - _right) * t);
+                    mix[i * 2] += y * (_panLeft + (_panTargetLeft - _panLeft) * t);
+                    mix[i * 2 + 1] += y * (_panRight + (_panTargetRight - _panRight) * t);
                 }
 
-                _delay += slope * BlockFrames;
-                _left = target.Left;
-                _right = target.Right;
+                _panLeft = _panTargetLeft;
+                _panRight = _panTargetRight;
                 _echoDelay = targetEcho;
                 _echoMix = target.EchoMix;
                 _distortion = target.Distortion;
+            }
+
+            private void Record(long block, VoicePath path, double delay)
+            {
+                float level = LevelOf(path);
+                var emission = new Emission { Block = block, Delay = (float)delay, Level = level };
+                ref var previous = ref _emissions[(block - 1) & HistoryMask];
+                if (previous.Block == block - 1 && emission.Arrival < previous.Arrival) _lastFold = block;
+                _emissions[block & HistoryMask] = emission;
+                if (level > 0f) _lastAudible = block;
+            }
+
+            private void RetimeGuesses(long block)
+            {
+                for (long b = _guessedFrom; b < block; b++)
+                {
+                    ref var emission = ref _emissions[b & HistoryMask];
+                    if (emission.Block != b) continue;
+                    emission.Delay = (float)_delays.At((b + 1) * (double)BlockFrames);
+                    if (_emissions[(b - 1) & HistoryMask].Block == b - 1 && emission.Arrival < _emissions[(b - 1) & HistoryMask].Arrival)
+                        _lastFold = Math.Max(_lastFold, b);
+                }
+                _guessedFrom = long.MaxValue;
+            }
+
+            private void AimPan(VoicePath target)
+            {
+                float level = LevelOf(target);
+                if (level <= 0f) return;
+                _panTargetLeft = target.Left / level;
+                _panTargetRight = target.Right / level;
+            }
+
+            private bool Gather(MixVoice voice, long block, long blockStart, double targetEcho, float targetEchoMix, float[] dry)
+            {
+                _first = Math.Max(_first, block - HistoryBlocks + 2);
+                while (_first <= block && HasPassed(_first, blockStart)) _first++;
+                if (_first > _lastAudible + 1) return false;
+
+                Array.Clear(dry, 0, BlockFrames);
+                bool echoed = _echoMix > 0f || targetEchoMix > 0f;
+                float step = 1f / BlockFrames;
+                long blockEnd = blockStart + BlockFrames;
+                bool heard = false;
+                for (long j = _first; j <= block; j++)
+                {
+                    ref var from = ref _emissions[(j - 1) & HistoryMask];
+                    ref var to = ref _emissions[j & HistoryMask];
+                    if (from.Block != j - 1 || to.Block != j) continue;
+                    double arrivesFrom = from.Arrival;
+                    double arrivesTo = to.Arrival;
+                    double earliest = Math.Min(arrivesFrom, arrivesTo);
+                    if (earliest >= blockEnd && j > _lastFold) break;
+
+                    double span = arrivesTo - arrivesFrom;
+                    float weight = span == 0.0 ? 0f : RateWeight(BlockFrames / Math.Abs(span));
+                    if (weight == 0f || (from.Level == 0f && to.Level == 0f)) continue;
+
+                    int start = (int)Math.Max(0.0, Math.Ceiling(earliest - blockStart));
+                    int end = (int)Math.Min(BlockFrames, Math.Ceiling(Math.Max(arrivesFrom, arrivesTo) - blockStart));
+                    double emittedFrom = j * (double)BlockFrames;
+                    for (int i = start; i < end; i++)
+                    {
+                        double u = (blockStart + i - arrivesFrom) / span;
+                        double emitted = emittedFrom + u * BlockFrames;
+                        float x = voice.Read(emitted);
+                        if (echoed)
+                        {
+                            float t = i * step;
+                            x += voice.Read(emitted - (_echoDelay + (targetEcho - _echoDelay) * t)) * (_echoMix + (targetEchoMix - _echoMix) * t);
+                        }
+                        dry[i] += x * (from.Level + (to.Level - from.Level) * (float)u) * weight;
+                        heard = true;
+                    }
+                }
+                return heard;
+            }
+
+            private bool HasPassed(long segment, long blockStart)
+            {
+                ref var from = ref _emissions[(segment - 1) & HistoryMask];
+                ref var to = ref _emissions[segment & HistoryMask];
+                return from.Block != segment - 1 || to.Block != segment || Math.Max(from.Arrival, to.Arrival) <= blockStart;
+            }
+
+            private static float LevelOf(VoicePath path) => (float)Math.Sqrt(path.Left * path.Left + path.Right * path.Right);
+
+            private static float RateWeight(double rate)
+            {
+                if (rate <= SilentBelowRate || rate >= SilentAboveRate) return 0f;
+                if (rate < FullFromRate) return (float)((rate - SilentBelowRate) / (FullFromRate - SilentBelowRate));
+                if (rate > FullUpToRate) return (float)((SilentAboveRate - rate) / (SilentAboveRate - FullUpToRate));
+                return 1f;
             }
 
             private static float SmoothCutoff(float current, float target)
                 => (float)Math.Exp(Math.Log(current) + (Math.Log(target) - Math.Log(current)) * CutoffSmoothing);
         }
 
+        private sealed class DelayCurve
+        {
+            private const int Capacity = 4;
+            private const double SpacingDecay = 0.98;
+            private const double SpacingsBehind = 1.25;
+            private const double LatencySlew = 0.02;
+            private const double MaxLatencyFrames = SampleRate / 5;
+
+            private readonly double[] _takenAt = new double[Capacity];
+            private readonly double[] _delays = new double[Capacity];
+            private int _count;
+            private int _newest;
+            private double _spacing = BlockFrames;
+            private double _latency = BlockFrames * 2;
+
+            public bool HasSlope => _count >= 2;
+
+            public void Add(double takenAt, double delay)
+            {
+                if (_count > 0 && takenAt <= _takenAt[_newest])
+                {
+                    _delays[_newest] = delay;
+                    return;
+                }
+                if (_count > 0)
+                {
+                    double gap = takenAt - _takenAt[_newest];
+                    _spacing = Math.Max(Math.Min(gap, MaxLatencyFrames), _spacing * SpacingDecay);
+                    double wanted = Math.Min(MaxLatencyFrames, BlockFrames + _spacing * SpacingsBehind);
+                    double slew = gap * LatencySlew;
+                    _latency += _count == 1 ? wanted - _latency : Math.Max(-slew, Math.Min(slew, wanted - _latency));
+                }
+                _newest = (_newest + 1) % Capacity;
+                _takenAt[_newest] = takenAt;
+                _delays[_newest] = delay;
+                _count = Math.Min(_count + 1, Capacity);
+            }
+
+            public double At(double frame)
+            {
+                if (_count < 2) return _delays[_newest];
+                double t = frame - _latency;
+                int later = _newest;
+                int earlier = Before(later);
+                if (t >= _takenAt[later]) return Along(earlier, later, Math.Min(t, _takenAt[later] + _latency));
+                for (int pair = 1; pair < _count - 1 && t < _takenAt[earlier]; pair++)
+                {
+                    later = earlier;
+                    earlier = Before(earlier);
+                }
+                return Along(earlier, later, Math.Max(t, _takenAt[earlier] - _latency));
+            }
+
+            private static int Before(int slot) => (slot + Capacity - 1) % Capacity;
+
+            private double Along(int earlier, int later, double t)
+                => _delays[earlier] + (_delays[later] - _delays[earlier]) * (t - _takenAt[earlier]) / (_takenAt[later] - _takenAt[earlier]);
+        }
+
         private sealed class MixBus
         {
             public readonly int CameraId;
             private readonly float[] _mix = new float[BlockFrames * Channels];
+            private readonly float[] _dry = new float[BlockFrames];
             private readonly Dictionary<long, PathState> _paths = new Dictionary<long, PathState>();
             private readonly AutoGain _autoGain = new AutoGain();
             private readonly Compressor _compressor = new Compressor();
@@ -474,8 +654,8 @@ namespace JustReadTheInstructions
             public void Add(long voiceId, MixVoice voice, VoicePath target, long blockStart)
             {
                 if (!_paths.TryGetValue(voiceId, out var path))
-                    _paths[voiceId] = path = new PathState(target);
-                path.Mix(voice, target, blockStart, _mix);
+                    _paths[voiceId] = path = new PathState(target, voice.TakenAt, blockStart);
+                path.Mix(voice, target, blockStart, _dry, _mix);
             }
 
             public byte[] Finish()

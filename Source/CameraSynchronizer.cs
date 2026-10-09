@@ -5,6 +5,7 @@ namespace JustReadTheInstructions
     public class CameraSynchronizer : MonoBehaviour
     {
         public Camera SourceCamera { get; set; }
+        public bool RotationOnly { get; set; }
 
         void OnPreRender() => Sync();
 
@@ -15,7 +16,8 @@ namespace JustReadTheInstructions
             if (SourceCamera == null || SourceCamera.transform == null || transform == null)
                 return;
 
-            transform.position = ScaledSpace.LocalToScaledSpace(SourceCamera.transform.position);
+            if (!RotationOnly)
+                transform.position = ScaledSpace.LocalToScaledSpace(SourceCamera.transform.position);
             transform.rotation = SourceCamera.transform.rotation;
         }
     }

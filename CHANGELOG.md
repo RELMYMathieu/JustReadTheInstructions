@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Changed
+
+- Booms sound more varied - each boom's length and depth now follow the vessel's size and the camera's distance (a long booster far away booms longer and deeper, a small craft close by snaps), plus a slight random pitch so repeated booms from the same craft never sound identical
+- Booms come in twos and threes - every boom is heard as a lead shock from the bottom of the vessel, then a gap set by its length and the camera's distance, then the shock from its top, and vessels over 25 m long split that into a close pair (interstage, fins), so a returning booster gives its BOOM... BOOM BOOM. Each one picks its own sound and pitch
+
+### Fixed
+
+- Sound leaves where it was made - each camera hears a sound from where its source was when it made it, so pitch rises and falls by the true Doppler amount (a vessel coming at half the speed of sound sounds twice as high, it was 1.5 times) and a vessel coming faster than sound is silent on the External and Onboard mics until its boom, then heard as it slows, with what it made on the way in played back after the boom
+- Far sounds arrive on time - sound can now take up to 18 s to reach a camera (about 6 km), it was cut at 8 s (about 2.7 km), so a distant engine no longer arrives before its own boom
+- Stars stay still on a feed - the star skybox on a feed no longer slides around as the game view moves, most visible on a ground camera at night
+
+
 ## v3.1.0 - 2026-10-09
 
 ### Added

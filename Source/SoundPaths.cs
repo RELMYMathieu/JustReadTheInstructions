@@ -113,7 +113,7 @@ namespace JustReadTheInstructions
     internal static class SoundPaths
     {
         private const float SeaLevelDensity = 1.225f;
-        public const float DefaultSpeedOfSound = 343f;
+        private const float DefaultSpeedOfSound = 343f;
         private const float ReferenceDistance = 15f;
         private const float ReferenceThrustKn = 60f;
         private const float PhysicalReachExponent = 0.5f;
@@ -138,9 +138,20 @@ namespace JustReadTheInstructions
         private const float MaxDistortion = 0.35f;
         private const float FullDistortionDistance = 3000f;
         private const float NearDistortionPerMach = 0.5f;
-        private const float MinTailShockDelay = 0.05f;
-        private const float MaxTailShockDelay = 0.6f;
-        private const double FarFieldStretchExponent = 0.25;
+        private const float ReferenceBoomLength = 20f;
+        private const float ReferenceBoomDistance = 1000f;
+        private const double BoomLengthExponent = 0.75;
+        private const double BoomDistanceExponent = 0.25;
+        private const double BoomStretchSoftening = 0.15;
+        private const float MinBoomStretch = 0.87f;
+        private const float MaxBoomStretch = 1.15f;
+        private const float MinShockSpacing = 0.05f;
+        private const float MaxShockSpacing = 0.6f;
+        private const float TripleShockLength = 25f;
+        private const float LeadGapPerSpacing = 1.6f;
+        private const float PairGapPerSpacing = 0.4f;
+        private const float MinPairGap = 0.12f;
+        private const float TrailingShockGain = 0.8f;
 
         public static float Reach(float thrustKn, bool loudnessScalesWithThrust)
         {
@@ -161,13 +172,37 @@ namespace JustReadTheInstructions
             return Clamp01((viewAngle - cone) / cone);
         }
 
-        public static float TailShockDelay(float lengthMetres, float mach, float distance, float speedOfSound)
+        public static float SpeedOfSoundBetween(float atSource, float atListener)
+        {
+            if (atSource <= 1f) return atListener > 1f ? atListener : DefaultSpeedOfSound;
+            return atListener > 1f ? (atSource + atListener) * 0.5f : atSource;
+        }
+
+        public static float BoomStretch(float lengthMetres, float distance)
+        {
+            double physical = Math.Pow(Math.Max(lengthMetres, 1f) / ReferenceBoomLength, BoomLengthExponent)
+                              * Math.Pow(Math.Max(distance, 1f) / ReferenceBoomDistance, BoomDistanceExponent);
+            return Math.Max(MinBoomStretch, Math.Min(MaxBoomStretch, (float)Math.Pow(physical, BoomStretchSoftening)));
+        }
+
+        public static float ShockSpacing(float lengthMetres, float mach, float distance, float speedOfSound)
         {
             float length = Math.Max(lengthMetres, 1f);
             float c = speedOfSound > 1f ? speedOfSound : DefaultSpeedOfSound;
-            double stretch = Math.Pow(Math.Max(1.0, distance / length), FarFieldStretchExponent);
-            return Math.Max(MinTailShockDelay, Math.Min(MaxTailShockDelay, (float)(length / (Math.Max(mach, 1f) * c) * stretch)));
+            double farField = Math.Pow(Math.Max(1.0, distance / length), BoomDistanceExponent);
+            return Math.Max(MinShockSpacing, Math.Min(MaxShockSpacing, (float)(length / (Math.Max(mach, 1f) * c) * farField)));
         }
+
+        public static int ShockCount(float lengthMetres) => lengthMetres >= TripleShockLength ? 3 : 2;
+
+        public static float ShockDelay(int shock, float spacing)
+        {
+            if (shock == 0) return 0f;
+            float lead = spacing * LeadGapPerSpacing;
+            return shock == 1 ? lead : lead + Math.Max(MinPairGap, spacing * PairGapPerSpacing);
+        }
+
+        public static float ShockGain(int shock) => shock < 2 ? 1f : TrailingShockGain;
 
         public static VoicePath Boom(CameraMic mic, float gain, float pan, float airFactor)
         {
@@ -182,8 +217,7 @@ namespace JustReadTheInstructions
         public static VoicePath For(CameraMic mic, PathInputs input)
         {
             var path = ForMic(mic, input);
-            if (!input.AheadOfShock) return path;
-            return mic == CameraMic.Game ? path.Muffled(ShockMuffledGain, ShockMuffledCutoff) : VoicePath.Silent;
+            return input.AheadOfShock && mic == CameraMic.Game ? path.Muffled(ShockMuffledGain, ShockMuffledCutoff) : path;
         }
 
         private static VoicePath ForMic(CameraMic mic, PathInputs input)
