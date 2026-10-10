@@ -43,6 +43,8 @@ namespace JustReadTheInstructions
 
         private DockingCameraOverlay _dockingOverlay;
         private readonly StockAeroFX _aeroFX;
+        private Renderer[] _ownPartRenderers = Array.Empty<Renderer>();
+        private readonly List<Renderer> _hiddenOwnPartRenderers = new List<Renderer>();
 
         public HullCameraRenderer(MuMechModuleHullCamera hullCamera)
         {
@@ -114,6 +116,7 @@ namespace JustReadTheInstructions
 
         private void CreateCameras()
         {
+            _ownPartRenderers = OwnPartRenderers();
             SetupNearCamera();
             SetupFarPqsCamera();
             SetupScaledCamera();
@@ -359,12 +362,14 @@ namespace JustReadTheInstructions
             bool unboosted = HullcamFilterIntegration.TryGetUnboostedAmbient(out var sceneAmbient);
             var ambient = unboosted ? FeedAmbient.Override(sceneAmbient) : default;
 
+            HideOwnPart();
             try
             {
                 RenderLayers(filterActive);
             }
             finally
             {
+                ShowOwnPart();
                 if (unboosted)
                     FeedAmbient.Restore(ambient);
             }
@@ -378,6 +383,34 @@ namespace JustReadTheInstructions
 
             if (capture)
                 JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
+        }
+
+        private Renderer[] OwnPartRenderers()
+        {
+            var config = _hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
+            return config != null && config.hideOwnPart
+                ? _hullCamera.part.FindModelComponents<Renderer>().ToArray()
+                : Array.Empty<Renderer>();
+        }
+
+        private void HideOwnPart()
+        {
+            foreach (var renderer in _ownPartRenderers)
+            {
+                if (renderer == null || renderer.forceRenderingOff) continue;
+                renderer.forceRenderingOff = true;
+                _hiddenOwnPartRenderers.Add(renderer);
+            }
+        }
+
+        private void ShowOwnPart()
+        {
+            foreach (var renderer in _hiddenOwnPartRenderers)
+            {
+                if (renderer != null)
+                    renderer.forceRenderingOff = false;
+            }
+            _hiddenOwnPartRenderers.Clear();
         }
 
         private void RenderLayers(bool filterActive)

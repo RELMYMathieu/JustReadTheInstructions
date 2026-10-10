@@ -8,6 +8,9 @@ namespace JustReadTheInstructions
         [KSPField(isPersistant = true)]
         public int jrtiId = 0;
 
+        [KSPField]
+        public bool hideOwnPart = false;
+
         [KSPEvent(
             guiName = "Set Name",
             guiActiveEditor = true,
