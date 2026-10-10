@@ -69,6 +69,7 @@ o7 and have fun :D
 * Record camera feeds as MP4 inside the game with the graphics card's encoder, then play or download the recordings from the web UI
 * Grab the raw MJPEG feed URL for OBS or other external tools
 * Adjust brightness, contrast, gamma, and FOV per camera from the web viewer - applied server-side so all viewers on the local network see the same image
+* Pan and tilt the TurretCam and LaunchCam from the browser, or let them track the active vessel or your target with auto zoom - see [Pan & Tracking](#pan--tracking)
 * Hear the game from each camera's position, with a mic per camera (game mix, external or onboard), in the browser, on the clean feed for OBS and in recordings - see [Camera Sound](#camera-sound)
 * Name cameras and assign a stable numeric ID from the part's right-click menu in the editor - kept in the craft file, so the stream URL stays the same across relaunches
 
@@ -91,6 +92,21 @@ The **Layout** button in the web UI opens `layout.html`: several cameras in one 
 The menu next to the layout's name saves it **in the game** under a name. `http://localhost:8080/layout.html?layout=Launch` then shows that layout on any device and in OBS, and follows every change made to it from another screen, so a phone can rearrange what an OBS browser source shows while you fly.
 
 For live shows, point one OBS browser source at the **clean feed**, `http://localhost:8080/layout.html?program`. It never shows controls and displays whichever saved layout is **on air**. On the layout page, press **Take on air** or `Shift` + `1` to `9` (the first nine saved layouts, in the order the menu lists them) and the clean feed switches at once, with cameras gliding to their new places. A Stream Deck or any tool that can open a URL can switch too: `http://localhost:8080/program/take/Launch`, or `/program/clear` for a black feed.
+
+## Pan & Tracking
+
+Two HullcamVDS cameras have a head that turns, and JRTI can steer it:
+
+| Camera | Pan | Tilt |
+| --- | --- | --- |
+| TurretCam | All the way round | -45° to 90° (the view tilts, the head stays level) |
+| LaunchCam | All the way round | -60° to 90° (straight up) |
+
+On these cameras, **Pan** (`P`) in the camera viewer opens the controls: hold an arrow or the arrow keys to turn, **Center** to point straight ahead. **Track** follows the active vessel or your target and zooms with its distance; zooming while tracking sets how tight it frames. Panning by hand stops tracking. The same Track choices are in the **Pan** menu on each camera card. The head turns in the game too, so every viewer and recording sees the same shot.
+
+Every camera can zoom in to 0.25° from the viewer's field of view slider, or by holding `+` and `-`.
+
+Other cameras have no moving head, so pan and tracking are limited to these two for now. It can be extended to more cameras later if needed.
 
 ## Camera Sound
 

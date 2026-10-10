@@ -1,6 +1,7 @@
 import { API, CAMERA_SYNC_MS, VIEWER_LOS_DELAY_MS, LOS_OVERLAY_HTML, WAITING_OVERLAY_HTML } from './config.js';
 import { fetchCameras, gameRecording } from './api.js';
 import { initControls, isControlsOpen } from './camera-controls.js';
+import { initPanControls, isPanOpen } from './pan-controls.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
 import { CameraAudio } from './camera-audio.js';
@@ -19,7 +20,7 @@ function getCameraId() {
 function wireIdleChrome() {
     let timer = null;
     const hide = () => {
-        if (isControlsOpen() || document.querySelector('.viewer-chrome:hover')) {
+        if (isControlsOpen() || isPanOpen() || document.querySelector('.viewer-chrome:hover')) {
             timer = setTimeout(hide, HUD_HIDE_MS);
             return;
         }
@@ -126,6 +127,7 @@ function main() {
         renderTally();
     }, SIGNAL_CHECK_MS);
 
+    const pan = initPanControls(cameraId);
     const syncCamera = async () => {
         try {
             const camera = (await fetchCameras()).find((c) => c.id === cameraId);
@@ -134,11 +136,14 @@ function main() {
                 nameEl.textContent = camera.name;
                 document.title = `${camera.name} - JRTI`;
             }
+            pan.setAvailable(camera?.canPan === true, camera?.track);
         } catch { }
         renderTally();
         renderRecording();
     };
-    syncCamera();
+    syncCamera().then(() => {
+        if (new URLSearchParams(location.search).get('pan') === '1') pan.openOnLoad();
+    });
 
     getSession().then((session) => {
         setInGameRecordingAvailable(session.inGameRecording === true, session.codecs);

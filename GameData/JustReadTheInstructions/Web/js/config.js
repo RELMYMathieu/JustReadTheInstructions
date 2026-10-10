@@ -28,6 +28,12 @@ export const MICS = Object.freeze([
     { id: 'onboard', label: 'Onboard', hint: 'Inside mic: its own vessel through the structure, other vessels muffled by the hull.' },
 ]);
 
+export const TRACKS = Object.freeze([
+    { id: 'off', label: 'Off', hint: 'Stays where you point it.' },
+    { id: 'vessel', label: 'Active vessel', hint: 'Follows the vessel you fly and zooms with its distance.' },
+    { id: 'target', label: 'Target', hint: 'Follows your target and zooms with its distance.' },
+]);
+
 export const API = Object.freeze({
     session: '/session',
     cameras: '/cameras',

@@ -1,4 +1,4 @@
-import { SNAPSHOT_REFRESH_MS, WAITING_OVERLAY_HTML, API, MICS } from './config.js';
+import { SNAPSHOT_REFRESH_MS, WAITING_OVERLAY_HTML, API, MICS, TRACKS } from './config.js';
 import { checkStatus, setCameraSettings } from './api.js';
 import { GameRecorder } from './game-recorder.js';
 import { isInGameRecordingAvailable } from './recorder-settings.js';
@@ -6,7 +6,7 @@ import { CameraSnapshot } from './camera-snapshot.js';
 import { CameraRecordingUI } from './camera-recording-ui.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
-import { h, icon, button } from './dom.js';
+import { h, icon, button, setButtonLabel } from './dom.js';
 import { Menu, menuItem, menuNote, menuSeparator, copyWithToast, toast } from './ui.js';
 import { getSession, lanUrl } from './session.js';
 import { showRecordings } from './recordings-ui.js';
@@ -34,6 +34,7 @@ export class CameraCard {
         this._recState = 'idle';
         this._mic = null;
         this._micHeldUntil = 0;
+        this._track = 'off';
 
         this.el = this._buildDom();
 
@@ -59,6 +60,7 @@ export class CameraCard {
         this._onViewerCountChange();
         this._syncGameRecording(cam.recording);
         this._syncMic(cam.mic);
+        this._syncPan(cam);
     }
 
     get key() {
@@ -81,6 +83,7 @@ export class CameraCard {
         }
         this._syncGameRecording(cam.recording);
         this._syncMic(cam.mic);
+        this._syncPan(cam);
     }
 
     dispose() {
@@ -90,6 +93,7 @@ export class CameraCard {
         this._moreMenu.dispose();
         this._groupMenu.dispose();
         this._micMenu.dispose();
+        this._panMenu.dispose();
         this._stopLivenessPolling();
         const img = this._getSnapshotImg();
         if (img?.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
@@ -158,6 +162,10 @@ export class CameraCard {
         });
         this._groupMenu = new Menu(this._groupBtn, () => this.groupItems?.() ?? []);
 
+        this._panBtn = button({ label: 'Pan', className: 'btn btn-quiet pan-assign-btn', title: 'Turn this camera in the game, or let it follow a vessel' });
+        this._panBtn.hidden = true;
+        this._panMenu = new Menu(this._panBtn, () => this._panItems());
+
         const moreBtn = button({ label: 'More', className: 'btn btn-quiet', title: 'Layout, links for OBS and other options' });
         this._moreMenu = new Menu(moreBtn, () => this._moreItems());
 
@@ -173,7 +181,7 @@ export class CameraCard {
             preview,
             h('div', { class: 'camera-actions' },
                 watchBtn, recBtn, pauseBtn,
-                h('div', { class: 'actions-end' }, this._groupBtn, moreBtn)),
+                h('div', { class: 'actions-end' }, this._panBtn, this._groupBtn, moreBtn)),
             this._micEl,
             h('div', { class: 'pane-foot', dataset: { role: 'rec-size' } }));
     }
@@ -209,6 +217,42 @@ export class CameraCard {
             toast(`Could not change the mic of ${this.name}`);
         }
         this._micHeldUntil = performance.now() + MIC_SETTLE_MS;
+    }
+
+    _syncPan(cam) {
+        this._panBtn.hidden = cam.canPan !== true;
+        this._showTrack(cam.track ?? 'off');
+    }
+
+    _showTrack(track) {
+        this._track = track;
+        const tracking = track !== 'off';
+        this._panBtn.classList.toggle('assigned', tracking);
+        setButtonLabel(this._panBtn, tracking ? 'Tracking' : 'Pan');
+    }
+
+    _panItems() {
+        return [
+            menuNote('Turns the camera head in the game, for everyone watching and in its recordings.'),
+            ...TRACKS.map((track) => menuItem({
+                label: track.id === 'off' ? 'No tracking' : `Track ${track.label.toLowerCase()}`,
+                description: track.hint,
+                checked: track.id === this._track,
+                onSelect: () => this._sendPan({ track: track.id }, track.id),
+            })),
+            menuSeparator(),
+            menuItem({ label: 'Center', description: 'Point it straight ahead again', onSelect: () => this._sendPan({ panYaw: 0, panPitch: 0 }, 'off') }),
+            menuItem({ label: 'Pan by hand', description: "This camera's page with the pan controls open", href: `${this.streamUrl}&pan=1`, target: '_blank' }),
+        ];
+    }
+
+    async _sendPan(body, track) {
+        this._showTrack(track);
+        try {
+            await setCameraSettings(this.id, body);
+        } catch {
+            toast(`Could not move ${this.name}`);
+        }
     }
 
     _moreItems() {

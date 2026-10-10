@@ -29,7 +29,34 @@
             <button type="button" class="btn overlay-btn" id="viewer-copy" title="Copy the address of this video alone, for an OBS media source or VLC">Copy stream URL</button>
             <button type="button" class="btn overlay-btn" id="viewer-sound" title="Play this camera's sound in this tab only" aria-pressed="false">Listen <kbd>M</kbd></button>
             <button type="button" class="btn overlay-btn" id="viewer-fullscreen" title="Show only the camera (Esc to leave)">Fullscreen <kbd>F</kbd></button>
+            <button type="button" class="btn overlay-btn" id="pan-toggle" title="Turn this camera's head in the game, or let it follow a vessel" aria-expanded="false" hidden>Pan <kbd>P</kbd></button>
             <button type="button" class="btn overlay-btn" id="controls-toggle" title="Picture and sound of this camera, for everyone" aria-expanded="false">Adjust</button>
+        </div>
+        <div id="pan-panel" class="controls-panel pan-panel" hidden>
+            <p class="hint ctrl-intro">Turns the camera head in the game, for every viewer and recording. Hold an arrow or the arrow keys to pan, - and + to zoom.</p>
+            <div class="pan-body">
+                <div class="pan-pad" role="group" aria-label="Pan">
+                    <button type="button" class="btn btn-icon pan-dir" data-dir="up" title="Tilt up" aria-label="Tilt up"><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-chevron"/></svg></button>
+                    <button type="button" class="btn btn-icon pan-dir" data-dir="left" title="Pan left" aria-label="Pan left"><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-chevron"/></svg></button>
+                    <button type="button" class="btn btn-icon pan-dir" data-dir="right" title="Pan right" aria-label="Pan right"><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-chevron"/></svg></button>
+                    <button type="button" class="btn btn-icon pan-dir" data-dir="down" title="Tilt down" aria-label="Tilt down"><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-chevron"/></svg></button>
+                </div>
+                <div class="pan-side">
+                    <dl class="pan-readout">
+                        <dt>Pan</dt><dd id="pan-yaw">0°</dd>
+                        <div id="pan-pitch-row"><dt>Tilt</dt><dd id="pan-pitch">0°</dd></div>
+                        <dt>Zoom</dt><dd id="pan-fov">-</dd>
+                    </dl>
+                    <div class="pan-zoom" role="group" aria-label="Zoom">
+                        <button type="button" class="btn" data-zoom="-1" title="Zoom out (hold)">-</button>
+                        <button type="button" class="btn" data-zoom="1" title="Zoom in (hold)">+</button>
+                        <button type="button" class="btn" id="pan-center" title="Point the camera straight ahead again">Center</button>
+                    </div>
+                </div>
+            </div>
+            <h2 class="section-title ctrl-heading" id="pan-track-label">Track</h2>
+            <div class="ctrl-choice pan-track" id="pan-track" role="group" aria-labelledby="pan-track-label"></div>
+            <p class="hint pan-track-note" id="pan-track-note"></p>
         </div>
         <div id="controls-panel" class="controls-panel" hidden>
             <p class="hint ctrl-intro">Changes apply in the game, so every viewer, stream and recording of this camera gets them.</p>
