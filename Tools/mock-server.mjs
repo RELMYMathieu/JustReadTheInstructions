@@ -49,6 +49,65 @@ const cameras = new Map([
 ]);
 for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, fovLimitMin: 0.25, fovLimitMax: 120, mic: 'game', soundGain: 0, autoGain: false, mastering: false }, audioClients: 0 });
 
+const PAN_SLEW_DEG_PER_S = 90;
+const PAN_RATE_DEG_PER_S = 25;
+const PAN_RATE_HOLD_MS = 600;
+const PAN_TICK_MS = 50;
+
+const ZOOM_DOUBLINGS_PER_S = 1;
+
+function makePan(pitchMin, pitchMax) {
+    return { yaw: 0, pitch: 0, targetYaw: 0, targetPitch: 0, yawRate: 0, pitchRate: 0, rateUntil: 0, track: 'off', pitchMin, pitchMax };
+}
+cameras.get(10).pan = makePan(-45, 90);
+cameras.get(11).pan = makePan(-60, 90);
+const wrap = (deg) => ((deg + 540) % 360) - 180;
+
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const towards = (v, target, step) => Math.abs(target - v) <= step ? target : v + Math.sign(target - v) * step;
+
+setInterval(() => {
+    const dt = PAN_TICK_MS / 1000;
+    for (const cam of cameras.values()) {
+        if (Date.now() < (cam.zoomUntil ?? 0) && cam.zoomRate) {
+            cam.settings.fov = clamp(cam.settings.fov * 2 ** (-cam.zoomRate * ZOOM_DOUBLINGS_PER_S * dt), cam.settings.fovLimitMin, cam.settings.fovLimitMax);
+        }
+        const pan = cam.pan;
+        if (!pan) continue;
+        if (pan.track !== 'off') {
+            const t = Date.now() / 1000;
+            pan.targetYaw = pan.yaw + wrap(40 * Math.sin(t / 6) - pan.yaw);
+            pan.targetPitch = clamp(15 + 10 * Math.sin(t / 4), pan.pitchMin, pan.pitchMax);
+        } else if (Date.now() < pan.rateUntil) {
+            pan.targetYaw += pan.yawRate * PAN_RATE_DEG_PER_S * dt;
+            pan.targetPitch = clamp(pan.targetPitch + pan.pitchRate * PAN_RATE_DEG_PER_S * dt, pan.pitchMin, pan.pitchMax);
+        }
+        pan.yaw = towards(pan.yaw, pan.targetYaw, PAN_SLEW_DEG_PER_S * dt);
+        pan.pitch = towards(pan.pitch, pan.targetPitch, PAN_SLEW_DEG_PER_S * dt);
+    }
+}, PAN_TICK_MS);
+
+function applyPan(pan, body) {
+    if (!pan) return;
+    if (body.panYaw != null || body.panPitch != null) {
+        if (body.panYaw != null) pan.targetYaw = pan.yaw + wrap(body.panYaw - pan.yaw);
+        pan.targetPitch = clamp(body.panPitch ?? pan.targetPitch, pan.pitchMin, pan.pitchMax);
+        pan.track = 'off';
+    }
+    if (body.panYawRate != null || body.panPitchRate != null) {
+        pan.yawRate = clamp(body.panYawRate ?? pan.yawRate, -1, 1);
+        pan.pitchRate = clamp(body.panPitchRate ?? pan.pitchRate, -1, 1);
+        pan.rateUntil = Date.now() + PAN_RATE_HOLD_MS;
+        if (pan.yawRate !== 0 || pan.pitchRate !== 0) pan.track = 'off';
+    }
+    if (['off', 'vessel', 'target'].includes(body.track)) pan.track = body.track;
+}
+
+function panJson(pan) {
+    const { yaw, pitch, pitchMin, pitchMax, track } = pan;
+    return { yaw: +wrap(yaw).toFixed(1), pitch: +pitch.toFixed(1), pitchMin, pitchMax, track };
+}
+
 const launchId = 'mock' + Date.now().toString(16);
 const layouts = new Map();
 const eventClients = new Set();
@@ -119,7 +178,7 @@ function recordingInfo(cam) {
 function cameraList() {
     return [...cameras.values()].filter((c) => c.online).map((c) => ({
         id: c.id, name: c.name, streaming: true, viewerCount: c.streamClients,
-        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, recording: recordingInfo(c),
+        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, canPan: Boolean(c.pan), track: c.pan?.track ?? 'off', recording: recordingInfo(c),
     }));
 }
 
@@ -327,8 +386,14 @@ const server = http.createServer(async (req, res) => {
                 case 'audio': return audio(req, res, cam);
                 case 'status': return text(res, 200, 'ok');
                 case 'settings':
-                    if (req.method === 'POST') { Object.assign(cam.settings, JSON.parse(await readBody(req))); res.writeHead(200); return res.end(); }
-                    return json(res, cam.settings);
+                    if (req.method === 'POST') {
+                        const { panYaw, panPitch, panYawRate, panPitchRate, track, zoomRate, ...rest } = JSON.parse(await readBody(req));
+                        applyPan(cam.pan, { panYaw, panPitch, panYawRate, panPitchRate, track });
+                        if (zoomRate != null) Object.assign(cam, { zoomRate: clamp(zoomRate, -1, 1), zoomUntil: Date.now() + PAN_RATE_HOLD_MS });
+                        Object.assign(cam.settings, rest);
+                        res.writeHead(200); return res.end();
+                    }
+                    return json(res, cam.pan ? { ...cam.settings, pan: panJson(cam.pan) } : cam.settings);
                 case 'recording': return gameRecording(res, cam, parts[3], url.searchParams.get('codec'));
                 default: return text(res, 404, 'Unknown action');
             }

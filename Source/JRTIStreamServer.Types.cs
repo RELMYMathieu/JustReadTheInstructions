@@ -122,6 +122,7 @@ namespace JustReadTheInstructions
             public float SoundGainDb;
             public volatile bool AutoGain;
             public volatile bool Mastering;
+            public readonly CameraAimControl Aim = new CameraAimControl();
 
             private byte[] _lut;
             private float _lutBrightness;

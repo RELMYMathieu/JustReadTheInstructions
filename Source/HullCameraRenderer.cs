@@ -46,8 +46,16 @@ namespace JustReadTheInstructions
 
         private DockingCameraOverlay _dockingOverlay;
         private readonly StockAeroFX _aeroFX;
+        private readonly CameraPan _pan;
         private Renderer[] _ownPartRenderers = Array.Empty<Renderer>();
         private readonly List<Renderer> _hiddenOwnPartRenderers = new List<Renderer>();
+        private CameraTrack _track;
+        private float _framingDegreeMetres = DefaultFramingDegreeMetres;
+        private float _trackDistance;
+
+        private const float DefaultFramingDegreeMetres = 20f * 1000f;
+        private const float ZoomDoublingsPerSecond = 1f;
+        private const float AutoZoomSharpness = 4f;
 
         public HullCameraRenderer(MuMechModuleHullCamera hullCamera)
         {
@@ -57,6 +65,8 @@ namespace JustReadTheInstructions
 
             if (hullCamera.cameraFoVMax > 0f)
                 hullCamera.cameraFoV = hullCamera.cameraFoVMax;
+
+            _pan = CameraPan.TryCreate(hullCamera);
 
             InitializeRenderTexture();
             SetupCameras();
@@ -154,6 +164,9 @@ namespace JustReadTheInstructions
                 _hullCamera.cameraUp
             );
             camera.transform.localPosition = _hullCamera.cameraPosition;
+
+            _pan?.AttachLens(camera.transform, camera.transform.parent,
+                _hullCamera.cameraPosition, _hullCamera.cameraForward, _hullCamera.cameraUp);
 
             //camera.nearClipPlane = 0.07f; // TODO: Find proper near clip plane value
             // Basically, this current value causes an issue where the shading on the cameras is a bit
@@ -552,8 +565,56 @@ namespace JustReadTheInstructions
             }
         }
 
+        internal void UpdateAim(CameraAimControl control, float deltaTime)
+        {
+            control?.Publish(_pan);
+
+            float yawRate = 0f, pitchRate = 0f, zoomRate = 0f;
+            control?.GetRates(out yawRate, out pitchRate, out zoomRate);
+            if (zoomRate != 0f)
+                SetUserFieldOfView(CurrentFov * Mathf.Pow(2f, -zoomRate * ZoomDoublingsPerSecond * deltaTime));
+
+            if (_pan == null) return;
+            if (control != null)
+            {
+                if (control.TryTakeTarget(out var yaw, out var pitch))
+                    _pan.PointAt(yaw, pitch);
+                FollowTrack(control.Track, deltaTime);
+            }
+            _pan.Tick(deltaTime, yawRate, pitchRate);
+        }
+
         public void SetUserFieldOfView(float fov)
-            => SetFieldOfView(Mathf.Clamp(fov, FovLimitMin, FovLimitMax));
+        {
+            fov = Mathf.Clamp(fov, FovLimitMin, FovLimitMax);
+            SetFieldOfView(fov);
+            if (_track != CameraTrack.Off && _trackDistance > 0f)
+                _framingDegreeMetres = fov * _trackDistance;
+        }
+
+        private float CurrentFov => Mathf.Max(GetFOV(), FovLimitMin);
+
+        private float WidestFov => GetMaxFOV() > 0f ? GetMaxFOV() : FovLimitMax;
+
+        private void FollowTrack(CameraTrack track, float deltaTime)
+        {
+            if (track != _track)
+            {
+                _track = track;
+                _framingDegreeMetres = DefaultFramingDegreeMetres;
+                _trackDistance = 0f;
+            }
+
+            var target = CameraPan.TrackTarget(track, _hullCamera.vessel);
+            var lens = ViewTransform;
+            if (!target.HasValue || lens == null) return;
+
+            _pan.AimAt(target.Value);
+            _trackDistance = Mathf.Max(Vector3.Distance(lens.position, target.Value), 1f);
+            float fov = Mathf.Clamp(_framingDegreeMetres / _trackDistance, FovLimitMin, WidestFov);
+            float blend = 1f - Mathf.Exp(-AutoZoomSharpness * deltaTime);
+            SetFieldOfView(Mathf.Exp(Mathf.Lerp(Mathf.Log(CurrentFov), Mathf.Log(fov), blend)));
+        }
 
         public void UpdateVisualEffects()
         {

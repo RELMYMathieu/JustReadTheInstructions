@@ -71,6 +71,7 @@ namespace JustReadTheInstructions
             RebuildCamerasAfterMapView();
             AutoStreamNewCameras();
             SyncStreamServerState();
+            UpdateAims();
             if (Time.frameCount % 60 == 0)
                 CleanupInvalidCameras();
         }
@@ -238,6 +239,13 @@ namespace JustReadTheInstructions
                 if (server.TryGetSoundSettings(kvp.Key, out var sound))
                     CameraSoundMemory.Remember(renderer.SoundKey, sound);
             }
+        }
+
+        private void UpdateAims()
+        {
+            var server = JRTIStreamServer.Instance;
+            foreach (var kvp in _renderers)
+                kvp.Value.UpdateAim(server?.AimControlOf(kvp.Key), Time.deltaTime);
         }
 
         private void CleanupInvalidCameras()

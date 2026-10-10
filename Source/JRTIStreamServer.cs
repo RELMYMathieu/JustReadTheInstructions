@@ -96,6 +96,9 @@ namespace JustReadTheInstructions
                 s.PublishInfo(displayName, fov, fovMin, fovMax);
         }
 
+        internal CameraAimControl AimControlOf(int cameraId)
+            => _states.TryGetValue(cameraId, out var s) ? s.Aim : null;
+
         public bool TryTakePendingFov(int cameraId, out float fov)
         {
             fov = 0f;
