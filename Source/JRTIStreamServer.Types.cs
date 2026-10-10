@@ -98,7 +98,7 @@ namespace JustReadTheInstructions
                 Fov = fov;
                 FovMin = min;
                 FovMax = max;
-                _hasFov = max > min;
+                _hasFov = true;
             }
 
             public void SetPendingFov(float fov)

@@ -1290,7 +1290,7 @@ kbd {
 
 .ctrl-row {
     display: grid;
-    grid-template-columns: var(--ctrl-label) 1fr 48px auto;
+    grid-template-columns: var(--ctrl-label) 1fr 56px auto;
     align-items: center;
     gap: 10px;
     min-height: 32px;
@@ -1303,6 +1303,10 @@ kbd {
 .ctrl-val {
     text-align: right;
 }
+
+    .ctrl-val.ctrl-warn {
+        color: var(--hold);
+    }
 
 .ctrl-slider {
     width: 100%;

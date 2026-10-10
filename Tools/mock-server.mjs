@@ -47,7 +47,7 @@ const cameras = new Map([
     [13, { name: 'Kerbal X.Booster Sep' }],
     [14, { name: 'Kerbal X.Docking Port Cam with a rather long name for overflow' }],
 ]);
-for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, mic: 'game', soundGain: 0, autoGain: false, mastering: false }, audioClients: 0 });
+for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, fovLimitMin: 0.25, fovLimitMax: 120, mic: 'game', soundGain: 0, autoGain: false, mastering: false }, audioClients: 0 });
 
 const launchId = 'mock' + Date.now().toString(16);
 const layouts = new Map();

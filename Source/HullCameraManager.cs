@@ -230,7 +230,7 @@ namespace JustReadTheInstructions
             {
                 var renderer = kvp.Value;
                 if (server.TryTakePendingFov(kvp.Key, out float fov))
-                    renderer.SetFieldOfView(Mathf.Clamp(fov, renderer.GetMinFOV(), renderer.GetMaxFOV()));
+                    renderer.SetUserFieldOfView(fov);
 
                 if (!publishInfo) continue;
                 server.PublishCameraInfo(kvp.Key, renderer.GetDisplayName(),

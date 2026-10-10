@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Field of view - zooms in to 0.25° on every camera, with a log scale slider in the web viewer and the in-game window for fine control at long range, flagged only when wider than the camera part allows
 - Sonic booms - the shocks come closer together, both the gap after the first one and the gap between the last two
 - Card snapshots (Cameras page, layout tray) - each snapshot takes one render instead of about three, so opening the Cameras page costs far less GPU time
 

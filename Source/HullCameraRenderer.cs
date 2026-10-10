@@ -28,6 +28,9 @@ namespace JustReadTheInstructions
 
         public Vessel Vessel => _hullCamera.vessel;
 
+        public const float FovLimitMin = 0.25f;
+        public const float FovLimitMax = 120f;
+
         private const int NearCameraIndex = 0;
         private const int FarPqsCameraIndex = 1;
         private const int ScaledCameraIndex = 2;
@@ -548,6 +551,9 @@ namespace JustReadTheInstructions
                     camera.fieldOfView = fov;
             }
         }
+
+        public void SetUserFieldOfView(float fov)
+            => SetFieldOfView(Mathf.Clamp(fov, FovLimitMin, FovLimitMax));
 
         public void UpdateVisualEffects()
         {

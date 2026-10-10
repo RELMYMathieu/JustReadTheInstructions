@@ -298,9 +298,11 @@ namespace JustReadTheInstructions
 
             if (state.HasFov)
             {
-                sb.Append($",\"fov\":{state.Fov.ToString("F1", ic)}");
+                sb.Append($",\"fov\":{state.Fov.ToString("0.##", ic)}");
                 sb.Append($",\"fovMin\":{state.FovMin.ToString("F1", ic)}");
                 sb.Append($",\"fovMax\":{state.FovMax.ToString("F1", ic)}");
+                sb.Append($",\"fovLimitMin\":{HullCameraRenderer.FovLimitMin.ToString("0.##", ic)}");
+                sb.Append($",\"fovLimitMax\":{HullCameraRenderer.FovLimitMax.ToString("F0", ic)}");
             }
 
             sb.Append("}");
