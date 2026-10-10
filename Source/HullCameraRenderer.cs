@@ -356,6 +356,32 @@ namespace JustReadTheInstructions
             if (filterActive)
                 HullcamFilterIntegration.SyncToCamera(_cameras[NearCameraIndex], _hullCamera);
 
+            bool unboosted = HullcamFilterIntegration.TryGetUnboostedAmbient(out var sceneAmbient);
+            var ambient = unboosted ? FeedAmbient.Override(sceneAmbient) : default;
+
+            try
+            {
+                RenderLayers(filterActive);
+            }
+            finally
+            {
+                if (unboosted)
+                    FeedAmbient.Restore(ambient);
+            }
+
+            RestoreRaymarchedLightBuffers();
+
+            if (_fireflyApplied) UpdateFireflyEffects();
+
+            if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
+                _dockingOverlay.Render(TargetTexture);
+
+            if (capture)
+                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
+        }
+
+        private void RenderLayers(bool filterActive)
+        {
             for (int i = _cameras.Length - 1; i >= 0; i--)
             {
                 if (i == FarPqsCameraIndex && !_farPqsReady)
@@ -368,7 +394,7 @@ namespace JustReadTheInstructions
                     _synchronizers[i].ManualSync();
 
                 if (i == NearCameraIndex && filterActive)
-                    HullcamFilterIntegration.RenderWithFilter(camera, _hullCamera);
+                    HullcamFilterIntegration.RenderWithFilter(camera);
                 else if (i == GalaxyCameraIndex)
                     GalaxySkyboxFade.Render(camera, _cameras[NearCameraIndex]);
                 else
@@ -377,16 +403,6 @@ namespace JustReadTheInstructions
 
             if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
                 _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
-
-            RestoreRaymarchedLightBuffers();
-
-            if (_fireflyApplied) UpdateFireflyEffects();
-
-            if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
-                _dockingOverlay.Render(TargetTexture);
-
-            if (capture)
-                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
         }
 
         private void SynchronizeFarPqsCamera()
@@ -688,7 +704,7 @@ namespace JustReadTheInstructions
                 }
             }
 
-            info += HullcamFilterIntegration.GetDiagnosticInfo();
+            info += HullcamFilterIntegration.GetDiagnosticInfo(_cameras[NearCameraIndex]);
             return info;
         }
     }

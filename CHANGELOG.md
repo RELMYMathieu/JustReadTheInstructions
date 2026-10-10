@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Hullcam filters per camera - each feed runs its own filter, so feeds no longer flicker or bleed into each other, and opening a feed no longer resets Hullcam's filter on the main view
+- Night vision on the main view - switching the game view to a night vision Hullcam no longer brightens every JRTI feed
 - Auto gain on camera sound - sonic booms are no longer measured, so they never turn the engine down after them, and a loud engine after a long quiet stretch settles in about two seconds instead of blasting then fading away
 - Engine warble on camera sound - fast vessels no longer wobble in pitch, as their positions are now timed to the physics step they come from
 - Supersonic Doppler - a vessel slowing through Mach 1 toward a camera now roars in loud and high-pitched with its boom, then drops in pitch as it slows, instead of fading in seconds later. Sounds coming towards a camera are a little louder and those going away a little quieter
