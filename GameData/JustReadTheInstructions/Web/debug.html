@@ -44,9 +44,10 @@
             </div>
 
             <p class="debug-hint">
-                Timings are CPU time on the game's main thread and do not include GPU time.
-                Readback latency is the best hint of a GPU backlog. Values in amber need attention:
-                hover them for why.
+                Render ms is CPU time on the game's main thread. GPU times come from GPU timestamps,
+                taken only while this page or the in-game overlay is open (DirectX 11 only). When the
+                game is CPU bound they also count time the GPU waited for work, so compare them with
+                Render ms. Values in amber need attention: hover them for why.
             </p>
         </section>
     </main>

@@ -68,6 +68,7 @@ namespace JustReadTheInstructions
 
         void Update()
         {
+            GpuPerf.BeginFrame();
             RebuildCamerasAfterMapView();
             AutoStreamNewCameras();
             SyncStreamServerState();
@@ -102,6 +103,7 @@ namespace JustReadTheInstructions
             {
                 yield return EndOfFrame;
                 UpdateAllRenderers();
+                GpuPerf.EndFrame();
             }
         }
 
@@ -130,6 +132,8 @@ namespace JustReadTheInstructions
 
             GrantDueRenders(RenderBudget(scheduledCameras), now);
         }
+
+        public long TargetTextureBytes() => _renderers.Values.Sum(r => RenderTextureCensus.EstimateBytes(r.TargetTexture));
 
         private FrameSchedule WindowSchedule(int cameraId)
         {
@@ -186,7 +190,9 @@ namespace JustReadTheInstructions
         private static void RenderCamera(HullCameraRenderer renderer, bool capture, bool rephaseCapture)
         {
             long start = JRTIPerf.Now();
+            GpuPerf.Mark(renderer.InstanceId, GpuSection.Setup);
             renderer.Render(capture, rephaseCapture);
+            GpuPerf.EndCamera();
             JRTIPerf.RecordMainThread(renderer.InstanceId, CameraMetric.Render, start);
         }
 

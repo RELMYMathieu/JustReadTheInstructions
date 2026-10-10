@@ -445,6 +445,7 @@ namespace JustReadTheInstructions
                 if (_synchronizers[i] != null)
                     _synchronizers[i].ManualSync();
 
+                GpuPerf.Mark(InstanceId, GpuSection.Near + i);
                 if (i == NearCameraIndex && filterActive)
                     HullcamFilterIntegration.RenderWithFilter(camera);
                 else if (i == GalaxyCameraIndex)
@@ -453,6 +454,7 @@ namespace JustReadTheInstructions
                     camera.Render();
             }
 
+            GpuPerf.Mark(InstanceId, GpuSection.Finish);
             if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
                 _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
         }

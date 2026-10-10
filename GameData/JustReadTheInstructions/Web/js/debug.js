@@ -1,15 +1,26 @@
 import { API, DEBUG_POLL_MS, DEBUG_HISTORY_SAMPLES, DEBUG_REQUEST_TIMEOUT_MS } from './config.js';
 
 const CAMERA_COLORS = ['#d9dcdf', '#8fb8de', '#c9a2e0', '#7cc6b0', '#e08f8f', '#b8c47a', '#d8b07a', '#9aa0a6'];
-const FRAME_SERIES = [
-    { label: 'Frame avg', key: 'frame_ms_avg', color: '#d9dcdf' },
-    { label: 'Frame max', key: 'frame_ms_max', color: '#7c8288' },
-    { label: 'JRTI main thread avg', key: 'jrti_ms_avg', color: '#e5a43b' },
+const GPU_SECTIONS = [
+    ['near', 'near'], ['far_terrain', 'terrain'], ['scaled', 'scaled'],
+    ['galaxy', 'galaxy'], ['setup', 'setup'], ['finish', 'finish'],
 ];
 
 const fmt = (value, digits = 1) => Number(value).toFixed(digits);
 const streamFrameMs = (s) => 1000 / Math.max(1, s.max_fps);
 const hasViewers = (c) => c.stream_clients + c.preview_clients > 0;
+const gpuOn = (s) => s.gpu_timing === 'on' && s.gpu_frames > 0;
+const hasVram = (s) => s.vram_used_mb >= 0;
+const gpuSplit = (row, suffix) => GPU_SECTIONS
+    .map(([key, label]) => `${label} ${fmt(row[`gpu_${key}_${suffix}`] ?? 0, 2)}`)
+    .join(', ');
+
+const FRAME_SERIES = [
+    { label: 'Frame avg', value: s => s.frame_ms_avg, color: '#d9dcdf' },
+    { label: 'Frame max', value: s => s.frame_ms_max, color: '#7c8288' },
+    { label: 'JRTI main thread avg', value: s => s.jrti_ms_avg, color: '#e5a43b' },
+    { label: 'JRTI GPU avg', value: s => (gpuOn(s) ? s.gpu_jrti_ms_avg : null), color: '#8fb8de' },
+];
 
 const TILES = [
     {
@@ -21,6 +32,29 @@ const TILES = [
         label: 'JRTI main thread',
         value: s => `${fmt(s.jrti_ms_avg, 2)} ms`,
         detail: s => `per frame, max ${fmt(s.jrti_ms_max, 2)}`,
+    },
+    {
+        label: 'GPU per frame',
+        value: s => (gpuOn(s) ? `${fmt(s.gpu_span_ms_avg)} ms` : 'off'),
+        detail: s => (gpuOn(s)
+            ? `game ${fmt(s.gpu_game_ms_avg)} ms + JRTI ${fmt(s.gpu_jrti_ms_avg, 2)} ms (max ${fmt(s.gpu_jrti_ms_max)})`
+            : s.gpu_timing ?? 'not reported by this game version'),
+        warn: s => (gpuOn(s) && s.gpu_jrti_ms_avg > 0.25 * s.frame_ms_avg
+            ? 'JRTI cameras keep the GPU busy for over a quarter of each frame'
+            : null),
+    },
+    {
+        label: 'JRTI GPU by layer',
+        value: s => (gpuOn(s) ? `${fmt(s.gpu_jrti_ms_avg, 2)} ms` : 'off'),
+        detail: s => (gpuOn(s) ? `per frame: ${gpuSplit(s, 'ms')}` : null),
+    },
+    {
+        label: 'Video memory',
+        value: s => (hasVram(s) ? `${fmt(s.vram_used_mb, 0)} / ${fmt(s.vram_budget_mb, 0)} MB` : 'n/a'),
+        detail: s => `${hasVram(s) ? `used / budget, shared ${fmt(s.vram_shared_mb, 0)} MB, ` : ''}JRTI camera targets ${fmt(s.jrti_targets_mb ?? 0, 0)} MB`,
+        warn: s => (hasVram(s) && s.vram_used_mb > 0.95 * s.vram_budget_mb
+            ? 'Near or over the video memory budget: Windows moves textures out to system memory, which stutters'
+            : null),
     },
     {
         label: 'Garbage collections',
@@ -77,6 +111,12 @@ const COLUMNS = [
         label: 'Render ms',
         title: 'Average / max main-thread time per render, capture included',
         value: c => `${fmt(c.render_ms_avg)} / ${fmt(c.render_ms_max)}`,
+    },
+    {
+        label: 'GPU ms',
+        title: 'Average / max GPU time per render, from GPU timestamps. Hover a value for the split by layer',
+        value: c => (c.gpu_ms_max > 0 ? `${fmt(c.gpu_ms_avg)} / ${fmt(c.gpu_ms_max)}` : '-'),
+        detail: c => (c.gpu_ms_max > 0 ? gpuSplit(c, 'ms_avg') : null),
     },
     {
         label: 'Stream FPS',
@@ -162,6 +202,8 @@ function renderTable(s) {
         const row = el('tr');
         for (const column of COLUMNS) {
             const td = el('td', column.className, column.value(c));
+            const detail = column.detail?.(c);
+            if (detail) td.title = detail;
             markWarning(td, column.warn?.(c, s));
             row.append(td);
         }
@@ -276,7 +318,7 @@ function renderCharts() {
     if (history.length === 0) return;
     const latest = history[history.length - 1];
 
-    const frameSeries = FRAME_SERIES.map(s => ({ ...s, values: history.map(sample => sample[s.key]) }));
+    const frameSeries = FRAME_SERIES.map(s => ({ ...s, values: history.map(s.value) }));
     drawChart(document.getElementById('chart-frame'), frameSeries, null);
     renderLegend('legend-frame', frameSeries);
 

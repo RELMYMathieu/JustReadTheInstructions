@@ -264,11 +264,18 @@ function sample() {
         spread: 1, max_fps: FPS, camera_count: cams.length,
         audio_cameras: cams.filter((c) => c.audioClients > 0).length, audio_voices: 14, audio_main_ms_avg: 0.12 + Math.random() * 0.05, audio_main_ms_max: 0.3 + Math.random() * 0.2,
         audio_mix_ms_avg: 0.6 + Math.random() * 0.2, audio_mix_ms_max: 1.5 + Math.random(), audio_skipped_sounds: 0,
+        gpu_timing: 'on', gpu_frames: 60, gpu_dropped: 0, gpu_span_ms_avg: 11 + Math.random(), gpu_span_ms_max: 15 + Math.random() * 3,
+        gpu_game_ms_avg: 8 + Math.random(), gpu_jrti_ms_avg: cams.length * 0.9, gpu_jrti_ms_max: cams.length * 1.6,
+        gpu_setup_ms: cams.length * 0.05, gpu_near_ms: cams.length * 0.5, gpu_far_terrain_ms: cams.length * 0.25, gpu_scaled_ms: cams.length * 0.06,
+        gpu_galaxy_ms: cams.length * 0.02, gpu_finish_ms: cams.length * 0.04,
+        vram_used_mb: 7480 + Math.random() * 40, vram_budget_mb: 7600, vram_shared_mb: 410, jrti_targets_mb: cams.length * 7,
         cameras: cams.map((c) => ({
             camera_id: c.id, camera: c.name, mode: c.id % 2 ? 'window' : 'stream', renders_per_s: 29.5 + Math.random(), render_ms_avg: 3 + Math.random() * 2, render_ms_max: 7 + Math.random() * 4,
             stream_fps: c.streamClients + c.previewClients > 0 ? 28 + Math.random() * 2 : 0, capture_ms_avg: 0.05, capture_ms_max: 0.1, readback_ms_avg: 21, readback_ms_max: 38,
             readback_copy_ms_avg: 0.4, encode_wait_ms_avg: 0.3, encode_wait_ms_max: 2, encode_ms_avg: 9.5, encode_ms_max: 14, jpeg_kb_avg: 96, deferred_per_s: 0.4,
             stream_clients: c.streamClients, preview_clients: c.previewClients,
+            gpu_ms_avg: 1.8 + Math.random() * 0.4, gpu_ms_max: 3 + Math.random(), gpu_setup_ms_avg: 0.1, gpu_near_ms_avg: 1, gpu_far_terrain_ms_avg: 0.5,
+            gpu_scaled_ms_avg: 0.12, gpu_galaxy_ms_avg: 0.04, gpu_finish_ms_avg: 0.08,
         })),
     };
 }

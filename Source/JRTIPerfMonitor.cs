@@ -12,15 +12,18 @@ namespace JustReadTheInstructions
         private const float SampleIntervalSeconds = 1f;
         private const int WindowId = 1903;
         private const int NameColumnChars = 28;
+        private const double RemoteViewerTimeoutMs = 5000.0;
 
         private static readonly (string Title, float Width)[] OverlayColumns =
         {
-            ("Camera", 190f), ("Mode", 52f), ("Rend/s", 48f), ("Render ms", 72f), ("FPS", 36f),
+            ("Camera", 190f), ("Mode", 52f), ("Rend/s", 48f), ("Render ms", 72f), ("GPU ms", 64f), ("FPS", 36f),
             ("Capt ms", 52f), ("Readback", 64f), ("Copy ms", 52f), ("Enc wait", 60f), ("Enc ms", 64f),
             ("KB", 40f), ("Defer/s", 50f), ("Clients", 50f)
         };
 
         private static readonly string[] OverlayHeader = Array.ConvertAll(OverlayColumns, c => c.Title);
+
+        private static long _remoteViewerTicks;
 
         private volatile PerfSnapshot _latest;
         internal PerfSnapshot Latest => _latest;
@@ -47,13 +50,14 @@ namespace JustReadTheInstructions
         {
             if (Instance != null) { Destroy(this); return; }
             Instance = this;
-            _windowRect = new Rect(Mathf.Max(0f, Screen.width - 850f), 60f, 830f, 160f);
+            _windowRect = new Rect(Mathf.Max(0f, Screen.width - 920f), 60f, 900f, 160f);
             ResetWindow(Time.unscaledTime);
         }
 
         void OnDestroy()
         {
             StopLog();
+            GpuPerf.Wanted = false;
             if (Instance == this) Instance = null;
         }
 
@@ -66,6 +70,8 @@ namespace JustReadTheInstructions
 
             if (hotkey && !_lastHotkeyState) ToggleOverlay();
             _lastHotkeyState = hotkey;
+
+            GpuPerf.Wanted = _overlayVisible || _log != null || RemoteViewerActive;
         }
 
         void LateUpdate()
@@ -90,6 +96,17 @@ namespace JustReadTheInstructions
         }
 
         public bool IsLogging => _log != null;
+
+        public static void NoteRemoteViewer() => Interlocked.Exchange(ref _remoteViewerTicks, JRTIPerf.Now());
+
+        private static bool RemoteViewerActive
+        {
+            get
+            {
+                long ticks = Interlocked.Read(ref _remoteViewerTicks);
+                return ticks != 0 && JRTIPerf.MsSince(ticks) < RemoteViewerTimeoutMs;
+            }
+        }
 
         public void StartLog()
         {
@@ -195,7 +212,8 @@ namespace JustReadTheInstructions
                 SpreadCaptures = JRTISettings.SpreadCaptures,
                 MaxFps = JRTISettings.StreamMaxFps,
                 Cameras = cameras,
-                Audio = AudioPerf.Take()
+                Audio = AudioPerf.Take(),
+                Gpu = GpuPerf.Take(manager?.TargetTextureBytes() ?? 0)
             };
         }
 
@@ -219,7 +237,9 @@ namespace JustReadTheInstructions
                 $"GC {s.GcCollections} in {s.Seconds:0.0}s (worst GC frame {s.GcFrameMaxMs:0} ms)    heap {s.HeapMb:0} MB    " +
                 $"pool threads busy {s.PoolBusy} (min {s.PoolMin}, IO {s.PoolIoBusy})",
                 $"Clients {s.StreamClients} stream + {s.PreviewClients} preview    recordings {s.Recordings}    " +
-                $"Max FPS {s.MaxFps}"
+                $"Max FPS {s.MaxFps}",
+                FormatGpuLine(s),
+                FormatVramLine(s.Gpu)
             };
 
             _overlayRows = new string[s.Cameras.Count][];
@@ -227,9 +247,29 @@ namespace JustReadTheInstructions
                 _overlayRows[i] = FormatCameraRow(s.Cameras[i]);
         }
 
+        private static string FormatGpuLine(PerfSnapshot s)
+        {
+            var g = s.Gpu;
+            if (g.Status != GpuPerf.StatusOn) return $"GPU timing {g.Status}";
+            if (g.Frames == 0) return "GPU timing on, waiting for the GPU";
+            return $"GPU span {g.SpanMs.Average:0.0} ms/frame: game {g.GameMs.Average:0.0}, JRTI {g.JrtiMs.Average:0.00} (max {g.JrtiMs.Max:0.0})    " +
+                   $"near {g.SectionMsPerFrame(GpuSection.Near):0.00}, terrain {g.SectionMsPerFrame(GpuSection.FarTerrain):0.00}, " +
+                   $"scaled {g.SectionMsPerFrame(GpuSection.Scaled):0.00}, galaxy {g.SectionMsPerFrame(GpuSection.Galaxy):0.00}, " +
+                   $"setup {g.SectionMsPerFrame(GpuSection.Setup):0.00}, finish {g.SectionMsPerFrame(GpuSection.Finish):0.00}" +
+                   (g.Dropped > 0 ? $"    dropped {g.Dropped}" : "");
+        }
+
+        private static string FormatVramLine(GpuPerfSample g)
+        {
+            string targets = $"JRTI camera targets {g.JrtiTargetsMb:0} MB";
+            if (g.VramUsedMb < 0.0) return $"VRAM n/a    {targets}";
+            return $"VRAM {g.VramUsedMb:0} / {g.VramBudgetMb:0} MB budget    shared {g.VramSharedMb:0} MB    {targets}";
+        }
+
         private static string[] FormatCameraRow(CameraPerfSample c)
         {
             var render = c[CameraMetric.Render];
+            var gpu = c[CameraMetric.Gpu];
             var encode = c[CameraMetric.Encode];
             return new[]
             {
@@ -237,6 +277,7 @@ namespace JustReadTheInstructions
                 c.HasWindow ? "window" : "stream",
                 $"{c.PerSecond(render.Count):0}",
                 $"{render.Average:0.0}/{render.Max:0.0}",
+                gpu.Count > 0 ? $"{gpu.Average:0.0}/{gpu.Max:0.0}" : "-",
                 $"{c.PerSecond(encode.Count):0}",
                 $"{c[CameraMetric.CaptureIssue].Average:0.00}",
                 $"{c[CameraMetric.Readback].Average:0}",

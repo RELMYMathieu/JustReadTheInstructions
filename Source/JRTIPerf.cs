@@ -30,6 +30,13 @@ namespace JustReadTheInstructions
         EncodeWait,
         Encode,
         JpegKb,
+        Gpu,
+        GpuSetup,
+        GpuNear,
+        GpuFarTerrain,
+        GpuScaled,
+        GpuGalaxy,
+        GpuFinish,
         Count
     }
 
@@ -95,7 +102,11 @@ namespace JustReadTheInstructions
 
         public static void Register(int cameraId, string name) => Cameras[cameraId] = new CameraCounters(name);
 
-        public static void Unregister(int cameraId) => Cameras.TryRemove(cameraId, out _);
+        public static void Unregister(int cameraId)
+        {
+            Cameras.TryRemove(cameraId, out _);
+            GpuPerf.Release(cameraId);
+        }
 
         public static void RecordMainThread(int cameraId, CameraMetric metric, long startTicks)
             => Record(cameraId, metric, RecordMainThread(startTicks));
@@ -140,7 +151,7 @@ namespace JustReadTheInstructions
             return samples;
         }
 
-        private static void Record(int cameraId, CameraMetric metric, double ms)
+        public static void Record(int cameraId, CameraMetric metric, double ms)
         {
             if (Cameras.TryGetValue(cameraId, out var counters))
                 counters.Add(metric, ms);

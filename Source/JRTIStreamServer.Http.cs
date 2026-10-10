@@ -248,6 +248,7 @@ namespace JustReadTheInstructions
 
         private static void ServeDebugStats(HttpListenerContext ctx)
         {
+            JRTIPerfMonitor.NoteRemoteViewer();
             var snapshot = JRTIPerfMonitor.Instance?.Latest;
             if (snapshot == null)
             {

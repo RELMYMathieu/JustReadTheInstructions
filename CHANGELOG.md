@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Pan and track (TurretCam, LaunchCam) - turn the camera head all the way round and tilt it up to straight up, from the web viewer (Pan, arrows or arrow keys) or a camera card, or let it follow the active vessel or your target with auto zoom. Zooming while tracking sets how tight it frames. Joint names from KerbCast, thanks to Jon Pepler
 - Hold to zoom (web viewer, + and - keys) - smooth zoom on any camera, also as buttons in Pan
+- GPU timing and video memory (Diagnostics page, Ctrl+Alt+F6 overlay, CSV log) - GPU time per camera split by layer (near, terrain, scaled, galaxy), JRTI's share of each frame on the GPU, and the game's video memory use against its budget. Only measured while one of them is open, DirectX 11 only
 - VRAM census (Ctrl+Alt+F6 overlay) - lists every render texture in the game by size in KSP.log, to see which mod holds the video memory
 
 ### Changed
