@@ -19,6 +19,7 @@ namespace JustReadTheInstructions
         private static Light _cachedScaledSunLight;
 
         public RenderTexture TargetTexture { get; private set; }
+        private RenderTexture _thumbnailTexture;
         public bool IsActive { get; private set; }
         public int InstanceId { get; }
         public string SoundKey { get; }
@@ -32,6 +33,7 @@ namespace JustReadTheInstructions
         private const int FarPqsCameraIndex = 1;
         private const int ScaledCameraIndex = 2;
         private const int GalaxyCameraIndex = 3;
+        private const int ThumbnailWidth = 640;
 
         private bool _deferredApplied;
         private bool _tufxApplied;
@@ -86,18 +88,27 @@ namespace JustReadTheInstructions
             => hullCamera.part.FindModulesImplementing<MuMechModuleHullCamera>();
 
         private void InitializeRenderTexture()
+            => TargetTexture = CreateTarget(JRTISettings.RenderWidth, JRTISettings.RenderHeight);
+
+        private RenderTexture ThumbnailTarget()
         {
-            TargetTexture = new RenderTexture(
-                JRTISettings.RenderWidth,
-                JRTISettings.RenderHeight,
-                32,
-                RenderTextureFormat.ARGB32
-            )
+            if (JRTISettings.RenderWidth <= ThumbnailWidth) return TargetTexture;
+            if (_thumbnailTexture == null)
+            {
+                int height = Mathf.RoundToInt(ThumbnailWidth * (float)JRTISettings.RenderHeight / JRTISettings.RenderWidth / 2f) * 2;
+                _thumbnailTexture = CreateTarget(ThumbnailWidth, height);
+            }
+            return _thumbnailTexture;
+        }
+
+        private static RenderTexture CreateTarget(int width, int height)
+        {
+            var texture = new RenderTexture(width, height, 32, RenderTextureFormat.ARGB32)
             {
                 antiAliasing = (ScattererIntegration.IsAvailable || JRTISettings.AntiAliasing == 0) ? 1 : JRTISettings.AntiAliasing
             };
-
-            TargetTexture.Create();
+            texture.Create();
+            return texture;
         }
 
         private void SetupCameras()
@@ -340,11 +351,12 @@ namespace JustReadTheInstructions
             return camera;
         }
 
-        public void Render(bool capture, bool rephaseCapture)
+        public void Render(bool capture, bool rephaseCapture, bool thumbnail)
         {
             if (!IsActive || _hullCamera == null) return;
 
-            if (!TargetTexture.IsCreated()) TargetTexture.Create();
+            var target = thumbnail ? ThumbnailTarget() : TargetTexture;
+            if (!target.IsCreated()) target.Create();
 
             SynchronizeFarPqsCamera();
 
@@ -363,7 +375,7 @@ namespace JustReadTheInstructions
 
                 var camera = _cameras[i];
                 if (camera == null) continue;
-                camera.targetTexture = TargetTexture;
+                camera.targetTexture = target;
                 if (_synchronizers[i] != null)
                     _synchronizers[i].ManualSync();
 
@@ -376,17 +388,17 @@ namespace JustReadTheInstructions
             }
 
             if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
-                _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
+                _aeroFX.Render(_cameras[NearCameraIndex], target);
 
             RestoreRaymarchedLightBuffers();
 
             if (_fireflyApplied) UpdateFireflyEffects();
 
             if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
-                _dockingOverlay.Render(TargetTexture);
+                _dockingOverlay.Render(target);
 
             if (capture)
-                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
+                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, target, rephaseCapture);
         }
 
         private void SynchronizeFarPqsCamera()
@@ -628,6 +640,8 @@ namespace JustReadTheInstructions
 
             TargetTexture?.Release();
             TargetTexture = null;
+            _thumbnailTexture?.Release();
+            _thumbnailTexture = null;
 
             _dockingOverlay.Dispose();
             _aeroFX?.Dispose();

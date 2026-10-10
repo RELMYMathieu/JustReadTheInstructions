@@ -127,11 +127,14 @@ namespace JustReadTheInstructions
         public bool TryGetCaptureOverdue(int cameraId, float now, out float overdue)
         {
             overdue = float.NegativeInfinity;
-            if (!_states.TryGetValue(cameraId, out var s) || !s.HasActiveClients)
+            if (!_states.TryGetValue(cameraId, out var s) || !s.WantsCaptures)
                 return false;
             overdue = s.CaptureOverdue(now);
             return true;
         }
+
+        public bool NeedsOnlyThumbnails(int cameraId)
+            => _states.TryGetValue(cameraId, out var s) && s.NeedsOnlyThumbnails;
 
         public void GetClientCounts(int cameraId, out int streamClients, out int previewClients)
         {
@@ -152,7 +155,7 @@ namespace JustReadTheInstructions
 
             int width = renderTexture.width;
             int height = renderTexture.height;
-            bool rgba = state.Recorder != null;
+            bool rgba = state.Recorder != null && width == state.FrameWidth && height == state.FrameHeight;
             var format = rgba ? TextureFormat.RGBA32 : TextureFormat.RGB24;
 
             if (!SystemInfo.supportsAsyncGPUReadback)
@@ -236,7 +239,7 @@ namespace JustReadTheInstructions
                 (uint)frame.Width, (uint)frame.Height, 0, JRTISettings.StreamJpegQuality);
 
             if (jpeg == null) return;
-            state.PushFrame(jpeg, frame.Sequence);
+            state.PushFrame(jpeg, frame.Sequence, frame.Width == state.FrameWidth);
             JRTIPerf.RecordEncode(cameraId, queued, started, jpeg.Length);
         }
 

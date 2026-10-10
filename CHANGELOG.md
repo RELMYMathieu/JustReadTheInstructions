@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Changed
+
+- Card thumbnails (Cameras page, layout tray) - a camera seen only on a card snapshot or a card's live preview now renders at 640 px wide instead of full resolution, and each snapshot takes one render instead of about three, so the Cameras page costs a fraction of the GPU time
+
 ## v3.1.1 - 2026-10-09
 
 ### Changed
