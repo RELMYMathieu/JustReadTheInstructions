@@ -277,6 +277,8 @@ namespace JustReadTheInstructions
                 JRTISettings.Save();
             }
             GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Log VRAM census", GUILayout.Width(130f)))
+                RenderTextureCensus.Log();
             if (GUILayout.Button(IsLogging ? $"Stop CSV log ({_log.Rows} rows)" : "Start CSV log", GUILayout.Width(170f)))
             {
                 if (IsLogging) StopLog();

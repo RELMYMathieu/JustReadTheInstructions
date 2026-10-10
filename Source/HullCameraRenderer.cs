@@ -28,6 +28,8 @@ namespace JustReadTheInstructions
 
         public Vessel Vessel => _hullCamera.vessel;
 
+        public const string TargetTexturePrefix = "JRTI_Target_";
+
         public const float FovLimitMin = 0.25f;
         public const float FovLimitMax = 120f;
 
@@ -109,6 +111,7 @@ namespace JustReadTheInstructions
                 RenderTextureFormat.ARGB32
             )
             {
+                name = TargetTexturePrefix + InstanceId,
                 antiAliasing = (ScattererIntegration.IsAvailable || JRTISettings.AntiAliasing == 0) ? 1 : JRTISettings.AntiAliasing
             };
 
