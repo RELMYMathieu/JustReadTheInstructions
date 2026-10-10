@@ -39,7 +39,7 @@ namespace JustReadTheInstructions
         private readonly List<long> _endedLoops = new List<long>();
         private readonly Queue<AudioClip> _clipsToCapture = new Queue<AudioClip>();
         private readonly List<AudioSource> _createdSources = new List<AudioSource>();
-        private readonly EngineSwitchMuter _engineSwitches = new EngineSwitchMuter();
+        private readonly EngineModeSwitches _engineSwitches = new EngineModeSwitches();
         private ClipCapture _capture;
         private float _refreshSourcesAt;
         private long _nextOneShotId = FirstOneShotId;
@@ -238,9 +238,22 @@ namespace JustReadTheInstructions
             foreach (var entry in _sources.Values)
             {
                 var source = entry.Source;
-                if (source == null || entry.ReplacedByJrti || !entry.IsPlayingClip(paused) || HasOneShot(entry, source.clip) || _engineSwitches.Mutes(source)) continue;
+                if (source == null || entry.ReplacedByJrti || _engineSwitches.Mutes(source)) continue;
+                if (_engineSwitches.Bridges(source, out float gain))
+                {
+                    var held = entry.Heard.HasValue && !paused ? ReadClip(source.clip) : null;
+                    if (held != null)
+                    {
+                        var heard = entry.Heard.Value;
+                        AddVoice(entry.Id, Emitter.Of(entry, heard.Volume * gain), held, heard.TimeSamplesAt(now, held), heard.Pitch, true, listeners);
+                    }
+                    continue;
+                }
+                if (!entry.IsPlayingClip(paused) || HasOneShot(entry, source.clip)) continue;
                 var pcm = ReadClip(source.clip);
-                if (pcm != null) AddVoice(entry.Id, Emitter.Of(entry, entry.Volume), pcm, source.timeSamples, entry.Pitch, source.loop, listeners);
+                if (pcm == null) continue;
+                entry.Heard = new HeardState(source.timeSamples, entry.Pitch, entry.Volume, now);
+                AddVoice(entry.Id, Emitter.Of(entry, entry.Volume), pcm, source.timeSamples, entry.Pitch, source.loop, listeners);
             }
 
             if (!paused) AddReentryVoices(listeners);
@@ -509,6 +522,25 @@ namespace JustReadTheInstructions
             }
         }
 
+        private readonly struct HeardState
+        {
+            public readonly int TimeSamples;
+            public readonly float Pitch;
+            public readonly float Volume;
+            public readonly float At;
+
+            public HeardState(int timeSamples, float pitch, float volume, float at)
+            {
+                TimeSamples = timeSamples;
+                Pitch = pitch;
+                Volume = volume;
+                At = at;
+            }
+
+            public int TimeSamplesAt(float now, ClipPcm pcm)
+                => (int)((TimeSamples + (now - At) * Pitch * pcm.Frequency) % Math.Max(pcm.Samples.Length, 1));
+        }
+
         private sealed class SoundSource : IEmitterShape
         {
             private const float MinDoppler = 0.01f;
@@ -518,6 +550,7 @@ namespace JustReadTheInstructions
             public readonly AudioSource Source;
             public readonly int Id;
             public readonly bool ReplacedByJrti;
+            public HeardState? Heard;
             private readonly Part _part;
             private readonly List<ModuleEngines> _engines;
             private readonly bool _inInternalSpace;
