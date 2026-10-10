@@ -20,6 +20,7 @@ namespace JustReadTheInstructions
 
         public RenderTexture TargetTexture { get; private set; }
         private RenderTexture _thumbnailTexture;
+        private RenderTexture _activeTarget;
         public bool IsActive { get; private set; }
         public int InstanceId { get; }
         public string SoundKey { get; }
@@ -88,7 +89,10 @@ namespace JustReadTheInstructions
             => hullCamera.part.FindModulesImplementing<MuMechModuleHullCamera>();
 
         private void InitializeRenderTexture()
-            => TargetTexture = CreateTarget(JRTISettings.RenderWidth, JRTISettings.RenderHeight);
+        {
+            TargetTexture = CreateTarget(JRTISettings.RenderWidth, JRTISettings.RenderHeight);
+            _activeTarget = TargetTexture;
+        }
 
         private RenderTexture ThumbnailTarget()
         {
@@ -99,6 +103,12 @@ namespace JustReadTheInstructions
                 _thumbnailTexture = CreateTarget(ThumbnailWidth, height);
             }
             return _thumbnailTexture;
+        }
+
+        private void SwitchTarget(RenderTexture target)
+        {
+            _activeTarget = target;
+            RebuildCameras();
         }
 
         private static RenderTexture CreateTarget(int width, int height)
@@ -164,7 +174,7 @@ namespace JustReadTheInstructions
             // Basically, this current value causes an issue where the shading on the cameras is a bit
             // "off" looking. Still looking into it.
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = TargetTexture;
+            camera.targetTexture = _activeTarget;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
@@ -246,7 +256,7 @@ namespace JustReadTheInstructions
             camera.transform.localScale = nearCamera.transform.localScale;
 
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = TargetTexture;
+            camera.targetTexture = _activeTarget;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
             camera.enabled = false;
@@ -273,7 +283,7 @@ namespace JustReadTheInstructions
             camera.transform.localScale = Vector3.one;
 
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = TargetTexture;
+            camera.targetTexture = _activeTarget;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
@@ -320,7 +330,7 @@ namespace JustReadTheInstructions
             camera.transform.localScale = Vector3.one;
 
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = TargetTexture;
+            camera.targetTexture = _activeTarget;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
@@ -357,6 +367,7 @@ namespace JustReadTheInstructions
 
             var target = thumbnail ? ThumbnailTarget() : TargetTexture;
             if (!target.IsCreated()) target.Create();
+            if (target != _activeTarget) SwitchTarget(target);
 
             SynchronizeFarPqsCamera();
 
