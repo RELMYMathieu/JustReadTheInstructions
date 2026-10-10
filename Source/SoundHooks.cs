@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace JustReadTheInstructions
 {
-    internal static class OneShotHook
+    internal static class SoundHooks
     {
         private const int MaxPending = 64;
         private const string HarmonyId = "JustReadTheInstructions.CameraAudio";
@@ -28,6 +28,7 @@ namespace JustReadTheInstructions
         }
 
         private static readonly List<Fired> Pending = new List<Fired>();
+        private static readonly List<AudioSource> Created = new List<AudioSource>();
         private static bool _attempted;
 
         public static bool Listening { get; set; }
@@ -49,24 +50,27 @@ namespace JustReadTheInstructions
                 }
 
                 var harmony = Activator.CreateInstance(harmonyType, HarmonyId);
-                var postfix = Activator.CreateInstance(harmonyType.Assembly.GetType("HarmonyLib.HarmonyMethod"),
-                    typeof(OneShotHook).GetMethod(nameof(AfterPlayOneShot), BindingFlags.Static | BindingFlags.NonPublic));
                 var patch = harmonyType.GetMethods().First(m => m.Name == "Patch" && m.GetParameters().Length > 2
                                                                 && m.GetParameters()[0].ParameterType == typeof(MethodBase));
-                int postfixSlot = Array.FindIndex(patch.GetParameters(), p => p.Name == "postfix");
 
-                foreach (var original in typeof(AudioSource).GetMethods().Where(m => m.Name == nameof(AudioSource.PlayOneShot)))
+                void Postfix(MethodBase original, string hook)
                 {
+                    var postfix = Activator.CreateInstance(harmonyType.Assembly.GetType("HarmonyLib.HarmonyMethod"),
+                        typeof(SoundHooks).GetMethod(hook, BindingFlags.Static | BindingFlags.NonPublic));
                     var arguments = new object[patch.GetParameters().Length];
                     arguments[0] = original;
-                    arguments[postfixSlot] = postfix;
+                    arguments[Array.FindIndex(patch.GetParameters(), p => p.Name == "postfix")] = postfix;
                     patch.Invoke(harmony, arguments);
                 }
-                Debug.Log("[JRTI-Audio]: Listening for PlayOneShot sounds");
+
+                foreach (var original in typeof(AudioSource).GetMethods().Where(m => m.Name == nameof(AudioSource.PlayOneShot)))
+                    Postfix(original, nameof(AfterPlayOneShot));
+                Postfix(typeof(AudioFX).GetMethod("CreateSource", BindingFlags.Instance | BindingFlags.NonPublic), nameof(AfterCreateSource));
+                Debug.Log("[JRTI-Audio]: Listening for PlayOneShot sounds and new effect sounds");
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[JRTI-Audio]: Could not listen for PlayOneShot sounds: {(ex.InnerException ?? ex).Message}");
+                Debug.LogWarning($"[JRTI-Audio]: Could not listen for PlayOneShot and effect sounds: {(ex.InnerException ?? ex).Message}");
             }
         }
 
@@ -74,6 +78,17 @@ namespace JustReadTheInstructions
         {
             into.AddRange(Pending);
             Pending.Clear();
+        }
+
+        public static void TakeCreated(List<AudioSource> into)
+        {
+            into.AddRange(Created);
+            Created.Clear();
+        }
+
+        private static void AfterCreateSource(AudioSource __result)
+        {
+            if (Listening && __result != null && Created.Count < MaxPending) Created.Add(__result);
         }
 
         private static void AfterPlayOneShot(AudioSource __instance, object[] __args)

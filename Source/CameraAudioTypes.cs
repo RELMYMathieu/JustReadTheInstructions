@@ -22,9 +22,12 @@ namespace JustReadTheInstructions
             int channels = clip.channels;
             if (channels <= 0) return null;
             var interleaved = new float[clip.samples * channels];
-            if (!clip.GetData(interleaved, 0)) return null;
+            return clip.GetData(interleaved, 0) ? FromInterleaved(interleaved, channels, clip.frequency) : null;
+        }
 
-            var mono = new short[clip.samples];
+        public static ClipPcm FromInterleaved(float[] interleaved, int channels, int frequency)
+        {
+            var mono = new short[interleaved.Length / channels];
             for (int i = 0; i < mono.Length; i++)
             {
                 float sum = 0f;
@@ -33,7 +36,7 @@ namespace JustReadTheInstructions
                 float sample = sum / channels;
                 mono[i] = (short)(Math.Max(-1f, Math.Min(1f, sample)) * short.MaxValue);
             }
-            return new ClipPcm(mono, clip.frequency);
+            return new ClipPcm(mono, frequency);
         }
 
         public static ClipPcm FromWav(byte[] wav)
@@ -120,15 +123,17 @@ namespace JustReadTheInstructions
         public readonly int TimeSamples;
         public readonly double ClipSamplesPerSecond;
         public readonly bool Loop;
+        public readonly bool IsBoom;
         public readonly VoicePath[] Paths;
 
-        public VoiceState(long voiceId, ClipPcm clip, int timeSamples, double clipSamplesPerSecond, bool loop, VoicePath[] paths)
+        public VoiceState(long voiceId, ClipPcm clip, int timeSamples, double clipSamplesPerSecond, bool loop, bool isBoom, VoicePath[] paths)
         {
             VoiceId = voiceId;
             Clip = clip;
             TimeSamples = timeSamples;
             ClipSamplesPerSecond = clipSamplesPerSecond;
             Loop = loop;
+            IsBoom = isBoom;
             Paths = paths;
         }
     }
@@ -136,14 +141,16 @@ namespace JustReadTheInstructions
     internal sealed class AudioSnapshot
     {
         public readonly long Ticks;
+        public readonly long PositionTicks;
         public readonly CameraMix[] Cameras;
         public readonly int[] CameraIds;
         public readonly VoiceState[] Voices;
         public readonly MasteringSettings Mastering;
 
-        public AudioSnapshot(long ticks, CameraMix[] cameras, VoiceState[] voices, MasteringSettings mastering)
+        public AudioSnapshot(long ticks, long positionTicks, CameraMix[] cameras, VoiceState[] voices, MasteringSettings mastering)
         {
             Ticks = ticks;
+            PositionTicks = positionTicks;
             Cameras = cameras;
             Voices = voices;
             Mastering = mastering;

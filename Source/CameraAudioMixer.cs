@@ -197,7 +197,7 @@ namespace JustReadTheInstructions
             _applied = snapshot;
 
             double elapsedSeconds = (Stopwatch.GetTimestamp() - snapshot.Ticks) / (double)Stopwatch.Frequency;
-            double takenAt = blockStart + (snapshot.Ticks - blockTicks) * (double)SampleRate / Stopwatch.Frequency;
+            double takenAt = blockStart + (snapshot.PositionTicks - blockTicks) * (double)SampleRate / Stopwatch.Frequency;
 
             foreach (var voice in _voices.Values)
                 voice.MarkEnding();
@@ -274,11 +274,14 @@ namespace JustReadTheInstructions
 
             public double TakenAt { get; private set; }
 
+            public bool IsBoom { get; private set; }
+
             public void MarkEnding() => _ending = true;
 
             public void Sync(VoiceState state, int[] cameraIds, double elapsedSeconds, double takenAt)
             {
                 TakenAt = takenAt;
+                IsBoom = state.IsBoom;
                 _ending = false;
                 _silentFrom = -1;
                 _loop = state.Loop;
@@ -369,8 +372,8 @@ namespace JustReadTheInstructions
             private const float DistortionDrive = 3f;
             private const double SilentBelowRate = 0.1;
             private const double FullFromRate = 0.2;
-            private const double FullUpToRate = 3.0;
-            private const double SilentAboveRate = 6.0;
+            private const double FullUpToRate = 8.0;
+            private const double SilentAboveRate = 16.0;
             private static readonly float CentrePan = (float)Math.Sqrt(0.5);
 
             private struct Emission
@@ -520,8 +523,8 @@ namespace JustReadTheInstructions
                     if (earliest >= blockEnd && j > _lastFold) break;
 
                     double span = arrivesTo - arrivesFrom;
-                    float weight = span == 0.0 ? 0f : RateWeight(BlockFrames / Math.Abs(span));
-                    if (weight == 0f || (from.Level == 0f && to.Level == 0f)) continue;
+                    float gain = span == 0.0 ? 0f : RateGain(BlockFrames / Math.Abs(span));
+                    if (gain == 0f || (from.Level == 0f && to.Level == 0f)) continue;
 
                     int start = (int)Math.Max(0.0, Math.Ceiling(earliest - blockStart));
                     int end = (int)Math.Min(BlockFrames, Math.Ceiling(Math.Max(arrivesFrom, arrivesTo) - blockStart));
@@ -536,7 +539,7 @@ namespace JustReadTheInstructions
                             float t = i * step;
                             x += voice.Read(emitted - (_echoDelay + (targetEcho - _echoDelay) * t)) * (_echoMix + (targetEchoMix - _echoMix) * t);
                         }
-                        dry[i] += x * (from.Level + (to.Level - from.Level) * (float)u) * weight;
+                        dry[i] += x * (from.Level + (to.Level - from.Level) * (float)u) * gain;
                         heard = true;
                     }
                 }
@@ -552,12 +555,13 @@ namespace JustReadTheInstructions
 
             private static float LevelOf(VoicePath path) => (float)Math.Sqrt(path.Left * path.Left + path.Right * path.Right);
 
-            private static float RateWeight(double rate)
+            private static float RateGain(double rate)
             {
                 if (rate <= SilentBelowRate || rate >= SilentAboveRate) return 0f;
-                if (rate < FullFromRate) return (float)((rate - SilentBelowRate) / (FullFromRate - SilentBelowRate));
-                if (rate > FullUpToRate) return (float)((SilentAboveRate - rate) / (SilentAboveRate - FullUpToRate));
-                return 1f;
+                float compression = (float)Math.Sqrt(Math.Min(rate, FullUpToRate));
+                if (rate < FullFromRate) return compression * (float)((rate - SilentBelowRate) / (FullFromRate - SilentBelowRate));
+                if (rate > FullUpToRate) return compression * (float)((SilentAboveRate - rate) / (SilentAboveRate - FullUpToRate));
+                return compression;
             }
 
             private static float SmoothCutoff(float current, float target)
@@ -627,6 +631,7 @@ namespace JustReadTheInstructions
         {
             public readonly int CameraId;
             private readonly float[] _mix = new float[BlockFrames * Channels];
+            private readonly float[] _booms = new float[BlockFrames * Channels];
             private readonly float[] _dry = new float[BlockFrames];
             private readonly Dictionary<long, PathState> _paths = new Dictionary<long, PathState>();
             private readonly AutoGain _autoGain = new AutoGain();
@@ -647,6 +652,7 @@ namespace JustReadTheInstructions
                 _settings = settings;
                 _mastering = mastering;
                 Array.Clear(_mix, 0, _mix.Length);
+                Array.Clear(_booms, 0, _booms.Length);
             }
 
             public void Forget(long voiceId) => _paths.Remove(voiceId);
@@ -655,12 +661,14 @@ namespace JustReadTheInstructions
             {
                 if (!_paths.TryGetValue(voiceId, out var path))
                     _paths[voiceId] = path = new PathState(target, voice.TakenAt, blockStart);
-                path.Mix(voice, target, blockStart, _dry, _mix);
+                path.Mix(voice, target, blockStart, _dry, voice.IsBoom ? _booms : _mix);
             }
 
             public byte[] Finish()
             {
                 float gain = _settings.Gain * _autoGain.Next(_mix, _settings.Gain, _settings.AutoGain);
+                for (int i = 0; i < _mix.Length; i++)
+                    _mix[i] += _booms[i];
                 GainRamp.Apply(_mix, _gain, gain);
                 _gain = gain;
                 if (_settings.Mastering) _compressor.Process(_mix, _mastering);

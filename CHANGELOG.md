@@ -11,7 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Sonic booms - the shocks come closer together, both the gap after the first one and the gap between the last two
 - Card thumbnails (Cameras page, layout tray) - a camera seen only on a card snapshot or a card's live preview now renders at 640 px wide instead of full resolution, and each snapshot takes one render instead of about three, so the Cameras page costs a fraction of the GPU time
+
+### Fixed
+
+- Auto gain on camera sound - sonic booms are no longer measured, so they never turn the engine down after them, and a loud engine after a long quiet stretch settles in about two seconds instead of blasting then fading away
+- Engine warble on camera sound - fast vessels no longer wobble in pitch, as their positions are now timed to the physics step they come from
+- Supersonic Doppler - a vessel slowing through Mach 1 toward a camera now roars in loud and high-pitched with its boom, then drops in pitch as it slows, instead of fading in seconds later. Sounds coming towards a camera are a little louder and those going away a little quieter
+- Stock engine sounds on camera sound - built-in sounds KSP keeps compressed (the vent when an engine starts or stops, flameouts...) now play on cameras instead of being skipped
+- Engine mode switches on camera sound - switching a multi-mode engine (the Tundra Falcon 9 booster going from nine to three to one engine...) keeps the roar going without a gap, and leaves out the start and stop vents of the switch
 
 ## v3.1.1 - 2026-10-09
 

@@ -154,38 +154,57 @@ namespace JustReadTheInstructions
     {
         private const float MaxBoostDb = 24f;
         private const float MaxCutDb = 18f;
-        private const float TargetRms = 0.1f;
-        private const float GateRms = 0.0005f;
+        private const float TargetDb = -20f;
+        private const float GateDb = -66f;
         private const float RiseDbPerSecond = 4f;
-        private const float FallDbPerSecond = 6f;
-        private const float LevelSeconds = 1f;
+        private const float FallDbPerSecond = 30f;
+        private const float MeterSeconds = 2f;
         private const float BlockSeconds = CameraAudioMixer.BlockFrames / (float)CameraAudioMixer.SampleRate;
+        private const int MeterBlocks = (int)(MeterSeconds / BlockSeconds);
 
-        private float _meanSquare;
+        private readonly float[] _recentDb = new float[MeterBlocks];
+        private readonly float[] _sortedDb = new float[MeterBlocks];
+        private int _recentCount;
+        private int _nextRecent;
         private float _db;
 
         public float Next(float[] stereo, float inputGain, bool enabled)
         {
             if (!enabled)
             {
-                _meanSquare = 0f;
+                _recentCount = 0;
+                _nextRecent = 0;
                 _db = 0f;
                 return 1f;
             }
 
             float sum = 0f;
             foreach (float sample in stereo) sum += sample * sample;
-            _meanSquare += (sum / stereo.Length * inputGain * inputGain - _meanSquare) * (BlockSeconds / LevelSeconds);
+            float blockDb = 10f * (float)Math.Log10(sum / stereo.Length * inputGain * inputGain + 1e-20f);
 
-            float rms = (float)Math.Sqrt(_meanSquare);
-            if (rms > GateRms)
+            if (blockDb > GateDb)
             {
-                float wanted = Math.Max(-MaxCutDb, Math.Min(MaxBoostDb, 20f * (float)Math.Log10(TargetRms / rms)));
+                Remember(blockDb);
+                float wanted = Math.Max(-MaxCutDb, Math.Min(MaxBoostDb, TargetDb - MedianDb()));
                 _db = wanted > _db
                     ? Math.Min(wanted, _db + RiseDbPerSecond * BlockSeconds)
                     : Math.Max(wanted, _db - FallDbPerSecond * BlockSeconds);
             }
             return (float)Math.Pow(10.0, _db / 20.0);
+        }
+
+        private void Remember(float blockDb)
+        {
+            _recentDb[_nextRecent] = blockDb;
+            _nextRecent = (_nextRecent + 1) % MeterBlocks;
+            _recentCount = Math.Min(_recentCount + 1, MeterBlocks);
+        }
+
+        private float MedianDb()
+        {
+            Array.Copy(_recentDb, _sortedDb, _recentCount);
+            Array.Sort(_sortedDb, 0, _recentCount);
+            return _sortedDb[_recentCount / 2];
         }
     }
 }

@@ -26,7 +26,7 @@ namespace JustReadTheInstructions
         private readonly Dictionary<AudioClip, ClipPcm> _clips = new Dictionary<AudioClip, ClipPcm>();
         private readonly Dictionary<int, SoundSource> _sources = new Dictionary<int, SoundSource>();
         private readonly List<OneShot> _oneShots = new List<OneShot>();
-        private readonly List<OneShotHook.Fired> _fired = new List<OneShotHook.Fired>();
+        private readonly List<SoundHooks.Fired> _fired = new List<SoundHooks.Fired>();
         private readonly List<VoiceState> _voices = new List<VoiceState>();
         private readonly List<int> _staleSources = new List<int>();
         private readonly SonicBoomDetector _boomDetector = new SonicBoomDetector();
@@ -37,6 +37,10 @@ namespace JustReadTheInstructions
         private readonly Dictionary<long, double> _loopPositions = new Dictionary<long, double>();
         private readonly HashSet<long> _liveLoops = new HashSet<long>();
         private readonly List<long> _endedLoops = new List<long>();
+        private readonly Queue<AudioClip> _clipsToCapture = new Queue<AudioClip>();
+        private readonly List<AudioSource> _createdSources = new List<AudioSource>();
+        private readonly EngineSwitchMuter _engineSwitches = new EngineSwitchMuter();
+        private ClipCapture _capture;
         private float _refreshSourcesAt;
         private long _nextOneShotId = FirstOneShotId;
 
@@ -45,14 +49,15 @@ namespace JustReadTheInstructions
             if (Instance != null) { Destroy(this); return; }
             Instance = this;
             _mixer.Start();
-            OneShotHook.TryInstall();
+            SoundHooks.TryInstall();
         }
 
         void OnDestroy()
         {
             if (Instance != this) return;
             Instance = null;
-            OneShotHook.Listening = false;
+            SoundHooks.Listening = false;
+            if (_capture != null) Destroy(_capture.gameObject);
             _mixer.Dispose();
         }
 
@@ -61,7 +66,7 @@ namespace JustReadTheInstructions
         void LateUpdate()
         {
             var cameraIds = _mixer.ListenedCameraIds;
-            OneShotHook.Listening = cameraIds.Length > 0;
+            SoundHooks.Listening = cameraIds.Length > 0;
             if (cameraIds.Length == 0)
             {
                 _oneShots.Clear();
@@ -72,7 +77,10 @@ namespace JustReadTheInstructions
 
             long start = JRTIPerf.Now();
             RefreshSources();
+            TakeCreatedSources();
+            CaptureCompressedClips();
             TakeOneShots();
+            _engineSwitches.Update();
             var listeners = Listeners(cameraIds, out var cameras);
             if (!AudioListener.pause) DetectBooms(cameraIds, listeners);
             _mixer.Publish(BuildSnapshot(listeners, cameras));
@@ -87,11 +95,26 @@ namespace JustReadTheInstructions
             foreach (var source in FindObjectsOfType<AudioSource>())
                 EntryFor(source).LinkPlayerNeutralMinDistance();
 
+            foreach (var effect in FindObjectsOfType<AudioFX>())
+            {
+                var clip = string.IsNullOrEmpty(effect.clip) ? null : GameDatabase.Instance.GetAudioClip(effect.clip);
+                if (clip != null && clip.loadType != AudioClipLoadType.DecompressOnLoad) ReadClip(clip);
+            }
+
             _staleSources.Clear();
             foreach (var kv in _sources)
                 if (kv.Value.Source == null) _staleSources.Add(kv.Key);
             foreach (int id in _staleSources)
                 _sources.Remove(id);
+            _engineSwitches.Forget();
+        }
+
+        private void TakeCreatedSources()
+        {
+            _createdSources.Clear();
+            SoundHooks.TakeCreated(_createdSources);
+            foreach (var source in _createdSources)
+                if (source != null) EntryFor(source).LinkPlayerNeutralMinDistance();
         }
 
         private SoundSource EntryFor(AudioSource source)
@@ -105,7 +128,7 @@ namespace JustReadTheInstructions
         private void TakeOneShots()
         {
             _fired.Clear();
-            OneShotHook.TakePending(_fired);
+            SoundHooks.TakePending(_fired);
             foreach (var fired in _fired)
             {
                 if (fired.Source == null) continue;
@@ -215,14 +238,22 @@ namespace JustReadTheInstructions
             foreach (var entry in _sources.Values)
             {
                 var source = entry.Source;
-                if (source == null || entry.ReplacedByJrti || !entry.IsPlayingClip(paused) || HasOneShot(entry, source.clip)) continue;
+                if (source == null || entry.ReplacedByJrti || !entry.IsPlayingClip(paused) || HasOneShot(entry, source.clip) || _engineSwitches.Mutes(source)) continue;
                 var pcm = ReadClip(source.clip);
                 if (pcm != null) AddVoice(entry.Id, Emitter.Of(entry, entry.Volume), pcm, source.timeSamples, entry.Pitch, source.loop, listeners);
             }
 
             if (!paused) AddReentryVoices(listeners);
 
-            return new AudioSnapshot(Stopwatch.GetTimestamp(), cameras, _voices.ToArray(), RSEIntegration.Mastering());
+            long ticks = Stopwatch.GetTimestamp();
+            return new AudioSnapshot(ticks, PhysicsStepTicks(ticks), cameras, _voices.ToArray(), RSEIntegration.Mastering());
+        }
+
+        private static long PhysicsStepTicks(long now)
+        {
+            if (Time.timeScale <= 0f) return now;
+            double secondsSinceStep = Time.realtimeSinceStartup - Time.unscaledTime + (Time.time - Time.fixedTime) / Time.timeScale;
+            return now - (long)(secondsSinceStep * Stopwatch.Frequency);
         }
 
         private void AddReentryVoices(Listener[] listeners)
@@ -288,7 +319,7 @@ namespace JustReadTheInstructions
             float now = Time.unscaledTime;
             for (int i = 0; i < listeners.Length; i++)
                 paths[i] = emitter.PathTo(listeners[i], _boomDetector, now);
-            _voices.Add(new VoiceState(id, pcm, timeSamples, pitch * pcm.Frequency, loop, paths));
+            _voices.Add(new VoiceState(id, pcm, timeSamples, pitch * pcm.Frequency, loop, false, paths));
         }
 
         private ClipPcm ReadClip(AudioClip clip)
@@ -299,13 +330,34 @@ namespace JustReadTheInstructions
             if (readable && clip.loadState != AudioDataLoadState.Loaded) return null;
 
             pcm = (readable ? ClipPcm.Read(clip) : null) ?? GameDataSounds.ReadWav(clip.name);
-            if (pcm == null)
-            {
-                AudioPerf.RecordSkippedSound();
-                Debug.LogWarning($"[JRTI-Audio]: Skipping sound '{clip.name}': Unity keeps it compressed ({clip.loadType}) and no WAV file with that name is in GameData");
-            }
+            if (pcm == null && !readable) _clipsToCapture.Enqueue(clip);
+            else if (pcm == null) SkipSound(clip, "Unity could not read it");
             _clips[clip] = pcm;
             return pcm;
+        }
+
+        private void CaptureCompressedClips()
+        {
+            if (_capture != null)
+            {
+                if (!_capture.IsDone) return;
+                var clip = _capture.Clip;
+                var pcm = _capture.Finish();
+                _capture = null;
+                if (pcm == null) SkipSound(clip, $"Unity keeps it compressed ({clip.loadType}) and capturing it failed");
+                else
+                {
+                    _clips[clip] = pcm;
+                    Debug.Log($"[JRTI-Audio]: Captured compressed sound '{clip.name}' ({pcm.Samples.Length / (float)pcm.Frequency:F1} s)");
+                }
+            }
+            if (_clipsToCapture.Count > 0) _capture = ClipCapture.Begin(_clipsToCapture.Dequeue());
+        }
+
+        private static void SkipSound(AudioClip clip, string reason)
+        {
+            AudioPerf.RecordSkippedSound();
+            Debug.LogWarning($"[JRTI-Audio]: Skipping sound '{clip.name}': {reason}");
         }
 
         private static float PanOf(Vector3 offset, float distance, Transform view, float blend)
@@ -433,7 +485,7 @@ namespace JustReadTheInstructions
                 var paths = new VoicePath[cameras.Length];
                 for (int i = 0; i < cameras.Length; i++)
                     paths[i] = cameras[i].CameraId == CameraId ? Path : VoicePath.Silent;
-                return new VoiceState(Id, Pcm, timeSamples, Pcm.Frequency * Pitch, false, paths);
+                return new VoiceState(Id, Pcm, timeSamples, Pcm.Frequency * Pitch, false, true, paths);
             }
         }
 
