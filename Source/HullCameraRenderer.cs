@@ -19,8 +19,6 @@ namespace JustReadTheInstructions
         private static Light _cachedScaledSunLight;
 
         public RenderTexture TargetTexture { get; private set; }
-        private RenderTexture _thumbnailTexture;
-        private RenderTexture _activeTarget;
         public bool IsActive { get; private set; }
         public int InstanceId { get; }
         public string SoundKey { get; }
@@ -34,7 +32,6 @@ namespace JustReadTheInstructions
         private const int FarPqsCameraIndex = 1;
         private const int ScaledCameraIndex = 2;
         private const int GalaxyCameraIndex = 3;
-        private const int ThumbnailWidth = 640;
 
         private bool _deferredApplied;
         private bool _tufxApplied;
@@ -90,35 +87,17 @@ namespace JustReadTheInstructions
 
         private void InitializeRenderTexture()
         {
-            TargetTexture = CreateTarget(JRTISettings.RenderWidth, JRTISettings.RenderHeight);
-            _activeTarget = TargetTexture;
-        }
-
-        private RenderTexture ThumbnailTarget()
-        {
-            if (JRTISettings.RenderWidth <= ThumbnailWidth) return TargetTexture;
-            if (_thumbnailTexture == null)
-            {
-                int height = Mathf.RoundToInt(ThumbnailWidth * (float)JRTISettings.RenderHeight / JRTISettings.RenderWidth / 2f) * 2;
-                _thumbnailTexture = CreateTarget(ThumbnailWidth, height);
-            }
-            return _thumbnailTexture;
-        }
-
-        private void SwitchTarget(RenderTexture target)
-        {
-            _activeTarget = target;
-            RebuildCameras();
-        }
-
-        private static RenderTexture CreateTarget(int width, int height)
-        {
-            var texture = new RenderTexture(width, height, 32, RenderTextureFormat.ARGB32)
+            TargetTexture = new RenderTexture(
+                JRTISettings.RenderWidth,
+                JRTISettings.RenderHeight,
+                32,
+                RenderTextureFormat.ARGB32
+            )
             {
                 antiAliasing = (ScattererIntegration.IsAvailable || JRTISettings.AntiAliasing == 0) ? 1 : JRTISettings.AntiAliasing
             };
-            texture.Create();
-            return texture;
+
+            TargetTexture.Create();
         }
 
         private void SetupCameras()
@@ -174,7 +153,7 @@ namespace JustReadTheInstructions
             // Basically, this current value causes an issue where the shading on the cameras is a bit
             // "off" looking. Still looking into it.
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = _activeTarget;
+            camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
@@ -256,7 +235,7 @@ namespace JustReadTheInstructions
             camera.transform.localScale = nearCamera.transform.localScale;
 
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = _activeTarget;
+            camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
             camera.enabled = false;
@@ -283,7 +262,7 @@ namespace JustReadTheInstructions
             camera.transform.localScale = Vector3.one;
 
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = _activeTarget;
+            camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
@@ -330,7 +309,7 @@ namespace JustReadTheInstructions
             camera.transform.localScale = Vector3.one;
 
             camera.fieldOfView = _hullCamera.cameraFoV;
-            camera.targetTexture = _activeTarget;
+            camera.targetTexture = TargetTexture;
             camera.allowHDR = JRTISettings.UseHDR;
             camera.allowMSAA = !ScattererIntegration.IsAvailable;
 
@@ -361,13 +340,11 @@ namespace JustReadTheInstructions
             return camera;
         }
 
-        public void Render(bool capture, bool rephaseCapture, bool thumbnail)
+        public void Render(bool capture, bool rephaseCapture)
         {
             if (!IsActive || _hullCamera == null) return;
 
-            var target = thumbnail ? ThumbnailTarget() : TargetTexture;
-            if (!target.IsCreated()) target.Create();
-            if (target != _activeTarget) SwitchTarget(target);
+            if (!TargetTexture.IsCreated()) TargetTexture.Create();
 
             SynchronizeFarPqsCamera();
 
@@ -386,7 +363,7 @@ namespace JustReadTheInstructions
 
                 var camera = _cameras[i];
                 if (camera == null) continue;
-                camera.targetTexture = target;
+                camera.targetTexture = TargetTexture;
                 if (_synchronizers[i] != null)
                     _synchronizers[i].ManualSync();
 
@@ -399,17 +376,17 @@ namespace JustReadTheInstructions
             }
 
             if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
-                _aeroFX.Render(_cameras[NearCameraIndex], target);
+                _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
 
             RestoreRaymarchedLightBuffers();
 
             if (_fireflyApplied) UpdateFireflyEffects();
 
             if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
-                _dockingOverlay.Render(target);
+                _dockingOverlay.Render(TargetTexture);
 
             if (capture)
-                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, target, rephaseCapture);
+                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
         }
 
         private void SynchronizeFarPqsCamera()
@@ -651,8 +628,6 @@ namespace JustReadTheInstructions
 
             TargetTexture?.Release();
             TargetTexture = null;
-            _thumbnailTexture?.Release();
-            _thumbnailTexture = null;
 
             _dockingOverlay.Dispose();
             _aeroFX?.Dispose();

@@ -157,8 +157,6 @@ namespace JustReadTheInstructions
             public bool WantsCaptures
                 => MjpegClients.Count > 0 || PreviewClients.Count > 0 || Recorder != null || SnapshotAwaitingCapture;
 
-            public bool NeedsOnlyThumbnails => MjpegClients.Count == 0 && Recorder == null;
-
             private bool SnapshotAwaitingCapture
                 => _snapshotPending && Volatile.Read(ref _capturesInFlight) == 0 && Volatile.Read(ref _jpegsInFlight) == 0;
 
@@ -249,7 +247,7 @@ namespace JustReadTheInstructions
                 _readbackTexture = null;
             }
 
-            public void PushFrame(byte[] jpeg, long sequence, bool fullSize)
+            public void PushFrame(byte[] jpeg, long sequence)
             {
                 _snapshotPending = false;
                 lock (JpegLock)
@@ -257,9 +255,8 @@ namespace JustReadTheInstructions
                     if (sequence < _lastPublishedSequence) return;
                     _lastPublishedSequence = sequence;
                     LatestJpeg = jpeg;
-                    if (fullSize)
-                        foreach (var kv in MjpegClients)
-                            kv.Value.Push(jpeg);
+                    foreach (var kv in MjpegClients)
+                        kv.Value.Push(jpeg);
                     foreach (var kv in PreviewClients)
                         kv.Value.Push(jpeg);
                 }

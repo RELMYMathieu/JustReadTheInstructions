@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Sonic booms - the shocks come closer together, both the gap after the first one and the gap between the last two
-- Card thumbnails (Cameras page, layout tray) - a camera seen only on a card snapshot or a card's live preview now renders at 640 px wide instead of full resolution, and each snapshot takes one render instead of about three, so the Cameras page costs a fraction of the GPU time
+- Card snapshots (Cameras page, layout tray) - each snapshot takes one render instead of about three, so opening the Cameras page costs far less GPU time
 
 ### Fixed
 

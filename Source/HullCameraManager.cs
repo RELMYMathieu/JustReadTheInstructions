@@ -178,15 +178,14 @@ namespace JustReadTheInstructions
 
                 bool rephase = _deferredRenders.Remove(id);
                 if (!due.Capture) WindowSchedule(id).Advance(now, JRTISettings.FramePeriod, rephase);
-                bool thumbnail = due.Capture && !_windows.ContainsKey(id) && JRTIStreamServer.Instance?.NeedsOnlyThumbnails(id) == true;
-                RenderCamera(due.Renderer, due.Capture, rephase, thumbnail);
+                RenderCamera(due.Renderer, due.Capture, rephase);
             }
         }
 
-        private static void RenderCamera(HullCameraRenderer renderer, bool capture, bool rephaseCapture, bool thumbnail)
+        private static void RenderCamera(HullCameraRenderer renderer, bool capture, bool rephaseCapture)
         {
             long start = JRTIPerf.Now();
-            renderer.Render(capture, rephaseCapture, thumbnail);
+            renderer.Render(capture, rephaseCapture);
             JRTIPerf.RecordMainThread(renderer.InstanceId, CameraMetric.Render, start);
         }
 
