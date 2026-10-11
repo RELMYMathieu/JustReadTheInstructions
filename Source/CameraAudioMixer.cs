@@ -289,7 +289,6 @@ namespace JustReadTheInstructions
                 _cameraIds = cameraIds;
                 _paths = state.Paths;
 
-                _maxDelayFrames = 0;
                 foreach (var path in _paths)
                     _maxDelayFrames = Math.Max(_maxDelayFrames, DelayFrames(path) + EchoFrames(path));
 

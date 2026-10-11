@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supersonic Doppler - a vessel slowing through Mach 1 toward a camera now roars in loud and high-pitched with its boom, then drops in pitch as it slows, instead of fading in seconds later. Sounds coming towards a camera are a little louder and those going away a little quieter
 - Stock engine sounds on camera sound - built-in sounds KSP keeps compressed (the vent when an engine starts or stops, flameouts...) now play on cameras instead of being skipped
 - Engine mode switches on camera sound - switching a multi-mode engine (the Tundra Falcon 9 booster going from nine to three to one engine...) keeps the roar going without a gap, and leaves out the start and stop vents of the switch
+- Sounds cut off on far cameras - a sound that stops while its vessel still comes at the camera faster than sound (an engine switching mode or shutting down on a landing booster...) now plays out in full instead of going silent
 
 ## v3.1.1 - 2026-10-09
 
