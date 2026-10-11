@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hold to zoom (web viewer, + and - keys) - smooth zoom on any camera, also as buttons in Pan
 - GPU timing and video memory (Diagnostics page, Ctrl+Alt+F6 overlay, CSV log) - GPU time per camera split by layer (near, terrain, scaled, galaxy), JRTI's share of each frame on the GPU, and the game's video memory use against its budget. Only measured while one of them is open, DirectX 11 only
 - VRAM census (Ctrl+Alt+F6 overlay) - lists every render texture in the game by size in KSP.log, to see which mod holds the video memory
+- Documentation site (relmymathieu.github.io/JustReadTheInstructions) - guides for install, cameras, layouts and OBS, sound, recording, settings and troubleshooting, with a Linux and Proton page and a settings reference. Opens from the Docs tab in the web UI and the Documentation button in the settings window
 
 ### Changed
 

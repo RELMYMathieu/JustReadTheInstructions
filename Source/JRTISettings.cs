@@ -27,6 +27,8 @@ namespace JustReadTheInstructions
         public static int MaxPreviewSize { get; internal set; } = 360;
         public static uint MaxOpenCameras { get; internal set; } = 32u;
 
+        public const string DocsUrl = "https://relmymathieu.github.io/JustReadTheInstructions/";
+
         public static bool IsLoaded { get; private set; }
 
         public static bool EnableStreamServer { get; internal set; } = true;

@@ -72,7 +72,7 @@ namespace JustReadTheInstructions
                 if (_executable == null)
                 {
                     _status = Wine.IsRunning
-                        ? "Proton detected: put a Linux build of ffmpeg in GameData/JustReadTheInstructions/PluginData/ffmpeg/ to record in game (see Linux and Proton in the docs)"
+                        ? "Proton detected: put a Linux build of ffmpeg in GameData/JustReadTheInstructions/PluginData/ffmpeg/ to record in game (see https://relmymathieu.github.io/JustReadTheInstructions/linux/)"
                         : "ffmpeg not found: install ffmpeg to record in game";
                     return;
                 }

@@ -23,8 +23,8 @@ Install ffmpeg from your distribution's package manager:
 | --- | --- |
 | Debian, Ubuntu, Linux Mint, Pop!_OS | `sudo apt install ffmpeg` |
 | Arch, Manjaro, EndeavourOS | `sudo pacman -S ffmpeg` |
-| Fedora | `sudo dnf install ffmpeg` (needs the [RPM Fusion](https://rpmfusion.org/) repository; Fedora's own build has fewer encoders) |
-| openSUSE | `sudo zypper install ffmpeg` (use the [Packman](https://en.opensuse.org/Additional_package_repositories#Packman) repository for the full encoder set) |
+| Fedora | `sudo dnf install ffmpeg-free` (hardware encoders and AV1 work; for the full build with libx264, enable [RPM Fusion](https://rpmfusion.org/Howto/Multimedia) and run `sudo dnf swap ffmpeg-free ffmpeg --allowerasing`) |
+| openSUSE | `sudo zypper install ffmpeg` (the official build has hardware encoders, OpenH264 and AV1 but no libx264; the [Packman](https://en.opensuse.org/Additional_package_repositories#Packman) repository provides the full build) |
 | Anything else | Your package manager's `ffmpeg` package, or the static build below |
 
 Start KSP and [check the encoders](#check-it-worked).
@@ -62,8 +62,8 @@ ffmpeg -hide_banner -encoders | grep -E "264|av1"
 
 Keep **H.264** unless you have checked that your whole workflow handles AV1. See [Choosing a codec](recording.md#choosing-a-codec).
 
-!!! note "Fedora"
-    Its stock graphics drivers leave out H.264 hardware encoding, so H.264 falls back to the CPU unless you install RPM Fusion's drivers (`mesa-va-drivers-freeworld`). AV1 still uses the graphics card.
+!!! note "Fedora with an AMD graphics card"
+    Fedora's Mesa drivers leave out H.264 and H.265 hardware encoding, so H.264 falls back to the CPU unless you install RPM Fusion's `mesa-va-drivers-freeworld`. AV1 hardware encoding on supported cards should still work. Intel and NVIDIA cards use their own drivers and are not affected.
 
 ## Problems
 
