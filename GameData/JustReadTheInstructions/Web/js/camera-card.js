@@ -7,7 +7,7 @@ import { CameraRecordingUI } from './camera-recording-ui.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
 import { h, icon, button, setButtonLabel } from './dom.js';
-import { Menu, menuItem, menuNote, menuSeparator, copyWithToast, toast } from './ui.js';
+import { Menu, menuHeading, menuItem, menuNote, menuSeparator, copyWithToast, toast } from './ui.js';
 import { getSession, lanUrl } from './session.js';
 import { showRecordings } from './recordings-ui.js';
 
@@ -234,8 +234,9 @@ export class CameraCard {
     _panItems() {
         return [
             menuNote('Turns the camera head in the game, for everyone watching and in its recordings.'),
+            menuHeading('Track'),
             ...TRACKS.map((track) => menuItem({
-                label: track.id === 'off' ? 'No tracking' : `Track ${track.label.toLowerCase()}`,
+                label: track.label,
                 description: track.hint,
                 checked: track.id === this._track,
                 onSelect: () => this._sendPan({ track: track.id }, track.id),

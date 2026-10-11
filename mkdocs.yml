@@ -1,0 +1,63 @@
+site_name: Just Read The Instructions
+site_description: Documentation for JRTI, the web-viewable Hullcam VDS camera feed mod for Kerbal Space Program
+site_url: https://relmymathieu.github.io/JustReadTheInstructions/
+repo_url: https://github.com/RELMYMathieu/JustReadTheInstructions
+repo_name: RELMYMathieu/JustReadTheInstructions
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+exclude_docs: |
+  BACKLOG.md
+  DESIGN.md
+
+theme:
+  name: material
+  logo: icon.png
+  favicon: icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - content.code.copy
+    - content.action.edit
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Linux and Proton: linux.md
+  - Cameras: cameras.md
+  - Layouts and OBS: layouts-obs.md
+  - Sound: sound.md
+  - Recording: recording.md
+  - Settings and mods: settings.md
+  - Troubleshooting: troubleshooting.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.keys
+  - pymdownx.superfences
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/RELMYMathieu/JustReadTheInstructions
+    - icon: simple/kofi
+      link: https://ko-fi.com/relmymathieu

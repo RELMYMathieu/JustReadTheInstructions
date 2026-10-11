@@ -6,13 +6,11 @@ import { isTyping, toast } from './ui.js';
 
 const RATE_RESEND_MS = 200;
 const POLL_MS = 500;
-const KEY_DIRECTIONS = Object.freeze({
-    ArrowLeft: [-1, 0],
-    ArrowRight: [1, 0],
-    ArrowUp: [0, 1],
-    ArrowDown: [0, -1],
-});
+const NUDGE_MS = 250;
+const DIRECTIONS = Object.freeze({ left: [-1, 0], right: [1, 0], up: [0, 1], down: [0, -1] });
+const KEY_DIRECTIONS = Object.freeze({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' });
 const ZOOM_KEYS = Object.freeze({ '+': 1, '=': 1, '-': -1, '_': -1 });
+const PRESS_KEYS = new Set([' ', 'Enter']);
 
 let panel = null;
 
@@ -20,14 +18,39 @@ export function isPanOpen() {
     return panel != null && !panel.hidden;
 }
 
-export function initPanControls(cameraId) {
+function holdable(btn, start, stop) {
+    btn.addEventListener('pointerdown', (e) => {
+        btn.setPointerCapture(e.pointerId);
+        start();
+    });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture', 'blur']) btn.addEventListener(type, stop);
+    btn.addEventListener('keydown', (e) => {
+        if (!PRESS_KEYS.has(e.key)) return;
+        e.preventDefault();
+        if (!e.repeat) start();
+    });
+    btn.addEventListener('keyup', (e) => {
+        if (!PRESS_KEYS.has(e.key)) return;
+        e.preventDefault();
+        stop();
+    });
+    btn.addEventListener('click', (e) => {
+        if (e.detail !== 0) return;
+        start();
+        setTimeout(stop, NUDGE_MS);
+    });
+}
+
+export function initPanControls(cameraId, { onFov } = {}) {
     const toggle = document.getElementById('pan-toggle');
+    const toggleText = document.getElementById('pan-toggle-text');
     panel = document.getElementById('pan-panel');
     const yawEl = document.getElementById('pan-yaw');
     const pitchEl = document.getElementById('pan-pitch');
     const fovEl = document.getElementById('pan-fov');
     const pitchRow = document.getElementById('pan-pitch-row');
-    const pitchButtons = [...panel.querySelectorAll('[data-dir="up"], [data-dir="down"]')];
+    const dirButtons = [...panel.querySelectorAll('[data-dir]')];
+    const zoomButtons = [...panel.querySelectorAll('[data-zoom]')];
     const trackGroup = document.getElementById('pan-track');
     const trackNote = document.getElementById('pan-track-note');
 
@@ -35,8 +58,9 @@ export function initPanControls(cameraId) {
     let pollTimer = null;
     let holdTimer = null;
     let zoomTimer = null;
+    let zoomPollTimer = null;
     let zoomKey = null;
-    const heldKeys = new Set();
+    const held = new Set();
 
     const send = (body) => setCameraSettings(cameraId, body)
         .catch(() => toast('Could not move the camera. Is KSP still in a flight?'));
@@ -56,8 +80,10 @@ export function initPanControls(cameraId) {
     function showTrack(id) {
         for (const btn of trackButtons) btn.setAttribute('aria-pressed', String(btn.dataset.track === id));
         const hint = TRACKS.find((t) => t.id === id)?.hint ?? '';
-        trackNote.textContent = id === 'off' ? hint : `${hint} Panning by hand stops it.`;
-        toggle.classList.toggle('tracking', id !== 'off');
+        const tracking = id !== 'off';
+        trackNote.textContent = tracking ? `${hint} Panning by hand stops it.` : hint;
+        toggle.classList.toggle('tracking', tracking);
+        toggleText.textContent = tracking ? 'Tracking' : 'Pan';
     }
 
     function showPan(pan) {
@@ -66,7 +92,7 @@ export function initPanControls(cameraId) {
         const canTilt = pan.pitchMax > pan.pitchMin;
         panel.classList.toggle('no-tilt', !canTilt);
         pitchRow.hidden = !canTilt;
-        for (const btn of pitchButtons) btn.hidden = !canTilt;
+        for (const btn of dirButtons) if (btn.dataset.dir === 'up' || btn.dataset.dir === 'down') btn.hidden = !canTilt;
         if (holdTimer === null) showTrack(pan.track);
     }
 
@@ -74,55 +100,72 @@ export function initPanControls(cameraId) {
         try {
             const settings = await getCameraSettings(cameraId);
             if (settings.pan) showPan(settings.pan);
-            if (settings.fov != null) fovEl.textContent = formatFov(settings.fov);
+            if (settings.fov != null) {
+                fovEl.textContent = formatFov(settings.fov);
+                onFov?.(settings.fov);
+            }
         } catch { }
     }
 
     function zoom(rate) {
         clearInterval(zoomTimer);
+        for (const btn of zoomButtons) btn.classList.toggle('held', +btn.dataset.zoom === rate);
         const tick = () => send({ zoomRate: rate });
         tick();
         zoomTimer = setInterval(tick, RATE_RESEND_MS);
+        zoomPollTimer ??= setInterval(refresh, POLL_MS);
     }
 
     function stopZoom() {
         if (zoomTimer === null) return;
         clearInterval(zoomTimer);
+        clearInterval(zoomPollTimer);
         zoomTimer = null;
-        send({ zoomRate: 0 });
+        zoomPollTimer = null;
+        for (const btn of zoomButtons) btn.classList.remove('held');
+        send({ zoomRate: 0 }).then(refresh);
     }
 
-    function hold(yawRate, pitchRate) {
+    function applyHeld() {
+        for (const btn of dirButtons) btn.classList.toggle('held', held.has(btn.dataset.dir));
         clearInterval(holdTimer);
-        showTrack('off');
-        const tick = () => send({ panYawRate: yawRate, panPitchRate: pitchRate });
-        tick();
-        holdTimer = setInterval(tick, RATE_RESEND_MS);
-    }
-
-    function release() {
-        if (holdTimer === null) return;
-        clearInterval(holdTimer);
-        holdTimer = null;
-        send({ panYawRate: 0, panPitchRate: 0 });
-    }
-
-    function holdKeys() {
-        if (heldKeys.size === 0) {
-            release();
+        if (held.size === 0) {
+            if (holdTimer === null) return;
+            holdTimer = null;
+            send({ panYawRate: 0, panPitchRate: 0 });
             return;
         }
         let yaw = 0;
         let pitch = 0;
-        for (const key of heldKeys) {
-            yaw += KEY_DIRECTIONS[key][0];
-            pitch += KEY_DIRECTIONS[key][1];
+        for (const dir of held) {
+            yaw += DIRECTIONS[dir][0];
+            pitch += DIRECTIONS[dir][1];
         }
-        hold(yaw, pitch);
+        showTrack('off');
+        const tick = () => send({ panYawRate: yaw, panPitchRate: pitch });
+        tick();
+        holdTimer = setInterval(tick, RATE_RESEND_MS);
+    }
+
+    function press(dir) {
+        held.add(dir);
+        applyHeld();
+    }
+
+    function lift(dir) {
+        if (held.delete(dir)) applyHeld();
+    }
+
+    function releaseAll() {
+        held.clear();
+        applyHeld();
+        zoomKey = null;
+        stopZoom();
     }
 
     function setOpen(open) {
         panel.hidden = !open;
+        document.body.classList.toggle('pan-open', open);
         toggle.setAttribute('aria-expanded', String(open));
         clearInterval(pollTimer);
         pollTimer = null;
@@ -131,25 +174,12 @@ export function initPanControls(cameraId) {
         pollTimer = setInterval(refresh, POLL_MS);
     }
 
+    new ResizeObserver(() => document.documentElement.style.setProperty('--pan-h', `${panel.offsetHeight}px`)).observe(panel);
     toggle.addEventListener('click', () => setOpen(panel.hidden));
     document.getElementById('controls-toggle')?.addEventListener('click', () => setOpen(false));
 
-    for (const btn of panel.querySelectorAll('[data-dir]')) {
-        const [yaw, pitch] = { left: [-1, 0], right: [1, 0], up: [0, 1], down: [0, -1] }[btn.dataset.dir];
-        btn.addEventListener('pointerdown', (e) => {
-            btn.setPointerCapture(e.pointerId);
-            hold(yaw, pitch);
-        });
-        for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(type, release);
-    }
-
-    for (const btn of panel.querySelectorAll('[data-zoom]')) {
-        btn.addEventListener('pointerdown', (e) => {
-            btn.setPointerCapture(e.pointerId);
-            zoom(+btn.dataset.zoom);
-        });
-        for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(type, stopZoom);
-    }
+    for (const btn of dirButtons) holdable(btn, () => press(btn.dataset.dir), () => lift(btn.dataset.dir));
+    for (const btn of zoomButtons) holdable(btn, () => zoom(+btn.dataset.zoom), stopZoom);
 
     document.getElementById('pan-center').addEventListener('click', () => {
         showTrack('off');
@@ -175,11 +205,10 @@ export function initPanControls(cameraId) {
             setOpen(panel.hidden);
             return;
         }
-        if (!(e.key in KEY_DIRECTIONS) || e.target.closest?.('input[type="range"]')) return;
+        const dir = KEY_DIRECTIONS[e.key];
+        if (!dir || e.target.closest?.('#controls-panel, input[type="range"]')) return;
         e.preventDefault();
-        if (e.repeat || heldKeys.has(e.key)) return;
-        heldKeys.add(e.key);
-        holdKeys();
+        if (!e.repeat) press(dir);
     });
 
     document.addEventListener('keyup', (e) => {
@@ -187,24 +216,23 @@ export function initPanControls(cameraId) {
             zoomKey = null;
             stopZoom();
         }
-        if (!heldKeys.delete(e.key)) return;
-        holdKeys();
+        const dir = KEY_DIRECTIONS[e.key];
+        if (dir) lift(dir);
     });
 
-    window.addEventListener('blur', () => {
-        heldKeys.clear();
-        release();
-        zoomKey = null;
-        stopZoom();
-    });
+    window.addEventListener('blur', releaseAll);
 
     return {
+        get available() {
+            return available;
+        },
         setAvailable(canPan, track) {
             available = canPan;
             toggle.hidden = !canPan;
             if (!canPan) {
                 setOpen(false);
-                release();
+                held.clear();
+                applyHeld();
             } else if (holdTimer === null) {
                 showTrack(track ?? 'off');
             }

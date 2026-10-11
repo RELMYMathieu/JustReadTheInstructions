@@ -29,11 +29,12 @@
             <button type="button" class="btn overlay-btn" id="viewer-copy" title="Copy the address of this video alone, for an OBS media source or VLC">Copy stream URL</button>
             <button type="button" class="btn overlay-btn" id="viewer-sound" title="Play this camera's sound in this tab only" aria-pressed="false">Listen <kbd>M</kbd></button>
             <button type="button" class="btn overlay-btn" id="viewer-fullscreen" title="Show only the camera (Esc to leave)">Fullscreen <kbd>F</kbd></button>
-            <button type="button" class="btn overlay-btn" id="pan-toggle" title="Turn this camera's head in the game, or let it follow a vessel" aria-expanded="false" hidden>Pan <kbd>P</kbd></button>
+            <button type="button" class="btn overlay-btn" id="pan-toggle" title="Turn this camera's head in the game, or let it follow a vessel" aria-expanded="false" hidden><span id="pan-toggle-text">Pan</span> <kbd>P</kbd></button>
             <button type="button" class="btn overlay-btn" id="controls-toggle" title="Picture and sound of this camera, for everyone" aria-expanded="false">Adjust</button>
+            <button type="button" class="btn overlay-btn keys-btn" id="viewer-keys" title="Keyboard shortcuts">Keys <kbd>?</kbd></button>
         </div>
         <div id="pan-panel" class="controls-panel pan-panel" hidden>
-            <p class="hint ctrl-intro">Turns the camera head in the game, for every viewer and recording. Hold an arrow or the arrow keys to pan, - and + to zoom.</p>
+            <p class="hint ctrl-intro">Turns the camera head in the game, for every viewer and recording. Hold an arrow to pan, - or + to zoom.<span class="keys-hint"> The arrow keys, - and + work anywhere on this page.</span></p>
             <div class="pan-body">
                 <div class="pan-pad" role="group" aria-label="Pan">
                     <button type="button" class="btn btn-icon pan-dir" data-dir="up" title="Tilt up" aria-label="Tilt up"><svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-chevron"/></svg></button>
@@ -43,13 +44,13 @@
                 </div>
                 <div class="pan-side">
                     <dl class="pan-readout">
-                        <dt>Pan</dt><dd id="pan-yaw">0°</dd>
+                        <div><dt>Pan</dt><dd id="pan-yaw">0°</dd></div>
                         <div id="pan-pitch-row"><dt>Tilt</dt><dd id="pan-pitch">0°</dd></div>
-                        <dt>Zoom</dt><dd id="pan-fov">-</dd>
+                        <div><dt>Field of view</dt><dd id="pan-fov">-</dd></div>
                     </dl>
                     <div class="pan-zoom" role="group" aria-label="Zoom">
-                        <button type="button" class="btn" data-zoom="-1" title="Zoom out (hold)">-</button>
-                        <button type="button" class="btn" data-zoom="1" title="Zoom in (hold)">+</button>
+                        <button type="button" class="btn" data-zoom="-1" title="Zoom out (hold)" aria-label="Zoom out">-</button>
+                        <button type="button" class="btn" data-zoom="1" title="Zoom in (hold)" aria-label="Zoom in">+</button>
                         <button type="button" class="btn" id="pan-center" title="Point the camera straight ahead again">Center</button>
                     </div>
                 </div>
@@ -79,11 +80,14 @@
                 <span class="ctrl-val" id="val-gamma">1.00</span>
                 <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="gamma" data-default="1" title="Reset gamma">Reset</button>
             </div>
-            <div class="ctrl-row" id="fov-row" hidden>
-                <label class="ctrl-label" for="ctrl-fov">Field of view</label>
-                <input type="range" id="ctrl-fov" class="ctrl-slider" min="1" max="180" step="1" value="60">
-                <span class="ctrl-val" id="val-fov">60°</span>
-                <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="fov" title="Back to the field of view this page opened with">Reset</button>
+            <div id="fov-row" hidden>
+                <div class="ctrl-row">
+                    <label class="ctrl-label" for="ctrl-fov">Field of view</label>
+                    <input type="range" id="ctrl-fov" class="ctrl-slider" min="1" max="180" step="1" value="60">
+                    <span class="ctrl-val" id="val-fov">60°</span>
+                    <button type="button" class="btn btn-quiet ctrl-reset-btn" data-reset="fov" title="Back to the field of view this page opened with">Reset</button>
+                </div>
+                <p class="hint ctrl-note" id="fov-note"><span class="keys-hint">Hold - or + anywhere on this page to zoom. </span><span id="fov-warn-note" hidden></span></p>
             </div>
             <div id="sound-group" hidden>
                 <h2 class="section-title ctrl-heading">Sound</h2>
@@ -121,7 +125,7 @@
     <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-title">
         <div class="modal">
             <div class="modal-title" id="copy-title">The browser blocked the clipboard. Press Ctrl+C (Cmd+C on a Mac), then close.</div>
-            <input id="copy-input" class="input" type="text" readonly>
+            <input id="copy-input" class="input" type="text" readonly aria-labelledby="copy-title">
             <div class="modal-actions">
                 <a id="copy-select-btn" class="btn" href="#">Select</a>
                 <a id="copy-close-btn" class="btn" href="#">Close</a>

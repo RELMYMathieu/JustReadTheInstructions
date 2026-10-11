@@ -5,12 +5,24 @@ import { initPanControls, isPanOpen } from './pan-controls.js';
 import { StreamHub } from './stream-hub.js';
 import { FeedCanvas } from './feed-canvas.js';
 import { CameraAudio } from './camera-audio.js';
-import { copyWithToast, formatTimecode, isTyping, toast } from './ui.js';
+import { Menu, copyWithToast, formatTimecode, isTyping, menuHeading, shortcutList, toast } from './ui.js';
 import { getSession } from './session.js';
 import { setInGameRecordingAvailable, selectedGameCodec } from './recorder-settings.js';
 
 const HUD_HIDE_MS = 3000;
 const SIGNAL_CHECK_MS = 1000;
+const PAN_SHORTCUTS = [
+    ['P', 'Pan panel'],
+    ['Arrows', 'Hold to pan and tilt'],
+];
+const SHORTCUTS = [
+    ['- +', 'Hold to zoom'],
+    ['M', 'Listen in this tab'],
+    ['F', 'Fullscreen'],
+    ['Esc', 'Close a panel'],
+    ['?', 'This list'],
+];
+const TALLY_TEXT = { live: 'Live', waiting: 'Waiting', lost: 'No signal' };
 
 function getCameraId() {
     const id = new URLSearchParams(location.search).get('id');
@@ -73,6 +85,7 @@ function main() {
         signal = next;
         viewer.classList.toggle('offline', next !== 'live');
         overlay.innerHTML = next === 'lost' ? LOS_OVERLAY_HTML : next === 'waiting' ? WAITING_OVERLAY_HTML : '';
+        renderTally();
     };
 
     const renderTally = () => {
@@ -83,7 +96,7 @@ function main() {
         tally.classList.toggle('is-live', !recording && signal === 'live');
         tallyText.textContent = recordingNow ? `REC ${formatTimecode(recording.elapsedMs)}`
             : paused ? 'Paused'
-            : signal === 'live' ? 'Live' : 'No signal';
+            : TALLY_TEXT[signal];
     };
 
     const renderRecording = () => {
@@ -127,7 +140,8 @@ function main() {
         renderTally();
     }, SIGNAL_CHECK_MS);
 
-    const pan = initPanControls(cameraId);
+    const adjust = initControls(cameraId);
+    const pan = initPanControls(cameraId, { onFov: (fov) => adjust?.showFov(fov) });
     const syncCamera = async () => {
         try {
             const camera = (await fetchCameras()).find((c) => c.id === cameraId);
@@ -154,7 +168,6 @@ function main() {
     pauseBtn.addEventListener('click', () => { if (recording) sendRecording(recording.paused ? 'resume' : 'pause'); });
     setInterval(syncCamera, CAMERA_SYNC_MS);
 
-    initControls(cameraId);
     wireIdleChrome();
 
     const streamUrl = location.origin + API.stream(cameraId);
@@ -172,11 +185,17 @@ function main() {
     soundBtn.addEventListener('click', toggleSound);
     if (new URLSearchParams(location.search).get('audio') === '1') toggleSound();
 
+    const keysMenu = new Menu(document.getElementById('viewer-keys'), () => [
+        menuHeading('Keyboard'),
+        shortcutList(pan.available ? [...PAN_SHORTCUTS, ...SHORTCUTS] : SHORTCUTS),
+    ]);
+
     document.addEventListener('keydown', (e) => {
         if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
         const key = e.key.toLowerCase();
         if (key === 'f') toggleFullscreen();
         if (key === 'm') toggleSound();
+        if (key === '?') keysMenu.open();
     });
 }
 

@@ -172,28 +172,36 @@ function el(tag, className, text) {
     return node;
 }
 
-function markWarning(node, reason) {
+function markWarning(node, reason, where, warnings) {
     if (!reason) return;
     node.classList.add('debug-warn');
     node.title = reason;
+    warnings.push(`${where}: ${reason}`);
 }
 
-function renderTiles(s) {
+function renderTiles(s, warnings) {
     const container = document.getElementById('debug-tiles');
     container.replaceChildren(...TILES.map(tile => {
         const node = el('div', 'debug-tile');
         node.append(el('div', 'debug-tile-label', tile.label), el('div', 'debug-tile-value', tile.value(s)));
         if (tile.detail) node.append(el('div', 'debug-tile-detail', tile.detail(s)));
-        markWarning(node, tile.warn?.(s));
+        markWarning(node, tile.warn?.(s), tile.label, warnings);
         return node;
     }));
 }
 
-function renderTable(s) {
+function renderWarnings(warnings) {
+    const list = document.getElementById('debug-warnings');
+    list.hidden = warnings.length === 0;
+    list.replaceChildren(...warnings.map(text => el('li', null, text)));
+}
+
+function renderTable(s, warnings) {
     const table = document.getElementById('debug-table');
     const head = el('tr');
     for (const column of COLUMNS) {
         const th = el('th', null, column.label);
+        th.scope = 'col';
         if (column.title) th.title = column.title;
         head.append(th);
     }
@@ -204,7 +212,7 @@ function renderTable(s) {
             const td = el('td', column.className, column.value(c));
             const detail = column.detail?.(c);
             if (detail) td.title = detail;
-            markWarning(td, column.warn?.(c, s));
+            markWarning(td, column.warn?.(c, s), `${c.camera} ${column.label}`, warnings);
             row.append(td);
         }
         const swatch = el('span', 'debug-swatch');
@@ -334,8 +342,10 @@ function render(s) {
         if (history.length > DEBUG_HISTORY_SAMPLES) history.shift();
     }
 
-    renderTiles(s);
-    renderTable(s);
+    const warnings = [];
+    renderTiles(s, warnings);
+    renderTable(s, warnings);
+    renderWarnings(warnings);
     renderCharts();
     document.getElementById('debug-updated').textContent = new Date(s.utc).toLocaleTimeString();
 }

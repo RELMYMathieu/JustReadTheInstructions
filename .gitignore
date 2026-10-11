@@ -385,3 +385,6 @@ TODO.local.md
 
 GameData/JustReadTheInstructions/PluginData/
 Tools/.mock/
+
+# MkDocs build output
+/site/

@@ -22,13 +22,13 @@ export function isControlsOpen() {
 export function initControls(cameraId) {
     const toggle = document.getElementById('controls-toggle');
     panel = document.getElementById('controls-panel');
-    if (!toggle || !panel) return;
+    if (!toggle || !panel) return null;
 
     const controls = {
         brightness: { slider: document.getElementById('ctrl-brightness'), display: document.getElementById('val-brightness'), fmt: v => (+v).toFixed(2) },
         contrast: { slider: document.getElementById('ctrl-contrast'), display: document.getElementById('val-contrast'), fmt: v => (+v).toFixed(2) },
         gamma: { slider: document.getElementById('ctrl-gamma'), display: document.getElementById('val-gamma'), fmt: v => (+v).toFixed(2) },
-        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), fmt: v => `${formatFov(v)}${widerThanPart(v) ? ' !' : ''}`, warn: widerThanPart, toSlider: Math.log, fromSlider: Math.exp },
+        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), note: document.getElementById('fov-warn-note'), fmt: v => `${formatFov(v)}${widerThanPart(v) ? ' !' : ''}`, warn: widerThanPart, toSlider: Math.log, fromSlider: Math.exp },
         soundGain: { slider: document.getElementById('ctrl-sound-gain'), display: document.getElementById('val-sound-gain'), fmt: v => `${+v > 0 ? '+' : ''}${Math.round(+v)} dB` },
     };
     const sound = {
@@ -103,6 +103,15 @@ export function initControls(cameraId) {
     });
 
     load();
+
+    return {
+        showFov(fov) {
+            const c = controls.fov;
+            if (document.getElementById('fov-row').hidden || document.activeElement === c.slider) return;
+            setSlider(c, fov);
+            sent.fov = Math.round(fov * 100) / 100;
+        },
+    };
 }
 
 function showMicHint(value) {
@@ -142,7 +151,7 @@ async function loadSettings(cameraId, controls, sound, sent) {
             c.slider.min = Math.log(s.fovLimitMin ?? s.fovMin);
             c.slider.max = Math.log(s.fovLimitMax ?? s.fovMax);
             c.slider.step = 'any';
-            c.display.title = `This camera part opens up to ${Math.round(s.fovMax)}°. Wider than that, the picture looks stretched.`;
+            c.note.textContent = `This camera part opens up to ${Math.round(s.fovMax)}°. Wider than that, the picture looks stretched.`;
             const fovReset = document.querySelector('[data-reset="fov"]');
             fovReset.dataset.default ??= s.fov;
             setSlider(c, s.fov);
@@ -170,8 +179,10 @@ function sliderValue(ctrl) {
 }
 
 function showValue(ctrl, value) {
+    const warned = ctrl.warn?.(value) === true;
     ctrl.display.textContent = ctrl.fmt(value);
-    ctrl.display.classList.toggle('ctrl-warn', ctrl.warn?.(value) === true);
+    ctrl.display.classList.toggle('ctrl-warn', warned);
+    if (ctrl.note) ctrl.note.hidden = !warned;
 }
 
 function readValues(controls, sound) {
