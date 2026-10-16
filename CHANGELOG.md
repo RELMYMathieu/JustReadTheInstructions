@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
-## Unreleased
+## v3.2.0 - 2026-10-16
 
 ### Added
 
@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stock engine sounds on camera sound - built-in sounds KSP keeps compressed (the vent when an engine starts or stops, flameouts...) now play on cameras instead of being skipped
 - Engine mode switches on camera sound - switching a multi-mode engine (the Tundra Falcon 9 booster going from nine to three to one engine...) keeps the roar going without a gap, and leaves out the start and stop vents of the switch
 - Sounds cut off on far cameras - a sound that stops while its vessel still comes at the camera faster than sound (an engine switching mode or shutting down on a landing booster...) now plays out in full instead of going silent
+
 
 ## v3.1.1 - 2026-10-09
 
