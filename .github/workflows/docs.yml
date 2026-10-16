@@ -2,7 +2,7 @@ name: docs
 
 on:
   push:
-    branches: [main, feat/hullcam-pan]
+    branches: [main]
     paths:
       - docs/**
       - mkdocs.yml
