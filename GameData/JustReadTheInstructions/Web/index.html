@@ -20,6 +20,9 @@
                 Diagnostics<svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-external"></use></svg>
             </a>
             <button type="button" class="btn btn-quiet" id="settings-btn" aria-expanded="false" title="Recorder settings">Settings</button>
+            <a class="btn btn-quiet" href="https://relmymathieu.github.io/JustReadTheInstructions/" target="_blank" rel="noopener" title="Documentation on the internet (opens a new tab)">
+                Docs<svg class="icon" aria-hidden="true"><use href="/images/icons.svg#i-external"></use></svg>
+            </a>
         </nav>
     </header>
 
@@ -93,7 +96,7 @@
     <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-title">
         <div class="modal">
             <div class="modal-title" id="copy-title">The browser blocked the clipboard. Press Ctrl+C (Cmd+C on a Mac), then close.</div>
-            <input id="copy-input" class="input" type="text" readonly>
+            <input id="copy-input" class="input" type="text" readonly aria-labelledby="copy-title">
             <div class="modal-actions">
                 <a id="copy-select-btn" class="btn" href="#">Select</a>
                 <a id="copy-close-btn" class="btn" href="#">Close</a>

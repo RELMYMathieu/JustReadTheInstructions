@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HullcamVDS;
@@ -9,28 +8,10 @@ namespace JustReadTheInstructions
 {
     public static class HullcamFilterIntegration
     {
+        private const float DefaultNightVisionAmbience = 0.7f;
+
         private static bool? _isAvailable;
-        private static Assembly _hullcamAssembly;
-
-        private static FieldInfo _mtField;
-        private static MethodInfo _setCameraModeMethod;
-        private static Type _eCameraModeType;
-        private static object _normalModeValue;
-
-        private static FieldInfo _cameraFilterField;
-        private static FieldInfo _ambienceLevelField;
-
-        private const int NightVisionMode = 8;
-
-        private static bool _cachePrepopulated;
-
-        private class CachedFilter
-        {
-            public Type ComponentType;
-            public (FieldInfo Field, object Value)[] Fields;
-        }
-
-        private static readonly Dictionary<int, CachedFilter> _cache = new Dictionary<int, CachedFilter>();
+        private static FieldInfo _defaultAmbienceField;
 
         public static bool IsAvailable
         {
@@ -41,26 +22,21 @@ namespace JustReadTheInstructions
 
                 try
                 {
-                    _hullcamAssembly = AssemblyLoader.loadedAssemblies
-                        .FirstOrDefault(a =>
-                            a.name.Equals("HullcamVDS", StringComparison.OrdinalIgnoreCase) ||
-                            a.name.Equals("HullcamVDSContinued", StringComparison.OrdinalIgnoreCase))
-                        ?.assembly;
-
-                    _isAvailable = _hullcamAssembly != null;
+                    _isAvailable = AssemblyLoader.loadedAssemblies.Any(a =>
+                        a.name.Equals("HullcamVDS", StringComparison.OrdinalIgnoreCase) ||
+                        a.name.Equals("HullcamVDSContinued", StringComparison.OrdinalIgnoreCase));
 
                     Debug.Log(_isAvailable.Value
                         ? "[JRTI-HullcamFilter]: Integration enabled"
                         : "[JRTI-HullcamFilter]: HullcamVDS not found");
-
-                    return _isAvailable.Value;
                 }
                 catch (Exception ex)
                 {
                     Debug.LogError($"[JRTI-HullcamFilter]: Error checking availability: {ex.Message}");
                     _isAvailable = false;
-                    return false;
                 }
+
+                return _isAvailable.Value;
             }
         }
 
@@ -69,238 +45,236 @@ namespace JustReadTheInstructions
             if (!IsAvailable || targetCamera == null || hullCamera == null)
                 return;
 
-            int mode = (int)hullCamera.cameraMode;
+            var mode = (CameraFilter.eCameraMode)(int)hullCamera.cameraMode;
+            var filter = targetCamera.GetComponent<HullcamFeedFilter>();
 
-            if (mode == 0)
+            if (mode == CameraFilter.eCameraMode.Normal)
             {
-                RemoveFromCamera(targetCamera);
+                if (filter != null)
+                    UnityEngine.Object.Destroy(filter);
                 return;
             }
 
-            if (!_cachePrepopulated)
-                TryPrepopulateCache();
-
-            if (MuMechModuleHullCamera.sCurrentCamera == hullCamera)
-                TryUpdateCacheFromMain(mode);
-
-            if (!_cache.TryGetValue(mode, out var cached))
+            if (filter == null)
             {
-                RemoveFromCamera(targetCamera);
-                return;
+                filter = targetCamera.gameObject.AddComponent<HullcamFeedFilter>();
+                filter.enabled = false;
             }
 
-            ApplyCached(targetCamera, cached);
+            filter.SetMode(mode);
         }
 
         public static void RemoveFromCamera(Camera targetCamera)
         {
-            if (!IsAvailable || targetCamera == null)
+            if (targetCamera == null)
                 return;
 
-            var comp = FindHullcamComponent(targetCamera);
-            if (comp != null)
-                UnityEngine.Object.Destroy(comp);
+            var filter = targetCamera.GetComponent<HullcamFeedFilter>();
+            if (filter != null)
+                UnityEngine.Object.Destroy(filter);
         }
 
-        private static void TryPrepopulateCache()
-        {
-            if (!EnsureReflectionReady())
-            {
-                _cachePrepopulated = true;
-                return;
-            }
-
-            var cameras = MuMechModuleHullCamera.sCameras;
-            if (cameras == null || cameras.Count == 0)
-                return;
-
-            _cachePrepopulated = true;
-
-            var modes = cameras
-                .Select(c => (int)c.cameraMode)
-                .Where(m => m != 0)
-                .Distinct()
-                .ToList();
-
-            if (modes.Count == 0)
-                return;
-
-            var probe = cameras.FirstOrDefault();
-            if (probe == null)
-                return;
-
-            var mt = _mtField.GetValue(probe);
-            if (mt == null)
-                return;
-
-            foreach (int mode in modes)
-            {
-                if (_cache.ContainsKey(mode))
-                    continue;
-
-                try
-                {
-                    _setCameraModeMethod.Invoke(mt, new[] { Enum.ToObject(_eCameraModeType, mode) });
-                    TryUpdateCacheFromMain(mode);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[JRTI-HullcamFilter]: Failed to probe mode {mode}: {ex.Message}");
-                }
-            }
-
-            try { _setCameraModeMethod.Invoke(mt, new[] { _normalModeValue }); }
-            catch { }
-
-            Debug.Log($"[JRTI-HullcamFilter]: Pre-populated cache for modes: [{string.Join(", ", _cache.Keys)}]");
-        }
-
-        private static bool EnsureReflectionReady()
-        {
-            if (_mtField != null)
-                return true;
-
-            _mtField = typeof(MuMechModuleHullCamera).GetField(
-                "mt", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-            if (_mtField == null)
-                return false;
-
-            _setCameraModeMethod = _mtField.FieldType.GetMethod(
-                "SetCameraMode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-            _eCameraModeType = _hullcamAssembly.GetTypes()
-                .FirstOrDefault(t => t.Name == "eCameraMode");
-
-            if (_setCameraModeMethod == null || _eCameraModeType == null)
-                return false;
-
-            _normalModeValue = Enum.ToObject(_eCameraModeType, 0);
-            return true;
-        }
-
-        private static void TryUpdateCacheFromMain(int mode)
-        {
-            var sourceComp = FindHullcamComponent(Camera.main);
-            if (sourceComp == null)
-                return;
-
-            var type = sourceComp.GetType();
-            _cache[mode] = new CachedFilter
-            {
-                ComponentType = type,
-                Fields = type
-                    .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-                    .Select(f => (f, f.GetValue(sourceComp)))
-                    .ToArray()
-            };
-        }
-
-        private static void ApplyCached(Camera targetCamera, CachedFilter cached)
-        {
-            var existing = FindHullcamComponent(targetCamera);
-
-            if (existing == null || existing.GetType() != cached.ComponentType)
-            {
-                if (existing != null)
-                    UnityEngine.Object.Destroy(existing);
-                existing = targetCamera.gameObject.AddComponent(cached.ComponentType) as MonoBehaviour;
-            }
-
-            foreach (var (field, value) in cached.Fields)
-            {
-                try { field.SetValue(existing, value); }
-                catch { }
-            }
-
-            if (existing != null)
-                existing.enabled = false;
-        }
-
-        public static void RenderWithFilter(Camera targetCamera, MuMechModuleHullCamera hullCamera)
+        public static void RenderWithFilter(Camera targetCamera)
         {
             if (targetCamera == null)
                 return;
 
-            var comp = FindHullcamComponent(targetCamera);
-            if (comp == null)
+            var filter = targetCamera.GetComponent<HullcamFeedFilter>();
+            if (filter == null || !filter.IsReady)
             {
                 targetCamera.Render();
                 return;
             }
 
-            bool nightVision = hullCamera != null && (int)hullCamera.cameraMode == NightVisionMode;
-            Color savedAmbient = RenderSettings.ambientLight;
+            bool nightVision = filter.Mode == CameraFilter.eCameraMode.NightVision;
+            var saved = default(FeedAmbient.Saved);
 
             if (nightVision)
             {
-                float level = GetNightVisionAmbience(comp);
-                RenderSettings.ambientLight = new Color(level, level, level, 1f);
+                float level = filter.NightVisionAmbience ?? DefaultNightVisionAmbience;
+                saved = FeedAmbient.Override(new Color(level, level, level, 1f));
             }
 
-            comp.enabled = true;
+            filter.enabled = true;
             targetCamera.Render();
-            comp.enabled = false;
+            filter.enabled = false;
 
             if (nightVision)
-                RenderSettings.ambientLight = savedAmbient;
+                FeedAmbient.Restore(saved);
         }
 
-        private static float GetNightVisionAmbience(MonoBehaviour filterComponent)
+        public static bool TryGetUnboostedAmbient(out Color ambient)
         {
-            try
+            ambient = default;
+            if (!IsAvailable || !MainViewInNightVision())
+                return false;
+
+            var kspAmbient = FeedAmbient.KspAmbient();
+            if (kspAmbient.HasValue)
             {
-                if (_cameraFilterField == null)
-                    _cameraFilterField = filterComponent.GetType().GetField(
-                        "cameraFilter", BindingFlags.NonPublic | BindingFlags.Instance);
-
-                var filter = _cameraFilterField?.GetValue(filterComponent);
-                if (filter == null)
-                    return 0.7f;
-
-                if (_ambienceLevelField == null || _ambienceLevelField.DeclaringType != filter.GetType())
-                    _ambienceLevelField = filter.GetType().GetField(
-                        "ambienceLevel", BindingFlags.NonPublic | BindingFlags.Instance);
-
-                if (_ambienceLevelField == null)
-                    return 0.7f;
-
-                return (float)_ambienceLevelField.GetValue(filter);
+                ambient = kspAmbient.Value;
+                return true;
             }
-            catch
-            {
-                return 0.7f;
-            }
+
+            var level = MainViewDefaultAmbience();
+            if (!level.HasValue)
+                return false;
+
+            ambient = new Color(level.Value, level.Value, level.Value, 1f);
+            return true;
         }
 
-        private static MonoBehaviour FindHullcamComponent(Camera camera)
+        private static bool MainViewInNightVision()
         {
-            if (camera == null)
+            var current = MuMechModuleHullCamera.sCurrentCamera;
+            return current != null && (CameraFilter.eCameraMode)(int)current.cameraMode == CameraFilter.eCameraMode.NightVision;
+        }
+
+        private static float? MainViewDefaultAmbience()
+        {
+            var mainView = FlightCamera.fetch != null ? FlightCamera.fetch.mainCamera : null;
+            var filter = mainView != null ? mainView.GetComponent<MovieTimeFilter>() : null;
+            if (filter == null || !(filter.GetFilter() is CameraFilterNightVision nightVision))
                 return null;
 
-            try
-            {
-                return camera.GetComponents<MonoBehaviour>()
-                    .FirstOrDefault(c => c != null && c.GetType().Assembly == _hullcamAssembly);
-            }
-            catch
-            {
-                return null;
-            }
+            if (_defaultAmbienceField == null)
+                _defaultAmbienceField = typeof(CameraFilterNightVision)
+                    .GetField("defaultAmbienceLevel", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            return _defaultAmbienceField?.GetValue(nightVision) as float?;
         }
 
-        public static string GetDiagnosticInfo()
+        public static string GetDiagnosticInfo(Camera nearCamera)
         {
             if (!IsAvailable)
                 return "HullcamFilter: unavailable\n";
 
-            var comp = FindHullcamComponent(Camera.main);
-            var cached = _cache.Count > 0
-                ? $"cached modes: [{string.Join(", ", _cache.Keys)}]"
-                : "no cached modes";
-            return comp != null
-                ? $"HullcamFilter: active ({comp.GetType().Name}), {cached}\n"
-                : $"HullcamFilter: idle, {cached}\n";
+            var filter = nearCamera != null ? nearCamera.GetComponent<HullcamFeedFilter>() : null;
+            if (filter == null)
+                return "HullcamFilter: none\n";
+
+            return filter.IsReady
+                ? $"HullcamFilter: {filter.Mode}, own material: {filter.HasOwnMaterial}\n"
+                : $"HullcamFilter: {filter.Mode}, not ready\n";
+        }
+    }
+
+    public class HullcamFeedFilter : MonoBehaviour
+    {
+        private const string TitleTextureFile = "dockingdisplay.png";
+
+        private static readonly FieldInfo SharedMaterialField = typeof(CameraFilter)
+            .GetField("mtShader", BindingFlags.NonPublic | BindingFlags.Static);
+
+        private static Texture2D _titleTexture;
+        private static FieldInfo _ambienceLevelField;
+
+        private CameraFilter _filter;
+        private Material _material;
+
+        public CameraFilter.eCameraMode Mode { get; private set; } = CameraFilter.eCameraMode.Normal;
+        public bool IsReady => _filter != null;
+        public bool HasOwnMaterial => _material != null;
+
+        public float? NightVisionAmbience
+        {
+            get
+            {
+                if (!(_filter is CameraFilterNightVision))
+                    return null;
+
+                if (_ambienceLevelField == null)
+                    _ambienceLevelField = typeof(CameraFilterNightVision)
+                        .GetField("ambienceLevel", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                return _ambienceLevelField?.GetValue(_filter) as float?;
+            }
+        }
+
+        public void SetMode(CameraFilter.eCameraMode mode)
+        {
+            if (mode == Mode && _filter != null)
+                return;
+
+            try
+            {
+                var filter = CameraFilter.CreateFilter(mode);
+                if (filter == null || !filter.Activate())
+                {
+                    Debug.LogWarning($"[JRTI-HullcamFilter]: Could not create filter for mode {mode}");
+                    return;
+                }
+
+                _filter = filter;
+                Mode = mode;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[JRTI-HullcamFilter]: Failed to create filter for mode {mode}: {ex.Message}");
+            }
+        }
+
+        private void OnRenderImage(RenderTexture source, RenderTexture target)
+        {
+            var shared = SharedMaterialField?.GetValue(null) as Material;
+            if (_filter == null || shared == null)
+            {
+                Graphics.Blit(source, target);
+                return;
+            }
+
+            if (_material == null)
+                _material = CreateOwnMaterial(shared);
+
+            SharedMaterialField.SetValue(null, _material);
+            try
+            {
+                _filter.RenderTitlePage(true, TitleTexture);
+                _filter.RenderImageWithFilter(source, target);
+            }
+            finally
+            {
+                SharedMaterialField.SetValue(null, shared);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_material != null)
+                Destroy(_material);
+        }
+
+        private static Texture2D TitleTexture
+        {
+            get
+            {
+                if (_titleTexture == null)
+                {
+                    _titleTexture = CameraFilter.LoadTextureFile(TitleTextureFile);
+                    if (_titleTexture != null)
+                        _titleTexture.wrapMode = TextureWrapMode.Clamp;
+                }
+                return _titleTexture;
+            }
+        }
+
+        private static Material CreateOwnMaterial(Material shared)
+        {
+            var material = new Material(shared.shader);
+            SetTextureFrom(material, "_VignetteTex", "filmVignette");
+            SetTextureFrom(material, "_Overlay1Tex", "nvMesh");
+            SetTextureFrom(material, "_Overlay2Tex", "noise");
+            return material;
+        }
+
+        private static void SetTextureFrom(Material material, string property, string sharedField)
+        {
+            var texture = typeof(CameraFilter)
+                .GetField(sharedField, BindingFlags.NonPublic | BindingFlags.Static)
+                ?.GetValue(null) as Texture2D;
+
+            if (texture != null)
+                material.SetTexture(property, texture);
         }
     }
 }

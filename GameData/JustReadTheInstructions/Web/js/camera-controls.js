@@ -7,6 +7,13 @@ const POST_DELAY_MS = 300;
 const SOUND_TOGGLES = ['autoGain', 'mastering'];
 
 let panel = null;
+let partFov = null;
+
+const widerThanPart = (v) => partFov != null && +v > partFov.max + 0.5;
+
+export function formatFov(fov) {
+    return `${(+fov).toFixed(fov < 1 ? 2 : fov < 10 ? 1 : 0)}°`;
+}
 
 export function isControlsOpen() {
     return panel != null && !panel.hidden;
@@ -15,13 +22,13 @@ export function isControlsOpen() {
 export function initControls(cameraId) {
     const toggle = document.getElementById('controls-toggle');
     panel = document.getElementById('controls-panel');
-    if (!toggle || !panel) return;
+    if (!toggle || !panel) return null;
 
     const controls = {
         brightness: { slider: document.getElementById('ctrl-brightness'), display: document.getElementById('val-brightness'), fmt: v => (+v).toFixed(2) },
         contrast: { slider: document.getElementById('ctrl-contrast'), display: document.getElementById('val-contrast'), fmt: v => (+v).toFixed(2) },
         gamma: { slider: document.getElementById('ctrl-gamma'), display: document.getElementById('val-gamma'), fmt: v => (+v).toFixed(2) },
-        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), fmt: v => `${Math.round(+v)}°` },
+        fov: { slider: document.getElementById('ctrl-fov'), display: document.getElementById('val-fov'), note: document.getElementById('fov-warn-note'), fmt: v => `${formatFov(v)}${widerThanPart(v) ? ' !' : ''}`, warn: widerThanPart, toSlider: Math.log, fromSlider: Math.exp },
         soundGain: { slider: document.getElementById('ctrl-sound-gain'), display: document.getElementById('val-sound-gain'), fmt: v => `${+v > 0 ? '+' : ''}${Math.round(+v)} dB` },
     };
     const sound = {
@@ -77,7 +84,7 @@ export function initControls(cameraId) {
     for (const ctrl of Object.values(controls)) {
         if (!ctrl.slider) continue;
         ctrl.slider.addEventListener('input', () => {
-            ctrl.display.textContent = ctrl.fmt(ctrl.slider.value);
+            showValue(ctrl, sliderValue(ctrl));
             schedulePost();
         });
     }
@@ -89,14 +96,22 @@ export function initControls(cameraId) {
             if (!ctrl?.slider) return;
             const def = btn.dataset.default !== undefined ? +btn.dataset.default : DEFAULTS[key];
             if (def !== undefined && !isNaN(def)) {
-                ctrl.slider.value = def;
-                ctrl.display.textContent = ctrl.fmt(def);
+                setSlider(ctrl, def);
                 schedulePost();
             }
         });
     });
 
     load();
+
+    return {
+        showFov(fov) {
+            const c = controls.fov;
+            if (document.getElementById('fov-row').hidden || document.activeElement === c.slider) return;
+            setSlider(c, fov);
+            sent.fov = Math.round(fov * 100) / 100;
+        },
+    };
 }
 
 function showMicHint(value) {
@@ -130,10 +145,13 @@ async function loadSettings(cameraId, controls, sound, sent) {
         }
 
         const fovRow = document.getElementById('fov-row');
-        if (s.fov != null && s.fovMax > s.fovMin && controls.fov?.slider) {
+        if (s.fov != null && controls.fov?.slider) {
             const c = controls.fov;
-            c.slider.min = s.fovMin;
-            c.slider.max = s.fovMax;
+            partFov = { min: s.fovMin, max: s.fovMax };
+            c.slider.min = Math.log(s.fovLimitMin ?? s.fovMin);
+            c.slider.max = Math.log(s.fovLimitMax ?? s.fovMax);
+            c.slider.step = 'any';
+            c.note.textContent = `This camera part opens up to ${Math.round(s.fovMax)}°. Wider than that, the picture looks stretched.`;
             const fovReset = document.querySelector('[data-reset="fov"]');
             fovReset.dataset.default ??= s.fov;
             setSlider(c, s.fov);
@@ -152,8 +170,19 @@ async function loadSettings(cameraId, controls, sound, sent) {
 
 function setSlider(ctrl, value) {
     if (!ctrl.slider || !ctrl.display) return;
-    ctrl.slider.value = value;
+    ctrl.slider.value = ctrl.toSlider ? ctrl.toSlider(value) : value;
+    showValue(ctrl, value);
+}
+
+function sliderValue(ctrl) {
+    return ctrl.fromSlider ? ctrl.fromSlider(+ctrl.slider.value) : +ctrl.slider.value;
+}
+
+function showValue(ctrl, value) {
+    const warned = ctrl.warn?.(value) === true;
     ctrl.display.textContent = ctrl.fmt(value);
+    ctrl.display.classList.toggle('ctrl-warn', warned);
+    if (ctrl.note) ctrl.note.hidden = !warned;
 }
 
 function readValues(controls, sound) {
@@ -163,7 +192,7 @@ function readValues(controls, sound) {
         gamma: +controls.gamma.slider.value,
     };
     if (!document.getElementById('fov-row')?.hidden && controls.fov?.slider)
-        values.fov = +controls.fov.slider.value;
+        values.fov = Math.round(sliderValue(controls.fov) * 100) / 100;
     if (!sound.group.hidden) {
         values.mic = sound.mic.value;
         values.soundGain = +controls.soundGain.slider.value;

@@ -16,16 +16,12 @@ namespace JustReadTheInstructions
         private float _scale = 1f;
         private bool _isResizing;
         private bool _minimalUI = JRTISettings.MinimalUI;
-        private float _currentFOV;
-        private float _minFOV;
         private float _maxFOV;
 
         private const float TitleBarHeight = 20;
         private const float ButtonSize = 18;
         private const float Margin = 2;
         private const float ControlsWidth = 60;
-        private const float SliderMinFOV = 5f;
-        private const float SliderMaxFOV = 120f;
 
         private static GUIStyle _titleStyle;
         private static GUIStyle _telemetryStyle;
@@ -41,9 +37,7 @@ namespace JustReadTheInstructions
             _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
             _telemetry = new CameraTelemetry(renderer.GetVessel());
             WindowId = windowId;
-            _minFOV = renderer.GetMinFOV();
             _maxFOV = renderer.GetMaxFOV();
-            _currentFOV = _maxFOV > 0f ? _maxFOV : renderer.GetFOV();
 
             InitializeStyles();
             CalculateInitialSize();
@@ -248,6 +242,9 @@ namespace JustReadTheInstructions
             GUI.Label(telemetryRect, _telemetry.GetFormattedTelemetry(), _telemetryStyle);
         }
 
+        private static string FormatFov(float fov)
+            => fov < 1f ? $"{fov:F2}°" : fov < 10f ? $"{fov:F1}°" : $"{fov:F0}°";
+
         private void DrawControls(float scaledWidth)
         {
             float controlX = scaledWidth + 2 * Margin;
@@ -261,28 +258,28 @@ namespace JustReadTheInstructions
             );
             controlY += 22;
 
-            float newFOV = GUI.VerticalSlider(
+            float fov = Mathf.Max(_renderer.GetFOV(), HullCameraRenderer.FovLimitMin);
+            float logFov = GUI.VerticalSlider(
                 new Rect(controlX + 20, controlY, 20, 100),
-                _currentFOV,
-                SliderMaxFOV,
-                SliderMinFOV
+                Mathf.Log(fov),
+                Mathf.Log(HullCameraRenderer.FovLimitMax),
+                Mathf.Log(HullCameraRenderer.FovLimitMin)
             );
 
-            if (Math.Abs(newFOV - _currentFOV) > 0.1f)
+            if (Math.Abs(logFov - Mathf.Log(fov)) > 0.005f)
             {
-                _currentFOV = newFOV;
-                _renderer.SetFieldOfView(_currentFOV);
+                fov = Mathf.Exp(logFov);
+                _renderer.SetUserFieldOfView(fov);
             }
 
-            bool outsideIntended = _minFOV > 0f && _maxFOV > 0f &&
-                (_currentFOV < _minFOV || _currentFOV > _maxFOV);
-            if (outsideIntended) GUI.color = new Color(1f, 0.65f, 0f);
+            bool tooWide = _maxFOV > 0f && fov > _maxFOV + 0.5f;
+            if (tooWide) GUI.color = new Color(1f, 0.65f, 0f);
             GUI.Label(
                 new Rect(controlX, controlY + 105, ControlsWidth, 20),
-                outsideIntended ? $"{_currentFOV:F0}° !" : $"{_currentFOV:F0}°",
+                tooWide ? $"{FormatFov(fov)} !" : FormatFov(fov),
                 _titleStyle
             );
-            if (outsideIntended) GUI.color = Color.white;
+            if (tooWide) GUI.color = Color.white;
 
             float urlButtonY = controlY + 130;
 

@@ -25,7 +25,6 @@ namespace JustReadTheInstructions
             = new ConcurrentDictionary<int, CameraStreamState>();
 
         private const int PortCheckTimeoutMs = 3000;
-        private const string SteamPortHint = "(Steam's web inspector often takes 8080)";
         private const string PortFixHint = "Pick another Port in JRTI settings (Ctrl+Alt+F8), then restart the game.";
 
         private enum PortCheckResult { ThisServer, OtherProgram, NoAnswer }
@@ -96,6 +95,9 @@ namespace JustReadTheInstructions
                 s.PublishInfo(displayName, fov, fovMin, fovMax);
         }
 
+        internal CameraAimControl AimControlOf(int cameraId)
+            => _states.TryGetValue(cameraId, out var s) ? s.Aim : null;
+
         public bool TryTakePendingFov(int cameraId, out float fov)
         {
             fov = 0f;
@@ -127,7 +129,7 @@ namespace JustReadTheInstructions
         public bool TryGetCaptureOverdue(int cameraId, float now, out float overdue)
         {
             overdue = float.NegativeInfinity;
-            if (!_states.TryGetValue(cameraId, out var s) || !s.HasActiveClients)
+            if (!_states.TryGetValue(cameraId, out var s) || !s.WantsCaptures)
                 return false;
             overdue = s.CaptureOverdue(now);
             return true;
@@ -256,7 +258,7 @@ namespace JustReadTheInstructions
 
             if (!started)
             {
-                PortWarning = $"Web UI could not start: port {port} is already used by another program {SteamPortHint}. {PortFixHint}";
+                PortWarning = $"Web UI could not start: port {port} is already used by another program. {PortFixHint}";
                 ShowPortWarning();
                 return;
             }
@@ -286,10 +288,10 @@ namespace JustReadTheInstructions
                 case PortCheckResult.ThisServer:
                     return;
                 case PortCheckResult.OtherProgram:
-                    PortWarning = $"Another program also answers on port {port} {SteamPortHint}, so localhost:{port} may show its page instead of JRTI's. {PortFixHint}";
+                    PortWarning = $"Another program also answers on port {port}, so localhost:{port} may show its page instead of JRTI's. {PortFixHint}";
                     break;
                 default:
-                    PortWarning = $"Could not confirm the web UI on port {port}: either the port check timed out or the port is busy {SteamPortHint}. If the browser does not show JRTI's page: {PortFixHint}";
+                    PortWarning = $"Could not confirm the web UI on port {port}: either the port check timed out or the port is busy. If the browser does not show JRTI's page: {PortFixHint}";
                     break;
             }
             _portWarningPending = true;

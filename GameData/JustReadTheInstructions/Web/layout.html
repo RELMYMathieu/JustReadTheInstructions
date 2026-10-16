@@ -35,23 +35,21 @@
         <span class="layout-status" id="layout-status" role="status"></span>
         <div class="toolbar-group">
             <button type="button" class="btn btn-quiet" id="layout-tray-btn" title="Camera list" aria-expanded="false">Cameras <kbd>C</kbd></button>
-            <button type="button" class="btn btn-quiet" id="layout-add" title="Add an empty tile">Add tile <kbd>T</kbd></button>
+            <button type="button" class="btn btn-quiet toolbar-wide" id="layout-add" title="Add an empty tile">Add tile <kbd>T</kbd></button>
+            <span class="toolbar-sep toolbar-wide"></span>
+            <button type="button" class="btn btn-quiet toolbar-wide" id="layout-fill" aria-pressed="false" title="Fill the window edge to edge: no gaps or black bars, feeds are cropped to fit">Fill <kbd>G</kbd></button>
+            <button type="button" class="btn btn-quiet toolbar-wide" id="layout-sound" aria-pressed="false" title="Play sound in this tab only: the spotlight camera, or the tile picked with its speaker button">Listen <kbd>M</kbd></button>
+            <button type="button" class="btn btn-quiet toolbar-wide" id="layout-fullscreen" title="Show only the cameras (Esc to leave)">Fullscreen <kbd>F</kbd></button>
             <span class="toolbar-sep"></span>
-            <button type="button" class="btn btn-quiet" id="layout-fill" aria-pressed="false" title="Fill the window edge to edge: no gaps or black bars, feeds are cropped to fit">Fill <kbd>G</kbd></button>
-            <button type="button" class="btn btn-quiet" id="layout-labels" title="Camera names on the tiles"><span id="layout-labels-text">Names: auto</span> <kbd>N</kbd></button>
-            <button type="button" class="btn btn-quiet" id="layout-columns" title="How many tiles side by side. Auto picks the biggest tiles; 2 keeps two cameras side by side even on a smaller screen"><span id="layout-columns-text">Columns: auto</span> <kbd>L</kbd></button>
-            <button type="button" class="btn btn-quiet" id="layout-sound" aria-pressed="false" title="Play sound in this tab only: the spotlight camera, or the tile picked with its speaker button">Listen <kbd>M</kbd></button>
-            <button type="button" class="btn btn-quiet" id="layout-fullscreen" title="Show only the cameras (Esc to leave)">Fullscreen <kbd>F</kbd></button>
-            <span class="toolbar-sep"></span>
-            <button type="button" class="btn btn-quiet" id="layout-copy" title="Copy a link to this layout, for a bookmark or an OBS browser source">Copy link</button>
-            <button type="button" class="btn btn-quiet" id="layout-help" title="Keyboard shortcuts">Keys <kbd>?</kbd></button>
+            <button type="button" class="btn btn-quiet" id="layout-more" title="Camera names, columns and more">More</button>
+            <button type="button" class="btn btn-quiet keys-btn" id="layout-help" title="Keyboard shortcuts">Keys <kbd>?</kbd></button>
         </div>
     </header>
 
     <aside class="sheet sheet-left" id="layout-tray" aria-labelledby="tray-title">
         <div class="sheet-head">
             <h2 id="tray-title">Cameras</h2>
-            <button type="button" class="btn btn-quiet" data-close>Close <kbd>C</kbd></button>
+            <button type="button" class="btn btn-quiet" data-close>Close <kbd>Esc</kbd></button>
         </div>
         <div class="sheet-body" tabindex="-1">
             <p class="hint">Click a camera to put it in the first empty tile, or drag it onto a tile to replace that feed. Drop it on an empty spot to add a tile.</p>
@@ -66,7 +64,7 @@
     <div id="copy-fallback" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-title">
         <div class="modal">
             <div class="modal-title" id="copy-title">The browser blocked the clipboard. Press Ctrl+C (Cmd+C on a Mac), then close.</div>
-            <input id="copy-input" class="input" type="text" readonly>
+            <input id="copy-input" class="input" type="text" readonly aria-labelledby="copy-title">
             <div class="modal-actions">
                 <a id="copy-select-btn" class="btn" href="#">Select</a>
                 <a id="copy-close-btn" class="btn" href="#">Close</a>

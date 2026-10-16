@@ -9,7 +9,7 @@ import { storeForLocation, savedLayoutStore, saveLayoutAs, LABEL_MODES, COLUMN_C
 import { beginDrag, isDragging } from './layout-drag.js';
 import { onServerEvent } from './events.js';
 import { h, button } from './dom.js';
-import { Menu, menuItem, menuSeparator, menuHeading, copyWithToast, isMenuOpen, isTyping, toast } from './ui.js';
+import { Menu, menuItem, menuSeparator, menuHeading, copyWithToast, isMenuOpen, isTyping, shortcutList, toast } from './ui.js';
 import { getSession, lanUrl } from './session.js';
 
 const TILE_GAP = 6;
@@ -21,7 +21,8 @@ const UNDO_LIMIT = 30;
 const SHORTCUT_LAYOUTS = 9;
 const LAYOUT_NAME_PATTERN = /^[\p{L}\p{N} _-]{1,64}$/u;
 const DIGIT_CODE = /^(?:Digit|Numpad)([0-9])$/;
-const LABEL_TEXT = { auto: 'Names: when idle', always: 'Names: on', never: 'Names: off' };
+const LABEL_TEXT = { auto: 'When the controls hide', always: 'Always', never: 'Never' };
+const NARROW = window.matchMedia('(max-width: 860px)');
 const EMPTY_LAYOUT = Object.freeze({ tiles: [], spotlight: null, fill: false, labels: 'auto', columns: null, sound: null });
 const SAVE_STATES = {
     missing: { text: 'New saved layout: your first change creates it' },
@@ -36,7 +37,7 @@ const SHORTCUTS = [
     ['C', 'Camera list'],
     ['T', 'Add an empty tile'],
     ['G', 'Fill the window edge to edge'],
-    ['N', 'Camera names: when idle, on, off'],
+    ['N', 'Camera names: when the controls hide, always, never'],
     ['L', 'Columns: auto, 1, 2, 3, 4'],
     ['M', 'Listen in this tab: you hear the spotlight, or the tile picked with its speaker button'],
     ['F', 'Fullscreen'],
@@ -53,8 +54,6 @@ const grid = document.getElementById('layout-grid');
 const emptyEl = document.getElementById('layout-empty');
 const statusEl = document.getElementById('layout-status');
 const fillBtn = document.getElementById('layout-fill');
-const labelsBtn = document.getElementById('layout-labels');
-const columnsBtn = document.getElementById('layout-columns');
 const fullscreenBtn = document.getElementById('layout-fullscreen');
 const switcherBtn = document.getElementById('layout-switcher');
 const takeBtn = document.getElementById('layout-take');
@@ -153,7 +152,7 @@ function applyRemoteLayout(layout) {
 
 function applyProgramLayout(layout) {
     applyLayout(layout);
-    programHint.hidden = store.name !== null;
+    programHint.hidden = store.name !== null || 'obsstudio' in window;
 }
 
 function layoutTiles() {
@@ -270,7 +269,6 @@ function applyLayout(layout) {
     columns = layout.columns ?? null;
     applyFill();
     applyLabels();
-    applyColumns();
     resolveTiles();
     layoutTiles();
 }
@@ -394,31 +392,29 @@ function toggleFill() {
 
 function applyLabels() {
     for (const mode of LABEL_MODES) document.body.classList.toggle(`labels-${mode}`, labels === mode);
-    document.getElementById('layout-labels-text').textContent = LABEL_TEXT[labels];
-    labelsBtn.setAttribute('aria-label', LABEL_TEXT[labels]);
 }
 
-function columnsText() {
-    return `Columns: ${columns ?? 'auto'}`;
-}
-
-function applyColumns() {
-    document.getElementById('layout-columns-text').textContent = columnsText();
-    columnsBtn.setAttribute('aria-label', columnsText());
+function setColumns(next) {
+    change(() => { columns = next; });
 }
 
 function cycleColumns() {
+    setColumns(COLUMN_CHOICES[(COLUMN_CHOICES.indexOf(columns) + 1) % COLUMN_CHOICES.length]);
+}
+
+function setLabels(next) {
     change(() => {
-        columns = COLUMN_CHOICES[(COLUMN_CHOICES.indexOf(columns) + 1) % COLUMN_CHOICES.length];
-        applyColumns();
+        labels = next;
+        applyLabels();
     });
 }
 
 function cycleLabels() {
-    change(() => {
-        labels = LABEL_MODES[(LABEL_MODES.indexOf(labels) + 1) % LABEL_MODES.length];
-        applyLabels();
-    });
+    setLabels(LABEL_MODES[(LABEL_MODES.indexOf(labels) + 1) % LABEL_MODES.length]);
+}
+
+function columnsLabel(choice) {
+    return choice === null ? 'Auto: the biggest tiles' : `${choice} column${choice === 1 ? '' : 's'}`;
 }
 
 function pageLink(query, origin = location.origin) {
@@ -605,8 +601,28 @@ const switcherMenu = new Menu(switcherBtn, (menu) => {
 
 const helpMenu = new Menu(document.getElementById('layout-help'), () => [
     menuHeading('Keyboard and mouse'),
-    h('div', { class: 'shortcuts' },
-        ...SHORTCUTS.flatMap(([key, text]) => [h('kbd', {}, key), h('span', {}, text)])),
+    shortcutList(SHORTCUTS),
+]);
+
+function narrowItems() {
+    if (!NARROW.matches) return [];
+    const items = [
+        menuItem({ label: 'Add tile', detail: 'T', onSelect: () => addTile() }),
+        menuItem({ label: 'Fill', detail: 'G', checked: fill, checkbox: true, onSelect: toggleFill }),
+        menuItem({ label: 'Listen in this tab', detail: 'M', checked: audio.playing, checkbox: true, onSelect: toggleSound }),
+    ];
+    if (document.fullscreenEnabled) items.push(menuItem({ label: 'Fullscreen', detail: 'F', onSelect: toggleFullscreen }));
+    items.push(menuItem({ label: 'Keyboard shortcuts', detail: '?', onSelect: () => helpMenu.open() }));
+    return [...items, menuSeparator()];
+}
+
+new Menu(document.getElementById('layout-more'), () => [
+    ...narrowItems(),
+    menuHeading('Camera names on tiles (N)'),
+    ...LABEL_MODES.map((mode) => menuItem({ label: LABEL_TEXT[mode], checked: labels === mode, onSelect: () => setLabels(mode) })),
+    menuSeparator(),
+    menuHeading('Columns (L)'),
+    ...COLUMN_CHOICES.map((choice) => menuItem({ label: columnsLabel(choice), checked: columns === choice, onSelect: () => setColumns(choice) })),
 ]);
 
 function chromeInUse() {
@@ -709,7 +725,6 @@ function wireProgram() {
 
 function wireControls() {
     document.getElementById('layout-add').addEventListener('click', () => addTile());
-    document.getElementById('layout-copy').addEventListener('click', () => copyWithToast(shareLink()));
     document.getElementById('layout-tray-btn').addEventListener('click', () => tray.toggle());
     document.getElementById('layout-empty-tray').addEventListener('click', () => tray.open());
     document.getElementById('layout-empty-all').addEventListener('click', addAllCameras);
@@ -717,8 +732,6 @@ function wireControls() {
     document.getElementById('tray-clear').addEventListener('click', clearLayout);
     takeBtn.addEventListener('click', () => { if (store.kind === 'saved' && onAirName !== store.name) takeOnAir(store.name); });
     fillBtn.addEventListener('click', toggleFill);
-    labelsBtn.addEventListener('click', cycleLabels);
-    columnsBtn.addEventListener('click', cycleColumns);
     soundBtn.addEventListener('click', toggleSound);
     fullscreenBtn.hidden = !document.fullscreenEnabled;
     fullscreenBtn.addEventListener('click', toggleFullscreen);

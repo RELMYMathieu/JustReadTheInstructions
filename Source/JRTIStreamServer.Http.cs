@@ -70,6 +70,7 @@ namespace JustReadTheInstructions
                 string name = kv.Value.DisplayName ?? id.ToString();
                 sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,\"viewerCount\":{kv.Value.MjpegClientCount},")
                   .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\",\"mic\":\"{CameraMics.Id(kv.Value.Mic)}\",")
+                  .Append($"\"canPan\":{(kv.Value.Aim.CanPan ? "true" : "false")},\"track\":\"{CameraTracks.Id(kv.Value.Aim.Track)}\",")
                   .Append($"\"recording\":{RecordingJson(kv.Value)}}}");
                 first = false;
             }
@@ -247,6 +248,7 @@ namespace JustReadTheInstructions
 
         private static void ServeDebugStats(HttpListenerContext ctx)
         {
+            JRTIPerfMonitor.NoteRemoteViewer();
             var snapshot = JRTIPerfMonitor.Instance?.Latest;
             if (snapshot == null)
             {
@@ -280,6 +282,7 @@ namespace JustReadTheInstructions
                     state.AutoGain = autoGain;
                 if (TryParseJsonBool(body, "mastering", out var mastering))
                     state.Mastering = mastering;
+                UpdateAim(body, state.Aim);
 
                 ctx.Response.StatusCode = 200;
                 ctx.Response.Close();
@@ -298,13 +301,37 @@ namespace JustReadTheInstructions
 
             if (state.HasFov)
             {
-                sb.Append($",\"fov\":{state.Fov.ToString("F1", ic)}");
+                sb.Append($",\"fov\":{state.Fov.ToString("0.##", ic)}");
                 sb.Append($",\"fovMin\":{state.FovMin.ToString("F1", ic)}");
                 sb.Append($",\"fovMax\":{state.FovMax.ToString("F1", ic)}");
+                sb.Append($",\"fovLimitMin\":{HullCameraRenderer.FovLimitMin.ToString("0.##", ic)}");
+                sb.Append($",\"fovLimitMax\":{HullCameraRenderer.FovLimitMax.ToString("F0", ic)}");
             }
 
+            state.Aim.AppendJson(sb);
             sb.Append("}");
             ServeText(ctx, sb.ToString(), "application/json");
+        }
+
+        private static void UpdateAim(string body, CameraAimControl aim)
+        {
+            if (TryParseJsonFloat(body, "zoomRate", out var zoomRate))
+                aim.SetZoomRate(zoomRate);
+
+            if (!aim.CanPan) return;
+
+            bool hasYaw = TryParseJsonFloat(body, "panYaw", out var yaw);
+            bool hasPitch = TryParseJsonFloat(body, "panPitch", out var pitch);
+            if (hasYaw || hasPitch)
+                aim.SetTarget(hasYaw ? yaw : (float?)null, hasPitch ? pitch : (float?)null);
+
+            bool hasYawRate = TryParseJsonFloat(body, "panYawRate", out var yawRate);
+            bool hasPitchRate = TryParseJsonFloat(body, "panPitchRate", out var pitchRate);
+            if (hasYawRate || hasPitchRate)
+                aim.SetPanRate(hasYawRate ? yawRate : (float?)null, hasPitchRate ? pitchRate : (float?)null);
+
+            if (TryParseJsonString(body, "track", out var track) && CameraTracks.TryParse(track, out var parsedTrack))
+                aim.SetTrack(parsedTrack);
         }
 
         private static int JsonValueStart(string json, string key)

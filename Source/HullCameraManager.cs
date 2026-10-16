@@ -68,9 +68,11 @@ namespace JustReadTheInstructions
 
         void Update()
         {
+            GpuPerf.BeginFrame();
             RebuildCamerasAfterMapView();
             AutoStreamNewCameras();
             SyncStreamServerState();
+            UpdateAims();
             if (Time.frameCount % 60 == 0)
                 CleanupInvalidCameras();
         }
@@ -101,6 +103,7 @@ namespace JustReadTheInstructions
             {
                 yield return EndOfFrame;
                 UpdateAllRenderers();
+                GpuPerf.EndFrame();
             }
         }
 
@@ -129,6 +132,8 @@ namespace JustReadTheInstructions
 
             GrantDueRenders(RenderBudget(scheduledCameras), now);
         }
+
+        public long TargetTextureBytes() => _renderers.Values.Sum(r => RenderTextureCensus.EstimateBytes(r.TargetTexture));
 
         private FrameSchedule WindowSchedule(int cameraId)
         {
@@ -185,7 +190,9 @@ namespace JustReadTheInstructions
         private static void RenderCamera(HullCameraRenderer renderer, bool capture, bool rephaseCapture)
         {
             long start = JRTIPerf.Now();
+            GpuPerf.Mark(renderer.InstanceId, GpuSection.Setup);
             renderer.Render(capture, rephaseCapture);
+            GpuPerf.EndCamera();
             JRTIPerf.RecordMainThread(renderer.InstanceId, CameraMetric.Render, start);
         }
 
@@ -230,7 +237,7 @@ namespace JustReadTheInstructions
             {
                 var renderer = kvp.Value;
                 if (server.TryTakePendingFov(kvp.Key, out float fov))
-                    renderer.SetFieldOfView(Mathf.Clamp(fov, renderer.GetMinFOV(), renderer.GetMaxFOV()));
+                    renderer.SetUserFieldOfView(fov);
 
                 if (!publishInfo) continue;
                 server.PublishCameraInfo(kvp.Key, renderer.GetDisplayName(),
@@ -238,6 +245,13 @@ namespace JustReadTheInstructions
                 if (server.TryGetSoundSettings(kvp.Key, out var sound))
                     CameraSoundMemory.Remember(renderer.SoundKey, sound);
             }
+        }
+
+        private void UpdateAims()
+        {
+            var server = JRTIStreamServer.Instance;
+            foreach (var kvp in _renderers)
+                kvp.Value.UpdateAim(server?.AimControlOf(kvp.Key), Time.deltaTime);
         }
 
         private void CleanupInvalidCameras()

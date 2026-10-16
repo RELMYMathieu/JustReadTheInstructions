@@ -47,7 +47,66 @@ const cameras = new Map([
     [13, { name: 'Kerbal X.Booster Sep' }],
     [14, { name: 'Kerbal X.Docking Port Cam with a rather long name for overflow' }],
 ]);
-for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, mic: 'game', soundGain: 0, autoGain: false, mastering: false }, audioClients: 0 });
+for (const [id, cam] of cameras) Object.assign(cam, { id, online: true, streamClients: 0, previewClients: 0, recording: null, settings: { brightness: 0, contrast: 1, gamma: 1, fov: 60, fovMin: 20, fovMax: 90, fovLimitMin: 0.25, fovLimitMax: 120, mic: 'game', soundGain: 0, autoGain: false, mastering: false }, audioClients: 0 });
+
+const PAN_SLEW_DEG_PER_S = 90;
+const PAN_RATE_DEG_PER_S = 25;
+const PAN_RATE_HOLD_MS = 600;
+const PAN_TICK_MS = 50;
+
+const ZOOM_DOUBLINGS_PER_S = 1;
+
+function makePan(pitchMin, pitchMax) {
+    return { yaw: 0, pitch: 0, targetYaw: 0, targetPitch: 0, yawRate: 0, pitchRate: 0, rateUntil: 0, track: 'off', pitchMin, pitchMax };
+}
+cameras.get(10).pan = makePan(-45, 90);
+cameras.get(11).pan = makePan(-60, 90);
+const wrap = (deg) => ((deg + 540) % 360) - 180;
+
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const towards = (v, target, step) => Math.abs(target - v) <= step ? target : v + Math.sign(target - v) * step;
+
+setInterval(() => {
+    const dt = PAN_TICK_MS / 1000;
+    for (const cam of cameras.values()) {
+        if (Date.now() < (cam.zoomUntil ?? 0) && cam.zoomRate) {
+            cam.settings.fov = clamp(cam.settings.fov * 2 ** (-cam.zoomRate * ZOOM_DOUBLINGS_PER_S * dt), cam.settings.fovLimitMin, cam.settings.fovLimitMax);
+        }
+        const pan = cam.pan;
+        if (!pan) continue;
+        if (pan.track !== 'off') {
+            const t = Date.now() / 1000;
+            pan.targetYaw = pan.yaw + wrap(40 * Math.sin(t / 6) - pan.yaw);
+            pan.targetPitch = clamp(15 + 10 * Math.sin(t / 4), pan.pitchMin, pan.pitchMax);
+        } else if (Date.now() < pan.rateUntil) {
+            pan.targetYaw += pan.yawRate * PAN_RATE_DEG_PER_S * dt;
+            pan.targetPitch = clamp(pan.targetPitch + pan.pitchRate * PAN_RATE_DEG_PER_S * dt, pan.pitchMin, pan.pitchMax);
+        }
+        pan.yaw = towards(pan.yaw, pan.targetYaw, PAN_SLEW_DEG_PER_S * dt);
+        pan.pitch = towards(pan.pitch, pan.targetPitch, PAN_SLEW_DEG_PER_S * dt);
+    }
+}, PAN_TICK_MS);
+
+function applyPan(pan, body) {
+    if (!pan) return;
+    if (body.panYaw != null || body.panPitch != null) {
+        if (body.panYaw != null) pan.targetYaw = pan.yaw + wrap(body.panYaw - pan.yaw);
+        pan.targetPitch = clamp(body.panPitch ?? pan.targetPitch, pan.pitchMin, pan.pitchMax);
+        pan.track = 'off';
+    }
+    if (body.panYawRate != null || body.panPitchRate != null) {
+        pan.yawRate = clamp(body.panYawRate ?? pan.yawRate, -1, 1);
+        pan.pitchRate = clamp(body.panPitchRate ?? pan.pitchRate, -1, 1);
+        pan.rateUntil = Date.now() + PAN_RATE_HOLD_MS;
+        if (pan.yawRate !== 0 || pan.pitchRate !== 0) pan.track = 'off';
+    }
+    if (['off', 'vessel', 'target'].includes(body.track)) pan.track = body.track;
+}
+
+function panJson(pan) {
+    const { yaw, pitch, pitchMin, pitchMax, track } = pan;
+    return { yaw: +wrap(yaw).toFixed(1), pitch: +pitch.toFixed(1), pitchMin, pitchMax, track };
+}
 
 const launchId = 'mock' + Date.now().toString(16);
 const layouts = new Map();
@@ -119,7 +178,7 @@ function recordingInfo(cam) {
 function cameraList() {
     return [...cameras.values()].filter((c) => c.online).map((c) => ({
         id: c.id, name: c.name, streaming: true, viewerCount: c.streamClients,
-        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, recording: recordingInfo(c),
+        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, canPan: Boolean(c.pan), track: c.pan?.track ?? 'off', recording: recordingInfo(c),
     }));
 }
 
@@ -205,11 +264,18 @@ function sample() {
         spread: 1, max_fps: FPS, camera_count: cams.length,
         audio_cameras: cams.filter((c) => c.audioClients > 0).length, audio_voices: 14, audio_main_ms_avg: 0.12 + Math.random() * 0.05, audio_main_ms_max: 0.3 + Math.random() * 0.2,
         audio_mix_ms_avg: 0.6 + Math.random() * 0.2, audio_mix_ms_max: 1.5 + Math.random(), audio_skipped_sounds: 0,
+        gpu_timing: 'on', gpu_frames: 60, gpu_dropped: 0, gpu_span_ms_avg: 11 + Math.random(), gpu_span_ms_max: 15 + Math.random() * 3,
+        gpu_game_ms_avg: 8 + Math.random(), gpu_jrti_ms_avg: cams.length * 0.9, gpu_jrti_ms_max: cams.length * 1.6,
+        gpu_setup_ms: cams.length * 0.05, gpu_near_ms: cams.length * 0.5, gpu_far_terrain_ms: cams.length * 0.25, gpu_scaled_ms: cams.length * 0.06,
+        gpu_galaxy_ms: cams.length * 0.02, gpu_finish_ms: cams.length * 0.04,
+        vram_used_mb: 7480 + Math.random() * 40, vram_budget_mb: 7600, vram_shared_mb: 410, jrti_targets_mb: cams.length * 7,
         cameras: cams.map((c) => ({
             camera_id: c.id, camera: c.name, mode: c.id % 2 ? 'window' : 'stream', renders_per_s: 29.5 + Math.random(), render_ms_avg: 3 + Math.random() * 2, render_ms_max: 7 + Math.random() * 4,
             stream_fps: c.streamClients + c.previewClients > 0 ? 28 + Math.random() * 2 : 0, capture_ms_avg: 0.05, capture_ms_max: 0.1, readback_ms_avg: 21, readback_ms_max: 38,
             readback_copy_ms_avg: 0.4, encode_wait_ms_avg: 0.3, encode_wait_ms_max: 2, encode_ms_avg: 9.5, encode_ms_max: 14, jpeg_kb_avg: 96, deferred_per_s: 0.4,
             stream_clients: c.streamClients, preview_clients: c.previewClients,
+            gpu_ms_avg: 1.8 + Math.random() * 0.4, gpu_ms_max: 3 + Math.random(), gpu_setup_ms_avg: 0.1, gpu_near_ms_avg: 1, gpu_far_terrain_ms_avg: 0.5,
+            gpu_scaled_ms_avg: 0.12, gpu_galaxy_ms_avg: 0.04, gpu_finish_ms_avg: 0.08,
         })),
     };
 }
@@ -327,8 +393,14 @@ const server = http.createServer(async (req, res) => {
                 case 'audio': return audio(req, res, cam);
                 case 'status': return text(res, 200, 'ok');
                 case 'settings':
-                    if (req.method === 'POST') { Object.assign(cam.settings, JSON.parse(await readBody(req))); res.writeHead(200); return res.end(); }
-                    return json(res, cam.settings);
+                    if (req.method === 'POST') {
+                        const { panYaw, panPitch, panYawRate, panPitchRate, track, zoomRate, ...rest } = JSON.parse(await readBody(req));
+                        applyPan(cam.pan, { panYaw, panPitch, panYawRate, panPitchRate, track });
+                        if (zoomRate != null) Object.assign(cam, { zoomRate: clamp(zoomRate, -1, 1), zoomUntil: Date.now() + PAN_RATE_HOLD_MS });
+                        Object.assign(cam.settings, rest);
+                        res.writeHead(200); return res.end();
+                    }
+                    return json(res, cam.pan ? { ...cam.settings, pan: panJson(cam.pan) } : cam.settings);
                 case 'recording': return gameRecording(res, cam, parts[3], url.searchParams.get('codec'));
                 default: return text(res, 404, 'Unknown action');
             }

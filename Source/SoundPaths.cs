@@ -148,9 +148,9 @@ namespace JustReadTheInstructions
         private const float MinShockSpacing = 0.05f;
         private const float MaxShockSpacing = 0.6f;
         private const float TripleShockLength = 25f;
-        private const float LeadGapPerSpacing = 1.6f;
-        private const float PairGapPerSpacing = 0.4f;
-        private const float MinPairGap = 0.12f;
+        private const float LeadGapPerSpacing = 0.92f;
+        private const float PairGapPerSpacing = 0.25f;
+        private const float MinPairGap = 0.06f;
         private const float TrailingShockGain = 0.8f;
 
         public static float Reach(float thrustKn, bool loudnessScalesWithThrust)

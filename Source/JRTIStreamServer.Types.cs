@@ -98,7 +98,7 @@ namespace JustReadTheInstructions
                 Fov = fov;
                 FovMin = min;
                 FovMax = max;
-                _hasFov = max > min;
+                _hasFov = true;
             }
 
             public void SetPendingFov(float fov)
@@ -122,6 +122,7 @@ namespace JustReadTheInstructions
             public float SoundGainDb;
             public volatile bool AutoGain;
             public volatile bool Mastering;
+            public readonly CameraAimControl Aim = new CameraAimControl();
 
             private byte[] _lut;
             private float _lutBrightness;
@@ -154,7 +155,11 @@ namespace JustReadTheInstructions
             public bool NeedsJpeg
                 => MjpegClients.Count > 0 || PreviewClients.Count > 0 || _snapshotPending;
 
-            public bool HasActiveClients => NeedsJpeg || Recorder != null;
+            public bool WantsCaptures
+                => MjpegClients.Count > 0 || PreviewClients.Count > 0 || Recorder != null || SnapshotAwaitingCapture;
+
+            private bool SnapshotAwaitingCapture
+                => _snapshotPending && Volatile.Read(ref _capturesInFlight) == 0 && Volatile.Read(ref _jpegsInFlight) == 0;
 
             private Mp4Recorder _recorder;
             public readonly object RecordingLock = new object();

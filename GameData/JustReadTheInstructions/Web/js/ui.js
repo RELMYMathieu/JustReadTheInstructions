@@ -93,12 +93,12 @@ export class Menu {
     }
 }
 
-export function menuItem({ label, detail, description, checked, onSelect, className = '', href, target, download }) {
+export function menuItem({ label, detail, description, checked, checkbox = false, onSelect, className = '', href, target, download }) {
     const tag = href ? 'a' : 'button';
     const classes = ['menu-item', description && 'has-description', checked && 'current', className];
     const item = h(tag, {
         class: classes.filter(Boolean).join(' '),
-        role: checked === undefined ? 'menuitem' : 'menuitemradio',
+        role: checked === undefined ? 'menuitem' : checkbox ? 'menuitemcheckbox' : 'menuitemradio',
         'aria-checked': checked === undefined ? null : String(checked),
         type: href ? null : 'button',
         href,
@@ -126,6 +126,10 @@ export function menuHeading(text) {
 
 export function menuNote(text) {
     return h('p', { class: 'menu-note' }, text);
+}
+
+export function shortcutList(rows) {
+    return h('div', { class: 'shortcuts' }, ...rows.flatMap(([key, text]) => [h('kbd', {}, key), h('span', {}, text)]));
 }
 
 export function isMenuOpen() {

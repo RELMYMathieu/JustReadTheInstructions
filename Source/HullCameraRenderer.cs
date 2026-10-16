@@ -28,6 +28,11 @@ namespace JustReadTheInstructions
 
         public Vessel Vessel => _hullCamera.vessel;
 
+        public const string TargetTexturePrefix = "JRTI_Target_";
+
+        public const float FovLimitMin = 0.25f;
+        public const float FovLimitMax = 120f;
+
         private const int NearCameraIndex = 0;
         private const int FarPqsCameraIndex = 1;
         private const int ScaledCameraIndex = 2;
@@ -43,6 +48,16 @@ namespace JustReadTheInstructions
 
         private DockingCameraOverlay _dockingOverlay;
         private readonly StockAeroFX _aeroFX;
+        private readonly CameraPan _pan;
+        private Renderer[] _ownPartRenderers = Array.Empty<Renderer>();
+        private readonly List<Renderer> _hiddenOwnPartRenderers = new List<Renderer>();
+        private CameraTrack _track;
+        private float _framingDegreeMetres = DefaultFramingDegreeMetres;
+        private float _trackDistance;
+
+        private const float DefaultFramingDegreeMetres = 20f * 1000f;
+        private const float ZoomDoublingsPerSecond = 1f;
+        private const float AutoZoomSharpness = 4f;
 
         public HullCameraRenderer(MuMechModuleHullCamera hullCamera)
         {
@@ -52,6 +67,8 @@ namespace JustReadTheInstructions
 
             if (hullCamera.cameraFoVMax > 0f)
                 hullCamera.cameraFoV = hullCamera.cameraFoVMax;
+
+            _pan = CameraPan.TryCreate(hullCamera);
 
             InitializeRenderTexture();
             SetupCameras();
@@ -94,6 +111,7 @@ namespace JustReadTheInstructions
                 RenderTextureFormat.ARGB32
             )
             {
+                name = TargetTexturePrefix + InstanceId,
                 antiAliasing = (ScattererIntegration.IsAvailable || JRTISettings.AntiAliasing == 0) ? 1 : JRTISettings.AntiAliasing
             };
 
@@ -114,6 +132,7 @@ namespace JustReadTheInstructions
 
         private void CreateCameras()
         {
+            _ownPartRenderers = OwnPartRenderers();
             SetupNearCamera();
             SetupFarPqsCamera();
             SetupScaledCamera();
@@ -148,6 +167,9 @@ namespace JustReadTheInstructions
                 _hullCamera.cameraUp
             );
             camera.transform.localPosition = _hullCamera.cameraPosition;
+
+            _pan?.AttachLens(camera.transform, camera.transform.parent,
+                _hullCamera.cameraPosition, _hullCamera.cameraForward, _hullCamera.cameraUp);
 
             //camera.nearClipPlane = 0.07f; // TODO: Find proper near clip plane value
             // Basically, this current value causes an issue where the shading on the cameras is a bit
@@ -356,6 +378,62 @@ namespace JustReadTheInstructions
             if (filterActive)
                 HullcamFilterIntegration.SyncToCamera(_cameras[NearCameraIndex], _hullCamera);
 
+            bool unboosted = HullcamFilterIntegration.TryGetUnboostedAmbient(out var sceneAmbient);
+            var ambient = unboosted ? FeedAmbient.Override(sceneAmbient) : default;
+
+            HideOwnPart();
+            try
+            {
+                RenderLayers(filterActive);
+            }
+            finally
+            {
+                ShowOwnPart();
+                if (unboosted)
+                    FeedAmbient.Restore(ambient);
+            }
+
+            RestoreRaymarchedLightBuffers();
+
+            if (_fireflyApplied) UpdateFireflyEffects();
+
+            if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
+                _dockingOverlay.Render(TargetTexture);
+
+            if (capture)
+                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
+        }
+
+        private Renderer[] OwnPartRenderers()
+        {
+            var config = _hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
+            return config != null && config.hideOwnPart
+                ? _hullCamera.part.FindModelComponents<Renderer>().ToArray()
+                : Array.Empty<Renderer>();
+        }
+
+        private void HideOwnPart()
+        {
+            foreach (var renderer in _ownPartRenderers)
+            {
+                if (renderer == null || renderer.forceRenderingOff) continue;
+                renderer.forceRenderingOff = true;
+                _hiddenOwnPartRenderers.Add(renderer);
+            }
+        }
+
+        private void ShowOwnPart()
+        {
+            foreach (var renderer in _hiddenOwnPartRenderers)
+            {
+                if (renderer != null)
+                    renderer.forceRenderingOff = false;
+            }
+            _hiddenOwnPartRenderers.Clear();
+        }
+
+        private void RenderLayers(bool filterActive)
+        {
             for (int i = _cameras.Length - 1; i >= 0; i--)
             {
                 if (i == FarPqsCameraIndex && !_farPqsReady)
@@ -367,26 +445,18 @@ namespace JustReadTheInstructions
                 if (_synchronizers[i] != null)
                     _synchronizers[i].ManualSync();
 
+                GpuPerf.Mark(InstanceId, GpuSection.Near + i);
                 if (i == NearCameraIndex && filterActive)
-                    HullcamFilterIntegration.RenderWithFilter(camera, _hullCamera);
+                    HullcamFilterIntegration.RenderWithFilter(camera);
                 else if (i == GalaxyCameraIndex)
                     GalaxySkyboxFade.Render(camera, _cameras[NearCameraIndex]);
                 else
                     camera.Render();
             }
 
+            GpuPerf.Mark(InstanceId, GpuSection.Finish);
             if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
                 _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
-
-            RestoreRaymarchedLightBuffers();
-
-            if (_fireflyApplied) UpdateFireflyEffects();
-
-            if (JRTISettings.EnableDockingOverlay && GetCameraMode() == CameraFilter.eCameraMode.DockingCam)
-                _dockingOverlay.Render(TargetTexture);
-
-            if (capture)
-                JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
         }
 
         private void SynchronizeFarPqsCamera()
@@ -498,6 +568,57 @@ namespace JustReadTheInstructions
                 if (camera != null)
                     camera.fieldOfView = fov;
             }
+        }
+
+        internal void UpdateAim(CameraAimControl control, float deltaTime)
+        {
+            control?.Publish(_pan);
+
+            float yawRate = 0f, pitchRate = 0f, zoomRate = 0f;
+            control?.GetRates(out yawRate, out pitchRate, out zoomRate);
+            if (zoomRate != 0f)
+                SetUserFieldOfView(CurrentFov * Mathf.Pow(2f, -zoomRate * ZoomDoublingsPerSecond * deltaTime));
+
+            if (_pan == null) return;
+            if (control != null)
+            {
+                if (control.TryTakeTarget(out var yaw, out var pitch))
+                    _pan.PointAt(yaw, pitch);
+                FollowTrack(control.Track, deltaTime);
+            }
+            _pan.Tick(deltaTime, yawRate, pitchRate);
+        }
+
+        public void SetUserFieldOfView(float fov)
+        {
+            fov = Mathf.Clamp(fov, FovLimitMin, FovLimitMax);
+            SetFieldOfView(fov);
+            if (_track != CameraTrack.Off && _trackDistance > 0f)
+                _framingDegreeMetres = fov * _trackDistance;
+        }
+
+        private float CurrentFov => Mathf.Max(GetFOV(), FovLimitMin);
+
+        private float WidestFov => GetMaxFOV() > 0f ? GetMaxFOV() : FovLimitMax;
+
+        private void FollowTrack(CameraTrack track, float deltaTime)
+        {
+            if (track != _track)
+            {
+                _track = track;
+                _framingDegreeMetres = DefaultFramingDegreeMetres;
+                _trackDistance = 0f;
+            }
+
+            var target = CameraPan.TrackTarget(track, _hullCamera.vessel);
+            var lens = ViewTransform;
+            if (!target.HasValue || lens == null) return;
+
+            _pan.AimAt(target.Value);
+            _trackDistance = Mathf.Max(Vector3.Distance(lens.position, target.Value), 1f);
+            float fov = Mathf.Clamp(_framingDegreeMetres / _trackDistance, FovLimitMin, WidestFov);
+            float blend = 1f - Mathf.Exp(-AutoZoomSharpness * deltaTime);
+            SetFieldOfView(Mathf.Exp(Mathf.Lerp(Mathf.Log(CurrentFov), Mathf.Log(fov), blend)));
         }
 
         public void UpdateVisualEffects()
@@ -688,7 +809,7 @@ namespace JustReadTheInstructions
                 }
             }
 
-            info += HullcamFilterIntegration.GetDiagnosticInfo();
+            info += HullcamFilterIntegration.GetDiagnosticInfo(_cameras[NearCameraIndex]);
             return info;
         }
     }

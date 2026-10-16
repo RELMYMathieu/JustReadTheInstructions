@@ -26,6 +26,7 @@ namespace JustReadTheInstructions
         public int MaxFps;
         public List<CameraPerfSample> Cameras;
         public AudioPerfSample Audio;
+        public GpuPerfSample Gpu;
 
         public double PerSecond(double count) => Seconds > 0.0 ? count / Seconds : 0.0;
     }
@@ -48,7 +49,7 @@ namespace JustReadTheInstructions
 
     internal static class PerfFormat
     {
-        public static readonly PerfColumn<PerfSnapshot>[] GlobalColumns =
+        public static readonly PerfColumn<PerfSnapshot>[] GlobalColumns = new[]
         {
             new PerfColumn<PerfSnapshot>("utc", s => s.Utc.ToString("o", CultureInfo.InvariantCulture), isText: true),
             Global("fps", s => s.PerSecond(s.Frames)),
@@ -75,9 +76,26 @@ namespace JustReadTheInstructions
             Global("audio_mix_ms_avg", s => s.Audio.MixMs.Average),
             Global("audio_mix_ms_max", s => s.Audio.MixMs.Max),
             Global("audio_skipped_sounds", s => s.Audio.SkippedSounds),
-        };
+            new PerfColumn<PerfSnapshot>("gpu_timing", s => s.Gpu.Status, isText: true),
+            Global("gpu_frames", s => s.Gpu.Frames),
+            Global("gpu_dropped", s => s.Gpu.Dropped),
+            Global("gpu_span_ms_avg", s => s.Gpu.SpanMs.Average),
+            Global("gpu_span_ms_max", s => s.Gpu.SpanMs.Max),
+            Global("gpu_game_ms_avg", s => s.Gpu.GameMs.Average),
+            Global("gpu_jrti_ms_avg", s => s.Gpu.JrtiMs.Average),
+            Global("gpu_jrti_ms_max", s => s.Gpu.JrtiMs.Max),
+        }
+        .Concat(GpuSectionColumns<PerfSnapshot>("ms", (s, section) => s.Gpu.SectionMsPerFrame(section)))
+        .Concat(new[]
+        {
+            Global("vram_used_mb", s => s.Gpu.VramUsedMb),
+            Global("vram_budget_mb", s => s.Gpu.VramBudgetMb),
+            Global("vram_shared_mb", s => s.Gpu.VramSharedMb),
+            Global("jrti_targets_mb", s => s.Gpu.JrtiTargetsMb),
+        })
+        .ToArray();
 
-        public static readonly PerfColumn<CameraPerfSample>[] CameraColumns =
+        public static readonly PerfColumn<CameraPerfSample>[] CameraColumns = new[]
         {
             Camera("camera_id", c => c.Id),
             new PerfColumn<CameraPerfSample>("camera", c => c.Name, isText: true),
@@ -99,7 +117,11 @@ namespace JustReadTheInstructions
             Camera("deferred_per_s", c => c.PerSecond(c.Deferred)),
             Camera("stream_clients", c => c.StreamClients),
             Camera("preview_clients", c => c.PreviewClients),
-        };
+            Camera("gpu_ms_avg", c => c[CameraMetric.Gpu].Average),
+            Camera("gpu_ms_max", c => c[CameraMetric.Gpu].Max),
+        }
+        .Concat(GpuSectionColumns<CameraPerfSample>("ms_avg", (c, section) => c[CameraMetric.GpuSetup + (int)section].Average))
+        .ToArray();
 
         public static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
@@ -124,6 +146,10 @@ namespace JustReadTheInstructions
             sb.Append("]}");
             return sb.ToString();
         }
+
+        private static IEnumerable<PerfColumn<T>> GpuSectionColumns<T>(string suffix, Func<T, GpuSection, double> value)
+            => Enumerable.Range(0, (int)GpuSection.Count).Select(i =>
+                new PerfColumn<T>($"gpu_{GpuPerf.SectionKeys[i]}_{suffix}", row => Number(value(row, (GpuSection)i))));
 
         private static PerfColumn<PerfSnapshot> Global(string key, Func<PerfSnapshot, double> value)
             => new PerfColumn<PerfSnapshot>(key, s => Number(value(s)));

@@ -222,6 +222,7 @@ namespace JustReadTheInstructions
             GUILayout.Space(4);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Close", _buttonStyle)) Toggle();
+            if (GUILayout.Button("Documentation", _buttonStyle)) Application.OpenURL(JRTISettings.DocsUrl);
             GUILayout.FlexibleSpace();
             if (Time.realtimeSinceStartup - _savedMessageTime < 2f)
                 GUILayout.Label("✓ Saved", _savedStyle);

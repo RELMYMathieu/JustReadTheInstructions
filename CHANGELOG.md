@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Pan and track (TurretCam, LaunchCam) - turn the camera head all the way round and tilt it up to straight up, from the web viewer (Pan, arrows or arrow keys) or a camera card, or let it follow the active vessel or your target with auto zoom. Zooming while tracking sets how tight it frames. Joint names from KerbCast, thanks to Jon Pepler
+- Hold to zoom (web viewer, + and - keys) - smooth zoom on any camera, also as buttons in Pan
+- GPU timing and video memory (Diagnostics page, Ctrl+Alt+F6 overlay, CSV log) - GPU time per camera split by layer (near, terrain, scaled, galaxy), JRTI's share of each frame on the GPU, and the game's video memory use against its budget. Only measured while one of them is open, DirectX 11 only
+- VRAM census (Ctrl+Alt+F6 overlay) - lists every render texture in the game by size in KSP.log, to see which mod holds the video memory
+- Documentation site (relmymathieu.github.io/JustReadTheInstructions) - guides for install, cameras, layouts and OBS, sound, recording, settings and troubleshooting, with a Linux and Proton page and a settings reference. Opens from the Docs tab in the web UI and the Documentation button in the settings window
+
+### Changed
+
+- Field of view - zooms in to 0.25° on every camera, with a log scale slider in the web viewer and the in-game window for fine control at long range, flagged only when wider than the camera part allows
+- Sonic booms - the shocks come closer together, both the gap after the first one and the gap between the last two
+- Card snapshots (Cameras page, layout tray) - each snapshot takes one render instead of about three, so opening the Cameras page costs far less GPU time
+
+### Fixed
+
+- Hullcam filters per camera - each feed runs its own filter, so feeds no longer flicker or bleed into each other, and opening a feed no longer resets Hullcam's filter on the main view
+- Hullcam filters on Linux - no longer black on modern drivers, using a rebuilt Linux shader bundle of HullcamVDS's own shaders
+- Night vision on the main view - switching the game view to a night vision Hullcam no longer brightens every JRTI feed
+- Camera housing in its own feed - HullcamVDS's camera parts (LaunchCam visor, TurretCam head...) no longer show at the edges of their own feed at wide fields of view
+- Auto gain on camera sound - sonic booms are no longer measured, so they never turn the engine down after them, and a loud engine after a long quiet stretch settles in about two seconds instead of blasting then fading away
+- Engine warble on camera sound - fast vessels no longer wobble in pitch, as their positions are now timed to the physics step they come from
+- Supersonic Doppler - a vessel slowing through Mach 1 toward a camera now roars in loud and high-pitched with its boom, then drops in pitch as it slows, instead of fading in seconds later. Sounds coming towards a camera are a little louder and those going away a little quieter
+- Stock engine sounds on camera sound - built-in sounds KSP keeps compressed (the vent when an engine starts or stops, flameouts...) now play on cameras instead of being skipped
+- Engine mode switches on camera sound - switching a multi-mode engine (the Tundra Falcon 9 booster going from nine to three to one engine...) keeps the roar going without a gap, and leaves out the start and stop vents of the switch
+- Sounds cut off on far cameras - a sound that stops while its vessel still comes at the camera faster than sound (an engine switching mode or shutting down on a landing booster...) now plays out in full instead of going silent
+
 ## v3.1.1 - 2026-10-09
 
 ### Changed
