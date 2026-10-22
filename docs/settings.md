@@ -63,6 +63,12 @@ Visual mods are applied to camera feeds as in the main view, and can be turned o
 !!! warning
     Parallax integration is off by default. Enabling it can cause significant frame-rate drops.
 
+Mods that only change how parts look, such as Losket's scorch and dust marks, show on feeds with no setting.
+
+### Trajectories
+
+The Trajectories prediction line is hidden on camera feeds and recordings, so for exampe, you can land a rocket with it in the main view and keep your footage clean. Tick **Trajectories (Show on Feeds)** under **Visual Mod Integrations** to show it on feeds too. The impact and target markers are only ever drawn in the main view.
+
 ## Loss of signal image
 
 The image shown in the web UI when a camera feed is unavailable can be replaced with any image of your choice (recommended: `1920×1080`). Add this file:

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Trajectories (mod) automatically hidden on feeds (Visual Mod Integrations) - the Trajectories prediction line is hidden on camera feeds and recordings by default. You can bring it back in the mod's visual integration settings.
+
+### Fixed
+
+- Camera part hiding - any marks a mod may add to a camera part during flight, such as Losket scorching and dust, no longer cover that camera's own view (might look into making a proper integration in the future, but for now this is a simple fix)
+
 ## v3.2.0 - 2026-10-16
 
 ### Added

@@ -360,6 +360,14 @@ namespace JustReadTheInstructions
                 HullcamFilterIntegration.IsAvailable,
                 "Applies the active Hullcam filter/overlay (night-vision, CRT, etc.) to the stream frame"
             );
+            GUILayout.Space(5);
+            DrawIntegrationToggle(
+                "Trajectories (Show on Feeds)",
+                JRTISettings.ShowTrajectories,
+                v => JRTISettings.ShowTrajectories = v,
+                TrajectoriesIntegration.IsAvailable,
+                "Trajectories prediction line on camera feeds - hidden by default so recordings stay clean"
+            );
             GUILayout.Space(6);
             GUILayout.Label("Changes apply immediately to all open cameras. Re-open a camera to fully reinitialize its integration stack.", _noteStyle);
             GUILayout.Space(2);
@@ -527,6 +535,7 @@ namespace JustReadTheInstructions
             Debug.Log($"[JRTI-Diag]: Stock aero FX: Available={StockAeroFX.IsAvailable}, Enabled={JRTISettings.EnableStockAeroFX}");
             Debug.Log($"[JRTI-Diag]: Scatterer:Available={ScattererIntegration.IsAvailable}, Enabled={JRTISettings.EnableScatterer}");
             Debug.Log($"[JRTI-Diag]: HullcamFilter: Available={HullcamFilterIntegration.IsAvailable}, Enabled={JRTISettings.EnableHullcamFilter}");
+            Debug.Log($"[JRTI-Diag]: Trajectories: Available={TrajectoriesIntegration.IsAvailable}, Shown={JRTISettings.ShowTrajectories}");
             if (ParallaxIntegration.IsAvailable)
                 Debug.Log($"[JRTI-Diag]: Parallax scatters active: {ParallaxIntegration.HasActiveScatters()}");
             Debug.Log($"[JRTI-Diag]: Open cameras: {HullCameraManager.Instance?.GetOpenCameraCount() ?? 0}");

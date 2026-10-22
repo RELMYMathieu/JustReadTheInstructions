@@ -49,8 +49,9 @@ namespace JustReadTheInstructions
         private DockingCameraOverlay _dockingOverlay;
         private readonly StockAeroFX _aeroFX;
         private readonly CameraPan _pan;
-        private Renderer[] _ownPartRenderers = Array.Empty<Renderer>();
-        private readonly List<Renderer> _hiddenOwnPartRenderers = new List<Renderer>();
+        private Transform _ownPartModel;
+        private readonly List<Renderer> _ownPartRenderers = new List<Renderer>();
+        private readonly List<Renderer> _hiddenRenderers = new List<Renderer>();
         private CameraTrack _track;
         private float _framingDegreeMetres = DefaultFramingDegreeMetres;
         private float _trackDistance;
@@ -132,7 +133,7 @@ namespace JustReadTheInstructions
 
         private void CreateCameras()
         {
-            _ownPartRenderers = OwnPartRenderers();
+            _ownPartModel = OwnPartModel();
             SetupNearCamera();
             SetupFarPqsCamera();
             SetupScaledCamera();
@@ -381,14 +382,14 @@ namespace JustReadTheInstructions
             bool unboosted = HullcamFilterIntegration.TryGetUnboostedAmbient(out var sceneAmbient);
             var ambient = unboosted ? FeedAmbient.Override(sceneAmbient) : default;
 
-            HideOwnPart();
+            HideFromFeed();
             try
             {
                 RenderLayers(filterActive);
             }
             finally
             {
-                ShowOwnPart();
+                ShowHiddenRenderers();
                 if (unboosted)
                     FeedAmbient.Restore(ambient);
             }
@@ -404,32 +405,42 @@ namespace JustReadTheInstructions
                 JRTIStreamServer.Instance?.CaptureFrame(InstanceId, TargetTexture, rephaseCapture);
         }
 
-        private Renderer[] OwnPartRenderers()
+        private Transform OwnPartModel()
         {
             var config = _hullCamera.part.FindModuleImplementing<JRTICameraConfigModule>();
             return config != null && config.hideOwnPart
-                ? _hullCamera.part.FindModelComponents<Renderer>().ToArray()
-                : Array.Empty<Renderer>();
+                ? _hullCamera.part.partTransform.Find("model")
+                : null;
         }
 
-        private void HideOwnPart()
+        private void HideFromFeed()
         {
-            foreach (var renderer in _ownPartRenderers)
+            if (_ownPartModel != null)
             {
-                if (renderer == null || renderer.forceRenderingOff) continue;
-                renderer.forceRenderingOff = true;
-                _hiddenOwnPartRenderers.Add(renderer);
+                _ownPartModel.GetComponentsInChildren(_ownPartRenderers);
+                foreach (var renderer in _ownPartRenderers)
+                    Hide(renderer);
             }
+
+            if (!JRTISettings.ShowTrajectories)
+                Hide(TrajectoriesIntegration.Line);
         }
 
-        private void ShowOwnPart()
+        private void Hide(Renderer renderer)
         {
-            foreach (var renderer in _hiddenOwnPartRenderers)
+            if (renderer == null || renderer.forceRenderingOff) return;
+            renderer.forceRenderingOff = true;
+            _hiddenRenderers.Add(renderer);
+        }
+
+        private void ShowHiddenRenderers()
+        {
+            foreach (var renderer in _hiddenRenderers)
             {
                 if (renderer != null)
                     renderer.forceRenderingOff = false;
             }
-            _hiddenOwnPartRenderers.Clear();
+            _hiddenRenderers.Clear();
         }
 
         private void RenderLayers(bool filterActive)
