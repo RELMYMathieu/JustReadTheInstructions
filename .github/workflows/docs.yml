@@ -7,22 +7,55 @@ on:
       - docs/**
       - mkdocs.yml
       - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - docs/**
+      - mkdocs.yml
+      - .github/workflows/docs.yml
+  release:
+    types: [released]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or tag to publish (empty = latest release)'
+        required: false
+        type: string
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+env:
+  PUBLISH: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
+
 concurrency:
-  group: pages
+  group: ${{ (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && 'pages' || format('docs-check-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ env.PUBLISH }}
     steps:
+      - name: Pick the version to build
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_REF: ${{ inputs.ref }}
+        run: |
+          REF="${RELEASE_TAG:-$REQUESTED_REF}"
+          if [ -z "$REF" ] && [ "$PUBLISH" = "true" ]; then
+            REF="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          fi
+          echo "Building docs from ${REF:-$GITHUB_SHA}"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -35,11 +68,13 @@ jobs:
         run: mkdocs build --strict
 
       - uses: actions/upload-pages-artifact@v3
+        if: env.PUBLISH == 'true'
         with:
           path: site
 
   deploy:
     needs: build
+    if: needs.build.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

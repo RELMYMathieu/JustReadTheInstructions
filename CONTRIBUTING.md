@@ -85,7 +85,7 @@ python -m mkdocs serve
 
 The preview is at `http://127.0.0.1:8000/` and reloads as you edit.
 
-The site is rebuilt and published by the `docs` workflow whenever `docs/` changes on `main`.
+The `docs` workflow publishes the site when a release goes live, built from that release's tag, so the site should never include edits or features players cannot access yet. Pushes to `main` and pull requests only check that the docs will build. To publish a fix between releases, run the `docs` workflow by hand and give it `main` as the ref; left empty, it simply republishes the latest release.
 
 ## Code style
 
