@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace JustReadTheInstructions
 {
@@ -64,6 +65,8 @@ namespace JustReadTheInstructions
 
         public static void Mark(int tag) => Issue(Kind.Mark, tag);
 
+        public static void Mark(CommandBuffer buffer, int tag) => buffer.IssuePluginEvent(CallbackPointer, EventId(Kind.Mark, tag));
+
         public static void EndFrame() => Issue(Kind.End, 0);
 
         public static int TakeDropped() => Interlocked.Exchange(ref _dropped, 0);
@@ -76,7 +79,9 @@ namespace JustReadTheInstructions
         }
 
         private static void Issue(Kind kind, int tag)
-            => GL.IssuePluginEvent(CallbackPointer, ((int)kind << TagBits) | (tag & TagMask));
+            => GL.IssuePluginEvent(CallbackPointer, EventId(kind, tag));
+
+        private static int EventId(Kind kind, int tag) => ((int)kind << TagBits) | (tag & TagMask);
 
         private static void OnRenderEvent(int eventId)
         {

@@ -36,6 +36,7 @@ namespace JustReadTheInstructions
         GpuFarTerrain,
         GpuScaled,
         GpuGalaxy,
+        GpuGroundFx,
         GpuFinish,
         Count
     }

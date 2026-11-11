@@ -48,6 +48,7 @@ namespace JustReadTheInstructions
 
         private DockingCameraOverlay _dockingOverlay;
         private readonly StockAeroFX _aeroFX;
+        private readonly VGFXFeed _groundFx;
         private readonly CameraPan _pan;
         private Transform _ownPartModel;
         private readonly List<Renderer> _ownPartRenderers = new List<Renderer>();
@@ -76,6 +77,7 @@ namespace JustReadTheInstructions
 
             _dockingOverlay = new DockingCameraOverlay(_hullCamera.vessel, TargetTexture, InstanceId);
             if (StockAeroFX.IsAvailable) _aeroFX = new StockAeroFX(InstanceId);
+            if (VGFXIntegration.IsAvailable) _groundFx = new VGFXFeed(InstanceId);
 
             IsActive = true;
         }
@@ -457,8 +459,8 @@ namespace JustReadTheInstructions
                     _synchronizers[i].ManualSync();
 
                 GpuPerf.Mark(InstanceId, GpuSection.Near + i);
-                if (i == NearCameraIndex && filterActive)
-                    HullcamFilterIntegration.RenderWithFilter(camera);
+                if (i == NearCameraIndex)
+                    RenderNear(camera, filterActive);
                 else if (i == GalaxyCameraIndex)
                     GalaxySkyboxFade.Render(camera, _cameras[NearCameraIndex]);
                 else
@@ -468,6 +470,23 @@ namespace JustReadTheInstructions
             GpuPerf.Mark(InstanceId, GpuSection.Finish);
             if (_aeroFX != null && JRTISettings.EnableStockAeroFX)
                 _aeroFX.Render(_cameras[NearCameraIndex], TargetTexture);
+        }
+
+        private void RenderNear(Camera camera, bool filterActive)
+        {
+            bool groundFx = _groundFx != null && JRTISettings.EnableVGFX && _groundFx.Begin(camera);
+            try
+            {
+                if (filterActive)
+                    HullcamFilterIntegration.RenderWithFilter(camera);
+                else
+                    camera.Render();
+            }
+            finally
+            {
+                if (groundFx)
+                    _groundFx.End();
+            }
         }
 
         private void SynchronizeFarPqsCamera()
@@ -763,6 +782,7 @@ namespace JustReadTheInstructions
 
             _dockingOverlay.Dispose();
             _aeroFX?.Dispose();
+            _groundFx?.Dispose();
 
             Debug.Log($"[JRTI]: Disposed camera '{GetDisplayName()}'");
         }
@@ -821,6 +841,8 @@ namespace JustReadTheInstructions
             }
 
             info += HullcamFilterIntegration.GetDiagnosticInfo(_cameras[NearCameraIndex]);
+            if (_groundFx != null)
+                info += $"Volumetric Ground FX: {(JRTISettings.EnableVGFX ? _groundFx.State : "off")}\n";
             return info;
         }
     }

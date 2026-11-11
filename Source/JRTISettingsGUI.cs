@@ -352,6 +352,14 @@ namespace JustReadTheInstructions
                 StockAeroFX.IsAvailable,
                 "Stock re-entry and Mach effects of the vessel you fly (Firefly replaces them)"
             );
+            GUILayout.Space(5);
+            DrawIntegrationToggle(
+                "Volumetric Ground FX",
+                JRTISettings.EnableVGFX,
+                v => JRTISettings.EnableVGFX = v,
+                VGFXIntegration.IsAvailable,
+                "Launch pad steam, ground dust and spray, on feeds that have a cloud in view"
+            );
             GUILayout.Space(8);
             DrawIntegrationToggle(
                 "HullcamVDS Camera Filter",
@@ -535,6 +543,7 @@ namespace JustReadTheInstructions
             Debug.Log($"[JRTI-Diag]: Stock aero FX: Available={StockAeroFX.IsAvailable}, Enabled={JRTISettings.EnableStockAeroFX}");
             Debug.Log($"[JRTI-Diag]: Scatterer:Available={ScattererIntegration.IsAvailable}, Enabled={JRTISettings.EnableScatterer}");
             Debug.Log($"[JRTI-Diag]: HullcamFilter: Available={HullcamFilterIntegration.IsAvailable}, Enabled={JRTISettings.EnableHullcamFilter}");
+            Debug.Log($"[JRTI-Diag]: VGFX: Available={VGFXIntegration.IsAvailable}, Enabled={JRTISettings.EnableVGFX}");
             Debug.Log($"[JRTI-Diag]: Trajectories: Available={TrajectoriesIntegration.IsAvailable}, Shown={JRTISettings.ShowTrajectories}");
             if (ParallaxIntegration.IsAvailable)
                 Debug.Log($"[JRTI-Diag]: Parallax scatters active: {ParallaxIntegration.HasActiveScatters()}");

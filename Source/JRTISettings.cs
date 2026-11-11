@@ -48,6 +48,7 @@ namespace JustReadTheInstructions
         public static bool EnableStockAeroFX { get; internal set; } = true;
         public static bool EnableScatterer { get; internal set; } = true;
         public static bool EnableHullcamFilter { get; internal set; } = true;
+        public static bool EnableVGFX { get; internal set; } = true;
         public static bool ShowTrajectories { get; internal set; } = false;
 
         private static readonly int[] ValidAntiAliasingValues = { 0, 1, 2, 4, 8 };
@@ -129,6 +130,7 @@ namespace JustReadTheInstructions
                 EnableStockAeroFX = ParseBool(settings, "EnableStockAeroFX", EnableStockAeroFX);
                 EnableScatterer = ParseBool(settings, "EnableScatterer", EnableScatterer);
                 EnableHullcamFilter = ParseBool(settings, "EnableHullcamFilter", EnableHullcamFilter);
+                EnableVGFX = ParseBool(settings, "EnableVGFX", EnableVGFX);
                 ShowTrajectories = ParseBool(settings, "ShowTrajectories", ShowTrajectories);
 
                 Sanitize();
@@ -192,6 +194,7 @@ namespace JustReadTheInstructions
                 settings.AddValue("EnableStockAeroFX", EnableStockAeroFX);
                 settings.AddValue("EnableScatterer", EnableScatterer);
                 settings.AddValue("EnableHullcamFilter", EnableHullcamFilter);
+                settings.AddValue("EnableVGFX", EnableVGFX);
                 settings.AddValue("ShowTrajectories", ShowTrajectories);
 
                 Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath));
