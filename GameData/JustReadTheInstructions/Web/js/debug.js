@@ -3,7 +3,7 @@ import { API, DEBUG_POLL_MS, DEBUG_HISTORY_SAMPLES, DEBUG_REQUEST_TIMEOUT_MS } f
 const CAMERA_COLORS = ['#d9dcdf', '#8fb8de', '#c9a2e0', '#7cc6b0', '#e08f8f', '#b8c47a', '#d8b07a', '#9aa0a6'];
 const GPU_SECTIONS = [
     ['near', 'near'], ['far_terrain', 'terrain'], ['scaled', 'scaled'],
-    ['galaxy', 'galaxy'], ['setup', 'setup'], ['finish', 'finish'],
+    ['galaxy', 'galaxy'], ['ground_fx', 'ground fx'], ['setup', 'setup'], ['finish', 'finish'],
 ];
 
 const fmt = (value, digits = 1) => Number(value).toFixed(digits);

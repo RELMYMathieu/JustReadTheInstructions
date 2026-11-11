@@ -58,6 +58,7 @@ Visual mods are applied to camera feeds as in the main view, and can be turned o
 * Parallax
 * Firefly
 * The stock re-entry and Mach effects, when Firefly is not installed
+* Volumetric Ground FX: launch pad steam, ground dust and water spray. A camera only draws them while a cloud or blast mark is in its view, so cameras looking elsewhere cost nothing extra
 * The HullcamVDS camera filter, which applies the active filter or overlay (night vision, CRT and so on) to the feed
 
 !!! warning
@@ -67,7 +68,7 @@ Mods that only change how parts look, such as Losket's scorch and dust marks, sh
 
 ### Trajectories
 
-The Trajectories prediction line is hidden on camera feeds and recordings, so for exampe, you can land a rocket with it in the main view and keep your footage clean. Tick **Trajectories (Show on Feeds)** under **Visual Mod Integrations** to show it on feeds too. The impact and target markers are only ever drawn in the main view.
+The Trajectories prediction line is hidden on camera feeds and recordings, so for example, you can land a rocket with it in the main view and keep your footage clean. Tick **Trajectories (Show on Feeds)** under **Visual Mod Integrations** to show it on feeds too. The impact and target markers are only ever drawn in the main view.
 
 ## Loss of signal image
 

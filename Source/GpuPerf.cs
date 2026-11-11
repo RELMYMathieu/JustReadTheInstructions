@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
+using UnityEngine.Rendering;
 
 namespace JustReadTheInstructions
 {
@@ -10,6 +11,7 @@ namespace JustReadTheInstructions
         FarTerrain,
         Scaled,
         Galaxy,
+        GroundFx,
         Finish,
         Count
     }
@@ -36,7 +38,7 @@ namespace JustReadTheInstructions
     {
         public const string StatusOn = "on";
 
-        public static readonly string[] SectionKeys = { "setup", "near", "far_terrain", "scaled", "galaxy", "finish" };
+        public static readonly string[] SectionKeys = { "setup", "near", "far_terrain", "scaled", "galaxy", "ground_fx", "finish" };
 
         private const int MaxCameras = 64;
         private const int Sections = (int)GpuSection.Count;
@@ -89,6 +91,13 @@ namespace JustReadTheInstructions
             if (!_frameOpen) return;
             int slot = SlotFor(cameraId);
             if (slot >= 0) GpuTimer.Mark(FirstCameraTag + slot * Sections + (int)section);
+        }
+
+        public static void Mark(CommandBuffer buffer, int cameraId, GpuSection section)
+        {
+            if (!_frameOpen) return;
+            int slot = SlotFor(cameraId);
+            if (slot >= 0) GpuTimer.Mark(buffer, FirstCameraTag + slot * Sections + (int)section);
         }
 
         public static void EndCamera()

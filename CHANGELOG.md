@@ -11,11 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Trajectories (mod) automatically hidden on feeds (Visual Mod Integrations) - the Trajectories prediction line is hidden on camera feeds and recordings by default. You can bring it back in the mod's visual integration settings.
+- Trajectories (Visual Mod Integrations) - the Trajectories prediction line is hidden on camera feeds and recordings and stays in the main view. Tick "Trajectories (Show on Feeds)" to show it on feeds too
+- Volumetric Ground FX (Visual Mod Integrations) - launch pad steam, ground dust and water spray from VGFX now show on camera feeds, drawn at each feed's own size and only while a cloud or blast mark is in view. Its GPU cost shows as "ground fx" on the Diagnostics page and the Ctrl+Alt+F6 overlay
 
 ### Fixed
 
-- Camera part hiding - any marks a mod may add to a camera part during flight, such as Losket scorching and dust, no longer cover that camera's own view (might look into making a proper integration in the future, but for now this is a simple fix)
+- Camera part hiding - scorch/texture/any other marks a mod adds to a camera part during flight, such as Losket scorching and dust, no longer cover that camera's own view
 
 ## v3.2.0 - 2026-10-16
 

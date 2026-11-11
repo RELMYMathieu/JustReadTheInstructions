@@ -254,7 +254,7 @@ namespace JustReadTheInstructions
             if (g.Frames == 0) return "GPU timing on, waiting for the GPU";
             return $"GPU span {g.SpanMs.Average:0.0} ms/frame: game {g.GameMs.Average:0.0}, JRTI {g.JrtiMs.Average:0.00} (max {g.JrtiMs.Max:0.0})    " +
                    $"near {g.SectionMsPerFrame(GpuSection.Near):0.00}, terrain {g.SectionMsPerFrame(GpuSection.FarTerrain):0.00}, " +
-                   $"scaled {g.SectionMsPerFrame(GpuSection.Scaled):0.00}, galaxy {g.SectionMsPerFrame(GpuSection.Galaxy):0.00}, " +
+                   $"scaled {g.SectionMsPerFrame(GpuSection.Scaled):0.00}, galaxy {g.SectionMsPerFrame(GpuSection.Galaxy):0.00}, ground fx {g.SectionMsPerFrame(GpuSection.GroundFx):0.00}, " +
                    $"setup {g.SectionMsPerFrame(GpuSection.Setup):0.00}, finish {g.SectionMsPerFrame(GpuSection.Finish):0.00}" +
                    (g.Dropped > 0 ? $"    dropped {g.Dropped}" : "");
         }
