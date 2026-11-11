@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
-## Unreleased
+## v3.3.0 - 2026-11-11
 
 ### Added
 
@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Camera part hiding - scorch/texture/any other marks a mod adds to a camera part during flight, such as Losket scorching and dust, no longer cover that camera's own view
+
 
 ## v3.2.0 - 2026-10-16
 
