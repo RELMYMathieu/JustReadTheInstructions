@@ -39,6 +39,7 @@ namespace JustReadTheInstructions
         public static bool AutoStreamCameras { get; internal set; } = false;
         public static bool RequireControlKey { get; internal set; } = false;
         public static string ControlKey { get; internal set; } = "";
+        public static string AllowedHosts { get; internal set; } = "";
 
         public static float FramePeriod => 1f / Mathf.Max(1, StreamMaxFps);
 
@@ -126,6 +127,7 @@ namespace JustReadTheInstructions
                 AutoStreamCameras = ParseBool(settings, "AutoStreamCameras", AutoStreamCameras);
                 RequireControlKey = ParseBool(settings, "RequireControlKey", RequireControlKey);
                 ControlKey = settings.GetValue("ControlKey") ?? ControlKey;
+                AllowedHosts = settings.GetValue("AllowedHosts") ?? AllowedHosts;
 
                 EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
                 EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
@@ -192,6 +194,7 @@ namespace JustReadTheInstructions
                 settings.AddValue("AutoStreamCameras", AutoStreamCameras);
                 settings.AddValue("RequireControlKey", RequireControlKey);
                 settings.AddValue("ControlKey", ControlKey);
+                settings.AddValue("AllowedHosts", AllowedHosts);
 
                 settings.AddValue("EnableDeferred", EnableDeferred);
                 settings.AddValue("EnableTUFX", EnableTUFX);

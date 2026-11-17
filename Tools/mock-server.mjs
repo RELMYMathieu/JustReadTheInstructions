@@ -1,5 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
+import net from 'node:net';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +22,9 @@ const OPENAPI_FILE = path.join(DOCS, 'openapi.json');
 const PLUGIN_DATA = path.join(ROOT, 'GameData', 'JustReadTheInstructions', 'PluginData');
 const MOCK_KEY = process.env.MOCK_KEY?.trim().toUpperCase();
 const PREFLIGHT_MAX_AGE_S = 600;
+const MOCK_ALLOWED_HOSTS = (process.env.MOCK_ALLOWED_HOSTS ?? '').split(/[, ]+/).filter(Boolean).map((h) => h.toLowerCase());
+const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
+const TAILSCALE_SUFFIX = '.ts.net';
 
 const FEEDS = [
     [10, 'screenshot-3.png', 'crop=2320:1305:160:100'],
@@ -193,19 +198,18 @@ function writePart(res, jpeg, id) {
     res.write('\r\n');
 }
 
-function stream(req, res, ids, preview) {
+function stream(req, res, ids, preview, tagged) {
     const cams = ids.map((id) => cameras.get(id)).filter((c) => c?.online);
     if (cams.length === 0) return text(res, 404, 'No matching cameras');
     res.writeHead(200, { 'Content-Type': `multipart/x-mixed-replace; boundary=${BOUNDARY}`, 'Cache-Control': 'no-cache' });
     const key = preview ? 'previewClients' : 'streamClients';
     for (const c of cams) c[key]++;
-    const multi = ids.length > 1 || req.url.startsWith('/streams');
     const timer = setInterval(() => {
         let any = false;
         for (const c of cams) {
             if (!c.online) continue;
             any = true;
-            writePart(res, frameFor(c.id), multi ? c.id : null);
+            writePart(res, frameFor(c.id), tagged ? c.id : null);
         }
         if (!any) { clearInterval(timer); res.end(); }
     }, 1000 / FPS);
@@ -323,9 +327,46 @@ function isLocalhostOrigin(origin) {
     }
 }
 
+function hostName(hostHeader) {
+    try {
+        return new URL(`http://${hostHeader}`).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
+function isLoopbackName(name) {
+    return name === 'localhost' || name.endsWith('.localhost') || name === '::1' || /^127\./.test(name);
+}
+
+function isAllowedHost(hostHeader) {
+    if (!hostHeader) return true;
+    const name = hostName(hostHeader);
+    if (!name) return false;
+    if (net.isIP(name) || isLoopbackName(name) || name.endsWith(TAILSCALE_SUFFIX)) return true;
+    const machine = os.hostname().toLowerCase();
+    return [...MOCK_ALLOWED_HOSTS, machine, `${machine}.local`].includes(name);
+}
+
+function isDirectFromThisComputer(req) {
+    const remote = req.socket.remoteAddress?.replace(/^::ffff:/, '') ?? '';
+    const local = req.socket.localAddress?.replace(/^::ffff:/, '') ?? '';
+    const name = hostName(req.headers.host ?? '');
+    return (remote === local || isLoopbackName(remote)) && Boolean(name) && isLoopbackName(name)
+        && PROXY_HEADERS.every((header) => !req.headers[header]);
+}
+
+function isSameOrigin(origin, hostHeader) {
+    try {
+        return new URL(origin).host.toLowerCase() === (hostHeader ?? '').toLowerCase();
+    } catch {
+        return false;
+    }
+}
+
 function isBlockedCrossSite(req) {
     const origin = req.headers.origin;
-    if (!origin || origin === `http://${req.headers.host}` || isLocalhostOrigin(origin)) return req.headers['sec-fetch-site'] === 'cross-site' && !origin;
+    if (!origin || isSameOrigin(origin, req.headers.host) || isLocalhostOrigin(origin)) return req.headers['sec-fetch-site'] === 'cross-site' && !origin;
     return true;
 }
 
@@ -397,6 +438,7 @@ const server = http.createServer(async (req, res) => {
     const origin = req.headers.origin;
     const cors = Boolean(origin) && isLocalhostOrigin(origin) && origin !== `http://${req.headers.host}`;
     try {
+        if (!isAllowedHost(req.headers.host)) return text(res, 403, "This name is not allowed here. Use the computer's IP address, or add the name to AllowedHosts in PluginData/settings.cfg");
         if (cors) {
             res.setHeader('Access-Control-Allow-Origin', origin);
             res.setHeader('Vary', 'Origin');
@@ -412,7 +454,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (isWrite(req.method, p)) {
             if (isBlockedCrossSite(req)) return text(res, 403, 'Pages from other websites cannot change anything here');
-            if (MOCK_KEY && providedKey(req, url) !== MOCK_KEY) {
+            if (MOCK_KEY && !isDirectFromThisComputer(req) && providedKey(req, url) !== MOCK_KEY) {
                 res.setHeader('WWW-Authenticate', 'Bearer realm="JRTI"');
                 return text(res, 401, "This needs the control key shown in the game's JRTI settings");
             }
@@ -434,7 +476,7 @@ const server = http.createServer(async (req, res) => {
             }
             return text(res, 404, 'Use GET /program, /program/take/<layout> or /program/clear');
         }
-        if (p === '/streams') return stream(req, res, (url.searchParams.get('ids') ?? '').split(',').map(Number), url.searchParams.get('preview') === '1');
+        if (p === '/streams') return stream(req, res, (url.searchParams.get('ids') ?? '').split(',').map(Number), url.searchParams.get('preview') === '1', true);
         if (parts[0] === 'mock' && parts[1] === 'toggle') {
             const cam = cameras.get(Number(parts[2]));
             if (cam) cam.online = !cam.online;

@@ -74,7 +74,7 @@ The web files in `GameData/JustReadTheInstructions/Web/` are static and need no 
 node Tools/mock-server.mjs
 ```
 
-It serves the Web folder on port 8099. Set `MOCK_KEY=ABCD234567` to make it require a control key, as if every request came from another device.
+It serves the Web folder on port 8099. Set `MOCK_KEY=ABCD234567` to make it require a control key with the game's rules: `localhost` on this computer never needs it, while its network address (for example `http://192.168.1.10:8099/`, like a phone) and requests through a proxy do. `MOCK_ALLOWED_HOSTS` works like `AllowedHosts`.
 
 ## Adding or changing an endpoint
 

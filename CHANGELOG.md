@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Web pages from other websites can no longer change camera settings, recordings or layouts. Pages served from localhost (development servers) can use the API from the browser
+- Allowed names (`AllowedHosts` in `PluginData/settings.cfg`) - the web UI only answers to localhost, IP addresses, the computer's name, Tailscale names and the names listed there, so a website cannot reach it under its own name
+- Control key - the KSP computer skips the key only when opened as localhost, not through its network address or a local proxy
 
 ## v3.3.0 - 2026-11-11
 

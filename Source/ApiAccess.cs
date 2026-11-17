@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 
 namespace JustReadTheInstructions
@@ -8,6 +9,9 @@ namespace JustReadTheInstructions
         private const string KeyAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
         public const int KeyLength = 10;
         public const string BearerPrefix = "Bearer ";
+        private const string TailscaleSuffix = ".ts.net";
+        private static readonly char[] HostListSeparators = { ',', ' ' };
+        private static readonly string[] ProxyHeaders = { "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP", "Forwarded" };
 
         public static string NewKey()
         {
@@ -46,11 +50,33 @@ namespace JustReadTheInstructions
         }
 
         public static bool IsLocalhostOrigin(string origin)
+            => Uri.TryCreate(origin, UriKind.Absolute, out var uri) && IsLoopback(uri);
+
+        public static bool IsLoopbackHost(string hostHeader)
+            => TryParseHost(hostHeader, out var uri) && IsLoopback(uri);
+
+        public static bool IsAllowedHost(string hostHeader, string machineName, string allowedHosts)
         {
-            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
-            return uri.IsLoopback || uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                   || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(hostHeader)) return true;
+            if (!TryParseHost(hostHeader, out var uri)) return false;
+            if (uri.HostNameType != UriHostNameType.Dns || IsLoopback(uri)) return true;
+            if (uri.Host.EndsWith(TailscaleSuffix, StringComparison.OrdinalIgnoreCase)) return true;
+
+            var names = (allowedHosts ?? "").Split(HostListSeparators, StringSplitOptions.RemoveEmptyEntries)
+                .Concat(new[] { machineName, machineName + ".local" });
+            return names.Any(name => string.Equals(name, uri.Host, StringComparison.OrdinalIgnoreCase));
         }
+
+        public static bool IsDirectFromThisComputer(bool connectionIsLocal, string hostHeader, Func<string, string> header)
+            => connectionIsLocal && IsLoopbackHost(hostHeader) && ProxyHeaders.All(name => header(name) == null);
+
+        private static bool TryParseHost(string hostHeader, out Uri uri)
+            => Uri.TryCreate("http://" + hostHeader, UriKind.Absolute, out uri)
+               && uri.AbsolutePath == "/" && uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0;
+
+        private static bool IsLoopback(Uri uri)
+            => uri.IsLoopback || uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+               || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase);
 
         public static bool IsSameOrigin(string origin, string requestHost)
             => Uri.TryCreate(origin, UriKind.Absolute, out var uri)
@@ -61,6 +87,16 @@ namespace JustReadTheInstructions
             if (origin == null || IsSameOrigin(origin, requestHost) || IsLocalhostOrigin(origin))
                 return secFetchSite == "cross-site" && origin == null;
             return true;
+        }
+
+        public enum WriteVerdict { Allowed, OtherWebsite, NeedsKey }
+
+        public static WriteVerdict CheckWrite(bool requireKey, string expectedKey, bool connectionIsLocal,
+                                              string hostHeader, string keyQuery, Func<string, string> header)
+        {
+            if (IsBlockedCrossSite(header("Sec-Fetch-Site"), header("Origin"), hostHeader)) return WriteVerdict.OtherWebsite;
+            if (!requireKey || IsDirectFromThisComputer(connectionIsLocal, hostHeader, header)) return WriteVerdict.Allowed;
+            return KeyMatches(ProvidedKey(header("Authorization"), keyQuery), expectedKey) ? WriteVerdict.Allowed : WriteVerdict.NeedsKey;
         }
     }
 }

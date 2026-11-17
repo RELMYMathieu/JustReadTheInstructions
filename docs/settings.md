@@ -46,6 +46,8 @@ If another program already uses the port, JRTI says so on screen and in `KSP.log
 
 Settings are saved in `GameData/JustReadTheInstructions/PluginData/settings.cfg`. Defaults live in the mod itself, so updates never reset your choices.
 
+One setting is only in the file: `AllowedHosts`, the extra names the web UI answers to besides `localhost`, IP addresses, the computer's name and Tailscale names. See [API](api.md#opening-it-by-name).
+
 Per-camera sound choices are in `PluginData/camera-sound.cfg`, and saved layouts in `PluginData/Layouts/`. Your own pages go in `PluginData/Apps/` and changed copies of the web UI in `PluginData/Web/` (see [API](api.md#building-a-web-page)).
 
 ## Visual mods

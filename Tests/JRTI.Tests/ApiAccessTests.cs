@@ -52,6 +52,40 @@ namespace JRTI.Tests
             => Assert.Equal(local, ApiAccess.IsLocalhostOrigin(origin));
 
         [Theory]
+        [InlineData(null, true)]
+        [InlineData("localhost:8080", true)]
+        [InlineData("127.0.0.1:8080", true)]
+        [InlineData("[::1]:8080", true)]
+        [InlineData("192.168.1.10:8080", true)]
+        [InlineData("100.64.0.7", true)]
+        [InlineData("gamepc:8080", true)]
+        [InlineData("GamePC.local:8080", true)]
+        [InlineData("gamepc.tail1234.ts.net", true)]
+        [InlineData("cams.example.org:8080", true)]
+        [InlineData("other.lan", true)]
+        [InlineData("ts.net.evil.example", false)]
+        [InlineData("evil.example:8080", false)]
+        [InlineData("gamepc.evil.example:8080", false)]
+        [InlineData("127.0.0.1.evil.example", false)]
+        [InlineData("evil.example/@127.0.0.1", false)]
+        [InlineData("user@127.0.0.1", false)]
+        public void AllowsOnlyKnownHostNames(string host, bool allowed)
+            => Assert.Equal(allowed, ApiAccess.IsAllowedHost(host, "GAMEPC", "cams.example.org, other.lan"));
+
+        [Theory]
+        [InlineData(true, "localhost:8080", null, true)]
+        [InlineData(true, "127.0.0.1:8080", null, true)]
+        [InlineData(true, "[::1]:8080", null, true)]
+        [InlineData(false, "localhost:8080", null, false)]
+        [InlineData(true, "192.168.1.10:8080", null, false)]
+        [InlineData(true, "gamepc.tail1234.ts.net", null, false)]
+        [InlineData(true, null, null, false)]
+        [InlineData(true, "localhost:8080", "X-Forwarded-For", false)]
+        [InlineData(true, "localhost:8080", "Forwarded", false)]
+        public void SkipsTheKeyOnlyForDirectLocalRequests(bool connectionIsLocal, string host, string proxyHeader, bool local)
+            => Assert.Equal(local, ApiAccess.IsDirectFromThisComputer(connectionIsLocal, host, name => name == proxyHeader ? "203.0.113.5" : null));
+
+        [Theory]
         [InlineData(null, null, false)]
         [InlineData("none", null, false)]
         [InlineData("same-origin", "http://192.168.1.10:8080", false)]

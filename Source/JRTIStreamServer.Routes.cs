@@ -111,20 +111,21 @@ namespace JustReadTheInstructions
         private static bool MayWrite(HttpListenerContext ctx)
         {
             var request = ctx.Request;
-            if (ApiAccess.IsBlockedCrossSite(request.Headers["Sec-Fetch-Site"], request.Headers["Origin"], request.UserHostName))
+            var verdict = ApiAccess.CheckWrite(JRTISettings.RequireControlKey, JRTISettings.ControlKey, request.IsLocal,
+                request.UserHostName, request.QueryString[ControlKeyQuery], name => request.Headers[name]);
+
+            switch (verdict)
             {
-                ServeError(ctx, 403, "Pages from other websites cannot change anything here");
-                return false;
+                case ApiAccess.WriteVerdict.OtherWebsite:
+                    ServeError(ctx, 403, "Pages from other websites cannot change anything here");
+                    return false;
+                case ApiAccess.WriteVerdict.NeedsKey:
+                    ctx.Response.Headers.Add("WWW-Authenticate", "Bearer realm=\"JRTI\"");
+                    ServeError(ctx, 401, "This needs the control key shown in the game's JRTI settings");
+                    return false;
+                default:
+                    return true;
             }
-
-            if (!JRTISettings.RequireControlKey || request.IsLocal) return true;
-
-            var provided = ApiAccess.ProvidedKey(request.Headers["Authorization"], request.QueryString[ControlKeyQuery]);
-            if (ApiAccess.KeyMatches(provided, JRTISettings.ControlKey)) return true;
-
-            ctx.Response.Headers.Add("WWW-Authenticate", "Bearer realm=\"JRTI\"");
-            ServeError(ctx, 401, "This needs the control key shown in the game's JRTI settings");
-            return false;
         }
 
         private Action<HttpListenerContext, RouteValues> ForCamera(Action<HttpListenerContext, int, CameraStreamState, RouteValues> handler)
