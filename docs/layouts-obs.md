@@ -49,7 +49,7 @@ http://localhost:8080/program/take/Launch
 http://localhost:8080/program/clear
 ```
 
-`/program/clear` puts nothing on air, which shows black.
+`/program/clear` puts nothing on air, which shows black. If you turned on the [control key](api.md#control-key), add it to the URL, for example `http://192.168.1.10:8080/program/take/Launch?key=ABCD234567`.
 
 The clean feed switches at once: cameras that stay glide to their new place, new ones fade in, removed ones fade out. The on-air layout is remembered by the game (`PluginData/program.txt`).
 

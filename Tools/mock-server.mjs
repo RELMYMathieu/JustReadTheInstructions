@@ -15,6 +15,11 @@ const LOOP_FRAMES = 90;
 const BOUNDARY = 'jrtiboundary';
 const AUDIO_RATE = 48000;
 const AUDIO_TICK_MS = 20;
+const API_PREFIX = '/api/v1';
+const OPENAPI_FILE = path.join(DOCS, 'openapi.json');
+const PLUGIN_DATA = path.join(ROOT, 'GameData', 'JustReadTheInstructions', 'PluginData');
+const MOCK_KEY = process.env.MOCK_KEY?.trim().toUpperCase();
+const PREFLIGHT_MAX_AGE_S = 600;
 
 const FEEDS = [
     [10, 'screenshot-3.png', 'crop=2320:1305:160:100'],
@@ -280,6 +285,67 @@ function sample() {
     };
 }
 
+function openApi() {
+    return JSON.parse(fs.readFileSync(OPENAPI_FILE, 'utf8'));
+}
+
+function operations() {
+    return Object.entries(openApi().paths).flatMap(([template, methods]) => Object.entries(methods).map(([method, op]) => ({
+        id: op.operationId, method: method.toUpperCase(), template, summary: op.summary, writes: Boolean(op.security),
+    })));
+}
+
+function matchesTemplate(template, p) {
+    const want = template.split('/').filter(Boolean);
+    const got = p.split('/').filter(Boolean);
+    return want.length === got.length && want.every((segment, i) => segment.startsWith('{') || segment === got[i]);
+}
+
+function isWrite(method, p) {
+    const ops = operations().filter((op) => matchesTemplate(op.template, p));
+    const exact = ops.find((op) => op.method === method || (method === 'HEAD' && op.method === 'GET'));
+    return exact ? exact.writes : ops.some((op) => op.writes);
+}
+
+function discovery() {
+    const routes = operations().map(({ id, method, template, summary, writes }) => ({
+        id, methods: [method], path: API_PREFIX + (template === '/' ? '' : template), summary, writes,
+    }));
+    return { name: 'Just Read The Instructions', version: '2.5.1.1', api: 1, launchId, features: { inGameRecording: true, codecs: ['h264', 'av1'], controlKeyRequired: Boolean(MOCK_KEY) }, routes };
+}
+
+function isLocalhostOrigin(origin) {
+    try {
+        const { hostname } = new URL(origin);
+        return ['localhost', '127.0.0.1', '[::1]'].includes(hostname) || hostname.endsWith('.localhost');
+    } catch {
+        return false;
+    }
+}
+
+function isBlockedCrossSite(req) {
+    const origin = req.headers.origin;
+    if (!origin || origin === `http://${req.headers.host}` || isLocalhostOrigin(origin)) return req.headers['sec-fetch-site'] === 'cross-site' && !origin;
+    return true;
+}
+
+function providedKey(req, url) {
+    const header = req.headers.authorization ?? '';
+    const key = /^bearer /i.test(header) ? header.slice(7) : url.searchParams.get('key');
+    return key?.trim().toUpperCase();
+}
+
+function insideRoot(root, rel) {
+    const full = path.join(root, rel);
+    return full.startsWith(path.normalize(root)) ? full : null;
+}
+
+function sendStatic(res, full) {
+    if (!full || !fs.existsSync(full) || fs.statSync(full).isDirectory()) return text(res, 404, 'Not found');
+    res.writeHead(200, { 'Content-Type': types[path.extname(full)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    fs.createReadStream(full).pipe(res);
+}
+
 function listRecordings() {
     const active = new Set([...cameras.values()].filter((c) => c.recording).map((c) => c.recording.file));
     return fs.readdirSync(recordingsDir).filter((f) => /\.(mp4|webm|mkv)$/i.test(f)).map((file) => {
@@ -324,10 +390,36 @@ function serveFile(req, res, file, type, download) {
 
 const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const p = url.pathname.replace(/\/+$/, '') || '/';
+    const pathname = url.pathname.replace(/\/+$/, '') || '/';
+    const versioned = pathname.startsWith(`${API_PREFIX}/`);
+    const p = versioned ? pathname.slice(API_PREFIX.length) : pathname;
     const parts = p.split('/').filter(Boolean);
+    const origin = req.headers.origin;
+    const cors = Boolean(origin) && isLocalhostOrigin(origin) && origin !== `http://${req.headers.host}`;
     try {
-        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.1.1', lanUrls: [`http://192.168.1.42:${PORT}/`] });
+        if (cors) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Vary', 'Origin');
+        }
+        if (cors && req.method === 'OPTIONS') {
+            res.writeHead(204, {
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Allow-Private-Network': 'true',
+                'Access-Control-Max-Age': String(PREFLIGHT_MAX_AGE_S),
+            });
+            return res.end();
+        }
+        if (isWrite(req.method, p)) {
+            if (isBlockedCrossSite(req)) return text(res, 403, 'Pages from other websites cannot change anything here');
+            if (MOCK_KEY && providedKey(req, url) !== MOCK_KEY) {
+                res.setHeader('WWW-Authenticate', 'Bearer realm="JRTI"');
+                return text(res, 401, "This needs the control key shown in the game's JRTI settings");
+            }
+        }
+        if (pathname === API_PREFIX) return json(res, discovery());
+        if (versioned && p === '/openapi.json') return json(res, openApi());
+        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.1.1', lanUrls: [`http://192.168.1.42:${PORT}/`], controlKeyRequired: Boolean(MOCK_KEY) });
         if (p === '/cameras') return json(res, cameraList());
         if (p === '/debug/stats') return json(res, sample());
         if (p === '/events') return events(req, res);
@@ -405,11 +497,18 @@ const server = http.createServer(async (req, res) => {
                 default: return text(res, 404, 'Unknown action');
             }
         }
+        if (versioned) return text(res, 404, `Unknown route, see ${API_PREFIX} for the list`);
+        if (parts[0] === 'apps') {
+            const full = insideRoot(path.join(PLUGIN_DATA, 'Apps'), decodeURIComponent(parts.slice(1).join('/')));
+            if (full && fs.existsSync(full) && fs.statSync(full).isDirectory()) {
+                if (!url.pathname.endsWith('/')) { res.writeHead(302, { Location: `${url.pathname}/` }); return res.end(); }
+                return sendStatic(res, path.join(full, 'index.html'));
+            }
+            return sendStatic(res, full);
+        }
         const rel = p === '/' ? 'index.html' : decodeURIComponent(p.slice(1));
-        const full = path.join(WEB, rel);
-        if (!full.startsWith(path.normalize(WEB)) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) return text(res, 404, 'Not found');
-        res.writeHead(200, { 'Content-Type': types[path.extname(full)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
-        fs.createReadStream(full).pipe(res);
+        const custom = insideRoot(path.join(PLUGIN_DATA, 'Web'), rel);
+        sendStatic(res, custom && fs.existsSync(custom) ? custom : insideRoot(WEB, rel));
     } catch (err) {
         console.error(err);
         if (!res.headersSent) text(res, 500, String(err));

@@ -19,7 +19,7 @@ export class CameraCard {
         this.id = cam.id;
         this.name = cam.name;
         this.streamUrl = cam.streamUrl;
-        this.snapshotBaseUrl = cam.snapshotUrl;
+        this.snapshotBaseUrl = API.snapshot(cam.id);
         this.streaming = cam.streaming;
         this.groupItems = null;
         this.onRecordingChange = null;
@@ -257,7 +257,7 @@ export class CameraCard {
     }
 
     _moreItems() {
-        const streamUrl = API.stream(this.id);
+        const streamUrl = API.obsStream(this.id);
         const lanItem = menuItem({
             label: 'Copy network stream URL',
             description: 'The same video, at the address other devices on your network can open',

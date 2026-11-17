@@ -170,7 +170,7 @@ function main() {
 
     wireIdleChrome();
 
-    const streamUrl = location.origin + API.stream(cameraId);
+    const streamUrl = location.origin + API.obsStream(cameraId);
     document.getElementById('viewer-copy').addEventListener('click', () => copyWithToast(streamUrl, 'Stream URL'));
     const fullscreenBtn = document.getElementById('viewer-fullscreen');
     fullscreenBtn.hidden = !document.fullscreenEnabled;

@@ -16,12 +16,6 @@ namespace JustReadTheInstructions
 
         private static void HandleGameRecording(HttpListenerContext ctx, int cameraId, CameraStreamState state, string action)
         {
-            if (ctx.Request.HttpMethod != "POST")
-            {
-                ServeError(ctx, 405, "POST required");
-                return;
-            }
-
             switch (action)
             {
                 case "start": StartGameRecording(ctx, cameraId, state); break;

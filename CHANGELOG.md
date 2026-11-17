@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Added
+
+- Web API (`/api/v1`) - every web UI route is also served under `/api/v1`, and `/api/v1` lists them all with the mod version and features, so other apps and pages can build on the same feeds. The old addresses keep working
+- OpenAPI document (`/api/v1/openapi.json`, docs site) - every route with its request and response fields, to generate clients in any language
+- Control key (Settings, Stream / Capture) - optional: other devices can still watch, but need the key to change settings, record or switch layouts. Copy link opens the web UI on another device with the key remembered
+- Your own pages (`PluginData/Apps/`) - a folder there opens at `/apps/<name>/`, served by the game and kept across updates
+- Web UI changes that survive updates (`PluginData/Web/`) - a file there replaces the shipped one of the same path
+
+### Changed
+
+- Web pages from other websites can no longer change camera settings, recordings or layouts. Pages served from localhost (development servers) can use the API from the browser
+
 ## v3.3.0 - 2026-11-11
 
 ### Added

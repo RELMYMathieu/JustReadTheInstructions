@@ -27,32 +27,6 @@ namespace JustReadTheInstructions
 
         private static string LayoutEventJson(string name) => $"{{\"name\":\"{EscapeJson(name)}\"}}";
 
-        private void HandleLayouts(HttpListenerContext ctx, string path)
-        {
-            var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 1)
-            {
-                ServeLayoutList(ctx);
-                return;
-            }
-
-            var name = parts.Length == 2 ? Uri.UnescapeDataString(parts[1]).Trim() : "";
-            if (!LayoutNamePattern.IsMatch(name))
-            {
-                ServeError(ctx, 400, "Layout names use letters, digits, spaces, - and _ (64 at most)");
-                return;
-            }
-
-            switch (ctx.Request.HttpMethod)
-            {
-                case "GET": ServeLayout(ctx, name); break;
-                case "PUT":
-                case "POST": SaveLayout(ctx, name); break;
-                case "DELETE": DeleteLayout(ctx, name); break;
-                default: ServeError(ctx, 405, "Use GET, PUT or DELETE"); break;
-            }
-        }
-
         private static void ServeLayoutList(HttpListenerContext ctx)
         {
             var entries = new List<string>();

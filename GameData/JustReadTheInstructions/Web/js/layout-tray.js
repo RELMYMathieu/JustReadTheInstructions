@@ -71,6 +71,6 @@ export class CameraTray {
     }
 
     _loadThumbnails() {
-        for (const [id, item] of this._items) item.img.src = API.snapshot(id);
+        for (const [id, item] of this._items) item.img.src = `${API.snapshot(id)}?t=${Date.now()}`;
     }
 }

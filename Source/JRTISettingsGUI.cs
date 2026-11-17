@@ -26,6 +26,7 @@ namespace JustReadTheInstructions
         private string _renderHeight;
         private string _antiAliasing;
         private bool _spreadCaptures;
+        private bool _requireControlKey;
         private bool _enableStreamServer;
         private string _streamPort;
 
@@ -258,6 +259,8 @@ namespace JustReadTheInstructions
             if (portWarning != null)
                 GUILayout.Label("⚠ " + portWarning, _warningStyle);
             GUILayout.Space(2);
+            DrawControlKey();
+            GUILayout.Space(6);
             DrawField("JPEG Quality  (1-100)", ref _jpegQuality, "f_quality");
             GUILayout.Space(2);
             DrawField("Max FPS  (camera windows and streams)", ref _maxFps, "f_fps");
@@ -467,6 +470,25 @@ namespace JustReadTheInstructions
             GUILayout.EndVertical();
         }
 
+        private void DrawControlKey()
+        {
+            DrawToggle(ref _requireControlKey, "Require a key to control from other devices");
+            GUILayout.Label("Other devices can always watch. With this on, changing settings, recording and switching layouts from another device needs the key. This computer never needs it.", _descriptionStyle);
+            if (!_requireControlKey) return;
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"Key: {JRTISettings.ControlKey}", _labelStyle);
+            var link = JRTIStreamServer.Instance?.LinkWithControlKey();
+            if (link != null && GUILayout.Button("Copy link", _buttonStyle)) GUIUtility.systemCopyBuffer = link;
+            if (GUILayout.Button("New key", _buttonStyle))
+            {
+                JRTISettings.ControlKey = ApiAccess.NewKey();
+                TriggerSave();
+            }
+            GUILayout.EndHorizontal();
+            GUILayout.Label("Copy link gives this computer's network address with the key: open it once on the other device and it remembers the key. New key logs every device out.", _descriptionStyle);
+        }
+
         private void DrawField(string label, ref string value, string controlName)
         {
             GUILayout.BeginHorizontal();
@@ -502,6 +524,7 @@ namespace JustReadTheInstructions
             if (int.TryParse(_renderHeight, out int h)) JRTISettings.RenderHeight = h;
             if (int.TryParse(_antiAliasing, out int aa)) JRTISettings.AntiAliasing = aa;
             JRTISettings.SpreadCaptures = _spreadCaptures;
+            JRTISettings.RequireControlKey = _requireControlKey;
             JRTISettings.EnableStreamServer = _enableStreamServer;
             JRTISettings.EnableDockingOverlay = _enableDockingOverlay;
             JRTISettings.FixedPreviewAspectRatio = _fixedPreviewAspectRatio;
@@ -522,6 +545,7 @@ namespace JustReadTheInstructions
             _renderHeight = JRTISettings.RenderHeight.ToString();
             _antiAliasing = JRTISettings.AntiAliasing.ToString();
             _spreadCaptures = JRTISettings.SpreadCaptures;
+            _requireControlKey = JRTISettings.RequireControlKey;
             _enableStreamServer = JRTISettings.EnableStreamServer;
             _enableDockingOverlay = JRTISettings.EnableDockingOverlay;
             _fixedPreviewAspectRatio = JRTISettings.FixedPreviewAspectRatio;

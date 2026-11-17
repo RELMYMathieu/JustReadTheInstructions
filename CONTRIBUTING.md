@@ -74,7 +74,26 @@ The web files in `GameData/JustReadTheInstructions/Web/` are static and need no 
 node Tools/mock-server.mjs
 ```
 
-It serves the Web folder on port 8099. Keep it in step when you add an endpoint.
+It serves the Web folder on port 8099. Set `MOCK_KEY=ABCD234567` to make it require a control key, as if every request came from another device.
+
+## Adding or changing an endpoint
+
+Every route is described once in `Source/ApiCatalog.cs` (path, method, fields) and bound to its handler in `Source/JRTIStreamServer.Routes.cs`. After a change:
+
+1. Regenerate the published OpenAPI document and run the tests (in bash; in PowerShell set `$env:JRTI_UPDATE_OPENAPI=1` first):
+
+    ```bash
+    cd Tests/JRTI.Tests
+    JRTI_UPDATE_OPENAPI=1 dotnet test
+    ```
+
+    Commit the updated `docs/openapi.json`. Without the variable, the tests fail when it is out of date.
+
+2. Add the route to `Tools/mock-server.mjs`, then check that the mock answers every route in the document:
+
+    ```bash
+    node Tools/check-routes.mjs
+    ```
 
 ## Working on the docs
 

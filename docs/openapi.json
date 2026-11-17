@@ -1,0 +1,1160 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Just Read The Instructions",
+    "version": "1"
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "getApi",
+        "summary": "Mod version, features and every route",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "This API as an OpenAPI 3.1 document, to generate clients",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "Game session: launch id, mod version, recording support, codecs, network addresses",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras": {
+      "get": {
+        "operationId": "listCameras",
+        "summary": "Cameras with their name, viewers, mic, pan and recording state",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Camera"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/streams": {
+      "get": {
+        "operationId": "getStreams",
+        "summary": "Several cameras in one multipart stream; each part names its camera in an X-Camera-Id header",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "description": "Camera IDs separated by commas, such as 10,11",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "description": "1 for preview-size frames",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPEG frames",
+            "content": {
+              "multipart/x-mixed-replace": {}
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "getEvents",
+        "summary": "Server-Sent Events: program (the layout on air) and layout (a saved layout changed)",
+        "responses": {
+          "200": {
+            "description": "Events, with a ping comment every 15 seconds",
+            "content": {
+              "text/event-stream": {}
+            }
+          }
+        }
+      }
+    },
+    "/debug/stats": {
+      "get": {
+        "operationId": "getDebugStats",
+        "summary": "Latest performance sample",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/program": {
+      "get": {
+        "operationId": "getProgram",
+        "summary": "The layout on air",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Program"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/program/take/{layout}": {
+      "post": {
+        "operationId": "takeProgram",
+        "summary": "Puts a saved layout on air. Also answers GET, for Stream Deck and browser links",
+        "parameters": [
+          {
+            "name": "layout",
+            "in": "path",
+            "required": true,
+            "description": "Layout name: letters, digits, spaces, - and _ (64 at most)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Program"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The control key is required and missing or wrong"
+          },
+          "403": {
+            "description": "Sent by a web page from another site"
+          }
+        },
+        "security": [
+          {},
+          {
+            "controlKey": []
+          }
+        ]
+      }
+    },
+    "/program/clear": {
+      "post": {
+        "operationId": "clearProgram",
+        "summary": "Takes the program off air. Also answers GET, for links",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Program"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The control key is required and missing or wrong"
+          },
+          "403": {
+            "description": "Sent by a web page from another site"
+          }
+        },
+        "security": [
+          {},
+          {
+            "controlKey": []
+          }
+        ]
+      }
+    },
+    "/layouts": {
+      "get": {
+        "operationId": "listLayouts",
+        "summary": "Saved layouts",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LayoutEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/layouts/{layout}": {
+      "get": {
+        "operationId": "getLayout",
+        "summary": "One saved layout, as saved by the layout page",
+        "parameters": [
+          {
+            "name": "layout",
+            "in": "path",
+            "required": true,
+            "description": "Layout name: letters, digits, spaces, - and _ (64 at most)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveLayout",
+        "summary": "Saves a layout: a JSON object of 64 KB at most. Also answers POST",
+        "parameters": [
+          {
+            "name": "layout",
+            "in": "path",
+            "required": true,
+            "description": "Layout name: letters, digits, spaces, - and _ (64 at most)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved"
+          },
+          "401": {
+            "description": "The control key is required and missing or wrong"
+          },
+          "403": {
+            "description": "Sent by a web page from another site"
+          }
+        },
+        "security": [
+          {},
+          {
+            "controlKey": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteLayout",
+        "summary": "Deletes a layout",
+        "parameters": [
+          {
+            "name": "layout",
+            "in": "path",
+            "required": true,
+            "description": "Layout name: letters, digits, spaces, - and _ (64 at most)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "The control key is required and missing or wrong"
+          },
+          "403": {
+            "description": "Sent by a web page from another site"
+          }
+        },
+        "security": [
+          {},
+          {
+            "controlKey": []
+          }
+        ]
+      }
+    },
+    "/recordings": {
+      "get": {
+        "operationId": "listRecordings",
+        "summary": "Recordings on disk, newest first",
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecordingFile"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recordings/{file}": {
+      "get": {
+        "operationId": "getRecording",
+        "summary": "One recording, with byte ranges for seeking",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "description": "File name, as listed by /recordings",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "description": "1 to save it instead of playing it",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The video file",
+            "content": {
+              "video/mp4": {}
+            }
+          }
+        }
+      }
+    },
+    "/camera/{id}/snapshot": {
+      "get": {
+        "operationId": "getSnapshot",
+        "summary": "Latest frame",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPEG image",
+            "content": {
+              "image/jpeg": {}
+            }
+          }
+        }
+      }
+    },
+    "/camera/{id}/stream": {
+      "get": {
+        "operationId": "getStream",
+        "summary": "MJPEG stream at render size, for OBS, VLC or an img tag",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPEG frames",
+            "content": {
+              "multipart/x-mixed-replace": {}
+            }
+          }
+        }
+      }
+    },
+    "/camera/{id}/preview": {
+      "get": {
+        "operationId": "getPreview",
+        "summary": "MJPEG stream at preview size",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPEG frames",
+            "content": {
+              "multipart/x-mixed-replace": {}
+            }
+          }
+        }
+      }
+    },
+    "/camera/{id}/audio": {
+      "get": {
+        "operationId": "getAudio",
+        "summary": "Camera sound as an endless WAV stream",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PCM audio",
+            "content": {
+              "audio/wav": {}
+            }
+          }
+        }
+      }
+    },
+    "/camera/{id}/status": {
+      "get": {
+        "operationId": "getCameraStatus",
+        "summary": "Answers ok while the camera exists",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "text/plain": {}
+            }
+          }
+        }
+      }
+    },
+    "/camera/{id}/settings": {
+      "get": {
+        "operationId": "getCameraSettings",
+        "summary": "Image, sound, field of view and pan settings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "changeCameraSettings",
+        "summary": "Changes any of the listed fields and leaves the others alone",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraSettingsChange"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Changed"
+          },
+          "401": {
+            "description": "The control key is required and missing or wrong"
+          },
+          "403": {
+            "description": "Sent by a web page from another site"
+          }
+        },
+        "security": [
+          {},
+          {
+            "controlKey": []
+          }
+        ]
+      }
+    },
+    "/camera/{id}/recording/{action}": {
+      "post": {
+        "operationId": "controlRecording",
+        "summary": "Starts, stops, discards, pauses or resumes the in-game recording",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Camera ID, as listed by /cameras",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "description": "What to do",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "start",
+                "stop",
+                "discard",
+                "pause",
+                "resume"
+              ]
+            }
+          },
+          {
+            "name": "codec",
+            "in": "query",
+            "required": false,
+            "description": "Codec for start, h264 by default",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "h264",
+                "av1"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The recording, or null once stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Recording"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The control key is required and missing or wrong"
+          },
+          "403": {
+            "description": "Sent by a web page from another site"
+          }
+        },
+        "security": [
+          {},
+          {
+            "controlKey": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Camera": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "streaming": {
+            "type": "boolean"
+          },
+          "viewerCount": {
+            "type": "integer"
+          },
+          "snapshotUrl": {
+            "type": "string"
+          },
+          "streamUrl": {
+            "type": "string"
+          },
+          "mic": {
+            "type": "string",
+            "enum": [
+              "game",
+              "external",
+              "onboard"
+            ]
+          },
+          "canPan": {
+            "type": "boolean"
+          },
+          "track": {
+            "type": "string",
+            "enum": [
+              "off",
+              "vessel",
+              "target"
+            ]
+          },
+          "recording": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Recording"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "streaming",
+          "viewerCount",
+          "snapshotUrl",
+          "streamUrl",
+          "mic",
+          "canPan",
+          "track",
+          "recording"
+        ]
+      },
+      "CameraSettings": {
+        "type": "object",
+        "properties": {
+          "brightness": {
+            "type": "number"
+          },
+          "contrast": {
+            "type": "number"
+          },
+          "gamma": {
+            "type": "number"
+          },
+          "mic": {
+            "type": "string",
+            "enum": [
+              "game",
+              "external",
+              "onboard"
+            ]
+          },
+          "soundGain": {
+            "type": "number"
+          },
+          "autoGain": {
+            "type": "boolean"
+          },
+          "mastering": {
+            "type": "boolean"
+          },
+          "fov": {
+            "type": "number"
+          },
+          "fovMin": {
+            "type": "number"
+          },
+          "fovMax": {
+            "type": "number"
+          },
+          "fovLimitMin": {
+            "type": "number"
+          },
+          "fovLimitMax": {
+            "type": "number"
+          },
+          "pan": {
+            "$ref": "#/components/schemas/Pan"
+          }
+        },
+        "required": [
+          "brightness",
+          "contrast",
+          "gamma",
+          "mic",
+          "soundGain",
+          "autoGain",
+          "mastering"
+        ]
+      },
+      "CameraSettingsChange": {
+        "type": "object",
+        "properties": {
+          "brightness": {
+            "type": "number"
+          },
+          "contrast": {
+            "type": "number"
+          },
+          "gamma": {
+            "type": "number"
+          },
+          "fov": {
+            "type": "number"
+          },
+          "mic": {
+            "type": "string",
+            "enum": [
+              "game",
+              "external",
+              "onboard"
+            ]
+          },
+          "soundGain": {
+            "type": "number"
+          },
+          "autoGain": {
+            "type": "boolean"
+          },
+          "mastering": {
+            "type": "boolean"
+          },
+          "zoomRate": {
+            "type": "number"
+          },
+          "panYaw": {
+            "type": "number"
+          },
+          "panPitch": {
+            "type": "number"
+          },
+          "panYawRate": {
+            "type": "number"
+          },
+          "panPitchRate": {
+            "type": "number"
+          },
+          "track": {
+            "type": "string",
+            "enum": [
+              "off",
+              "vessel",
+              "target"
+            ]
+          }
+        }
+      },
+      "Discovery": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "api": {
+            "type": "integer"
+          },
+          "launchId": {
+            "type": "string"
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "inGameRecording": {
+                "type": "boolean"
+              },
+              "codecs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "h264",
+                    "av1"
+                  ]
+                }
+              },
+              "controlKeyRequired": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "inGameRecording",
+              "codecs",
+              "controlKeyRequired"
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "api",
+          "launchId",
+          "features",
+          "routes"
+        ]
+      },
+      "LayoutEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "updated"
+        ]
+      },
+      "Pan": {
+        "type": "object",
+        "properties": {
+          "yaw": {
+            "type": "number"
+          },
+          "pitch": {
+            "type": "number"
+          },
+          "pitchMin": {
+            "type": "number"
+          },
+          "pitchMax": {
+            "type": "number"
+          },
+          "track": {
+            "type": "string",
+            "enum": [
+              "off",
+              "vessel",
+              "target"
+            ]
+          }
+        },
+        "required": [
+          "yaw",
+          "pitch",
+          "pitchMin",
+          "pitchMax",
+          "track"
+        ]
+      },
+      "Program": {
+        "type": "object",
+        "properties": {
+          "layout": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "layout",
+          "version"
+        ]
+      },
+      "Recording": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "elapsedMs": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "framesWritten": {
+            "type": "integer"
+          },
+          "framesDropped": {
+            "type": "integer"
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "file",
+          "paused",
+          "elapsedMs",
+          "bytes",
+          "framesWritten",
+          "framesDropped",
+          "error"
+        ]
+      },
+      "RecordingFile": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recording": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "file",
+          "bytes",
+          "modified",
+          "recording"
+        ]
+      },
+      "Route": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "path": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "writes": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "methods",
+          "path",
+          "summary",
+          "writes"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "launchId": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "inGameRecording": {
+            "type": "boolean"
+          },
+          "codecs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "h264",
+                "av1"
+              ]
+            }
+          },
+          "lanUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "controlKeyRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "launchId",
+          "version",
+          "inGameRecording",
+          "codecs",
+          "lanUrls",
+          "controlKeyRequired"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "controlKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Only when the player turns on Require a key. The key can also go in a key query parameter"
+      }
+    }
+  }
+}

@@ -45,6 +45,7 @@ nav:
   - Recording: recording.md
   - Settings and mods: settings.md
   - Troubleshooting: troubleshooting.md
+  - API: api.md
 
 markdown_extensions:
   - admonition

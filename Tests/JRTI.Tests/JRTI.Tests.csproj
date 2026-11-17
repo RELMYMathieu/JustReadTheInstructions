@@ -16,6 +16,10 @@
 
   <ItemGroup>
     <Compile Include="..\..\Source\JRTICameraRuntime.cs" Link="Source\JRTICameraRuntime.cs" />
+    <Compile Include="..\..\Source\ApiRoute.cs" Link="Source\ApiRoute.cs" />
+    <Compile Include="..\..\Source\ApiCatalog.cs" Link="Source\ApiCatalog.cs" />
+    <Compile Include="..\..\Source\ApiSchema.cs" Link="Source\ApiSchema.cs" />
+    <Compile Include="..\..\Source\ApiAccess.cs" Link="Source\ApiAccess.cs" />
   </ItemGroup>
 
 </Project>

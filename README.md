@@ -41,6 +41,7 @@
 * Hear the game from each camera's position - [Sound](https://relmymathieu.github.io/JustReadTheInstructions/sound/)
 * Record camera feeds as MP4 inside the game - [Recording](https://relmymathieu.github.io/JustReadTheInstructions/recording/)
 * Raw MJPEG feed URLs for OBS or other tools, with stable camera IDs
+* An HTTP API to build your own pages and apps on the same feeds - [API](https://relmymathieu.github.io/JustReadTheInstructions/api/)
 
 ## Install
 
