@@ -37,6 +37,9 @@ namespace JustReadTheInstructions
         public static int StreamMaxFps { get; internal set; } = 30;
         public static bool SpreadCaptures { get; internal set; } = true;
         public static bool AutoStreamCameras { get; internal set; } = false;
+        public static bool RequireControlKey { get; internal set; } = false;
+        public static string ControlKey { get; internal set; } = "";
+        public static string AllowedHosts { get; internal set; } = "";
 
         public static float FramePeriod => 1f / Mathf.Max(1, StreamMaxFps);
 
@@ -77,6 +80,7 @@ namespace JustReadTheInstructions
             StreamPort = Mathf.Clamp(StreamPort, 1024, 65535);
             StreamJpegQuality = Mathf.Clamp(StreamJpegQuality, 1, 100);
             StreamMaxFps = Mathf.Clamp(StreamMaxFps, 1, 120);
+            if (RequireControlKey && !ApiAccess.IsValidKey(ControlKey)) ControlKey = ApiAccess.NewKey();
         }
 
         void Awake()
@@ -121,6 +125,9 @@ namespace JustReadTheInstructions
                 StreamMaxFps = ParseInt(settings, "StreamMaxFps", StreamMaxFps);
                 SpreadCaptures = ParseBool(settings, "SpreadCaptures", SpreadCaptures);
                 AutoStreamCameras = ParseBool(settings, "AutoStreamCameras", AutoStreamCameras);
+                RequireControlKey = ParseBool(settings, "RequireControlKey", RequireControlKey);
+                ControlKey = settings.GetValue("ControlKey") ?? ControlKey;
+                AllowedHosts = settings.GetValue("AllowedHosts") ?? AllowedHosts;
 
                 EnableDeferred = ParseBool(settings, "EnableDeferred", EnableDeferred);
                 EnableTUFX = ParseBool(settings, "EnableTUFX", EnableTUFX);
@@ -185,6 +192,9 @@ namespace JustReadTheInstructions
                 settings.AddValue("StreamMaxFps", StreamMaxFps);
                 settings.AddValue("SpreadCaptures", SpreadCaptures);
                 settings.AddValue("AutoStreamCameras", AutoStreamCameras);
+                settings.AddValue("RequireControlKey", RequireControlKey);
+                settings.AddValue("ControlKey", ControlKey);
+                settings.AddValue("AllowedHosts", AllowedHosts);
 
                 settings.AddValue("EnableDeferred", EnableDeferred);
                 settings.AddValue("EnableTUFX", EnableTUFX);

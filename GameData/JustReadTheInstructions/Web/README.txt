@@ -31,6 +31,14 @@ To go back to the default, just delete your customlos.png.
 Any *standard* image format works (PNG recommended, 1920x1080).
 
 
+YOUR OWN PAGES AND CHANGES
+--------------------------
+
+Files in GameData/JustReadTheInstructions/PluginData/Web/ replace the ones
+here and survive updates. Your own pages go in PluginData/Apps/<name>/ and
+open at http://localhost:8080/apps/<name>/. See the API page of the docs.
+
+
 RECORDINGS
 ----------
 

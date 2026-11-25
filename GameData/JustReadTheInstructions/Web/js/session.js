@@ -1,6 +1,6 @@
 import { fetchSession } from './api.js';
 
-const EMPTY_SESSION = Object.freeze({ launchId: null, version: null, inGameRecording: false, codecs: [], lanUrls: [] });
+const EMPTY_SESSION = Object.freeze({ launchId: null, version: null, inGameRecording: false, codecs: [], lanUrls: [], controlKeyRequired: false });
 
 let pending = null;
 

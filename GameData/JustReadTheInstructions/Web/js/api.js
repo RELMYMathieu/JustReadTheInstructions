@@ -1,4 +1,7 @@
 import { API } from './config.js';
+import { controlKeyHeaders, askForControlKey } from './control-key.js';
+
+const UNAUTHORIZED = 401;
 
 async function getJson(url, what) {
     const res = await fetch(url, { cache: 'no-store' });
@@ -6,12 +9,17 @@ async function getJson(url, what) {
     return res.json();
 }
 
-async function send(url, method, body, what) {
-    const res = await fetch(url, {
+function request(url, method, body) {
+    return fetch(url, {
         method,
-        headers: body == null ? undefined : { 'Content-Type': 'application/json' },
+        headers: { ...controlKeyHeaders(), ...(body == null ? {} : { 'Content-Type': 'application/json' }) },
         body: body == null ? undefined : JSON.stringify(body),
     });
+}
+
+async function send(url, method, body, what) {
+    let res = await request(url, method, body);
+    if (res.status === UNAUTHORIZED && await askForControlKey()) res = await request(url, method, body);
     if (!res.ok) throw new Error(`${what} failed: ${res.status} ${await res.text()}`);
     return res;
 }

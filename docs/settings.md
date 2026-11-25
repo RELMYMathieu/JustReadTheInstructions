@@ -18,6 +18,7 @@ Open it in flight with `Ctrl` + `Alt` + `F8` or `F9`. Everything is saved when y
 | --- | --- | --- |
 | Enable web streaming server | On | Turn off to run JRTI with in-game camera windows only: no web UI, browser streaming or recording. Lighter on weak machines. Takes effect when you next enter a flight scene |
 | Port | `8080` | The web UI and stream port (1024 to 65535). Changing it needs a game restart |
+| Require a key to control from other devices | Off | Other devices can still watch, but changing settings, recording and switching layouts need the key shown under it. **Copy link** gives this computer's address with the key, **New key** logs every device out. See [API](api.md#control-key) |
 | JPEG Quality | `90` | Quality of the MJPEG stream, 1 to 100. Lower is smaller and faster |
 | Max FPS | `30` | The most renders per second any camera makes, in its window and in streams alike (1 to 120). Each render costs about as much as the game's own view, so lower it if the game slows down |
 | Render Width and Height | `1280` x `720` | The resolution every camera renders at, and the size of recordings. Applies the next time a camera opens |
@@ -45,7 +46,9 @@ If another program already uses the port, JRTI says so on screen and in `KSP.log
 
 Settings are saved in `GameData/JustReadTheInstructions/PluginData/settings.cfg`. Defaults live in the mod itself, so updates never reset your choices.
 
-Per-camera sound choices are in `PluginData/camera-sound.cfg`, and saved layouts in `PluginData/Layouts/`.
+One setting is only in the file: `AllowedHosts`, the extra names the web UI answers to besides `localhost`, IP addresses, the computer's name and private network names such as `.local`, `.lan` or Tailscale's `.ts.net`. See [API](api.md#opening-it-by-name).
+
+Per-camera sound choices are in `PluginData/camera-sound.cfg`, and saved layouts in `PluginData/Layouts/`. Your own pages go in `PluginData/Apps/` and changed copies of the web UI in `PluginData/Web/` (see [API](api.md#building-a-web-page)).
 
 ## Visual mods
 

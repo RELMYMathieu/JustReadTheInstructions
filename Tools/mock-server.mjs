@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,16 @@ const LOOP_FRAMES = 90;
 const BOUNDARY = 'jrtiboundary';
 const AUDIO_RATE = 48000;
 const AUDIO_TICK_MS = 20;
+const API_PREFIX = '/api/v1';
+const OPENAPI_FILE = path.join(DOCS, 'openapi.json');
+const PLUGIN_DATA = path.join(ROOT, 'GameData', 'JustReadTheInstructions', 'PluginData');
+const MOCK_KEY = process.env.MOCK_KEY?.trim().toUpperCase();
+const PREFLIGHT_MAX_AGE_S = 600;
+const MOCK_ALLOWED_HOSTS = (process.env.MOCK_ALLOWED_HOSTS ?? '').split(/[, ]+/).filter(Boolean).map((h) => h.toLowerCase());
+const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
+const PRIVATE_NAME_SUFFIXES = ['.ts.net', '.local', '.lan', '.home', '.home.arpa', '.internal', '.localdomain'];
+const MOD_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'GameData', 'JustReadTheInstructions', 'JustReadTheInstructions.version'), 'utf8')).VERSION;
+const SETTING_RANGES = { brightness: [-1, 1], contrast: [0, 3], gamma: [0.1, 5], soundGain: [-24, 24] };
 
 const FEEDS = [
     [10, 'screenshot-3.png', 'crop=2320:1305:160:100'],
@@ -178,7 +189,7 @@ function recordingInfo(cam) {
 function cameraList() {
     return [...cameras.values()].filter((c) => c.online).map((c) => ({
         id: c.id, name: c.name, streaming: true, viewerCount: c.streamClients,
-        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, canPan: Boolean(c.pan), track: c.pan?.track ?? 'off', recording: recordingInfo(c),
+        snapshotUrl: `${API_PREFIX}/camera/${c.id}/snapshot`, videoUrl: `${API_PREFIX}/camera/${c.id}/stream`, previewUrl: `${API_PREFIX}/camera/${c.id}/preview`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, canPan: Boolean(c.pan), track: c.pan?.track ?? 'off', recording: recordingInfo(c),
     }));
 }
 
@@ -188,19 +199,18 @@ function writePart(res, jpeg, id) {
     res.write('\r\n');
 }
 
-function stream(req, res, ids, preview) {
+function stream(req, res, ids, preview, tagged) {
     const cams = ids.map((id) => cameras.get(id)).filter((c) => c?.online);
     if (cams.length === 0) return text(res, 404, 'No matching cameras');
     res.writeHead(200, { 'Content-Type': `multipart/x-mixed-replace; boundary=${BOUNDARY}`, 'Cache-Control': 'no-cache' });
     const key = preview ? 'previewClients' : 'streamClients';
     for (const c of cams) c[key]++;
-    const multi = ids.length > 1 || req.url.startsWith('/streams');
     const timer = setInterval(() => {
         let any = false;
         for (const c of cams) {
             if (!c.online) continue;
             any = true;
-            writePart(res, frameFor(c.id), multi ? c.id : null);
+            writePart(res, frameFor(c.id), tagged ? c.id : null);
         }
         if (!any) { clearInterval(timer); res.end(); }
     }, 1000 / FPS);
@@ -280,6 +290,121 @@ function sample() {
     };
 }
 
+function openApi() {
+    return JSON.parse(fs.readFileSync(OPENAPI_FILE, 'utf8'));
+}
+
+function operations() {
+    return Object.entries(openApi().paths).flatMap(([template, methods]) => Object.entries(methods).map(([method, op]) => ({
+        id: op.operationId, method: method.toUpperCase(), template, summary: op.summary, writes: Boolean(op.security),
+    })));
+}
+
+function matchesTemplate(template, p) {
+    const want = template.split('/').filter(Boolean);
+    const got = p.split('/').filter(Boolean);
+    return want.length === got.length && want.every((segment, i) => segment.startsWith('{') || segment === got[i]);
+}
+
+function isWrite(method, p) {
+    const ops = operations().filter((op) => matchesTemplate(op.template, p));
+    const exact = ops.find((op) => op.method === method || (method === 'HEAD' && op.method === 'GET'));
+    return exact ? exact.writes : ops.some((op) => op.writes);
+}
+
+function discovery() {
+    const routes = operations().map(({ id, method, template, summary, writes }) => ({
+        id, methods: [method], path: API_PREFIX + (template === '/' ? '' : template), summary, writes,
+    }));
+    return { name: 'Just Read The Instructions', version: MOD_VERSION, api: 1, launchId, features: { inGameRecording: true, codecs: ['h264', 'av1'], controlKeyRequired: Boolean(MOCK_KEY) }, routes };
+}
+
+function isLocalhostOrigin(origin) {
+    try {
+        const { hostname } = new URL(origin);
+        return ['localhost', '127.0.0.1', '[::1]'].includes(hostname) || hostname.endsWith('.localhost');
+    } catch {
+        return false;
+    }
+}
+
+function hostName(hostHeader) {
+    try {
+        return new URL(`http://${hostHeader}`).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
+function isLoopbackName(name) {
+    return name === 'localhost' || name.endsWith('.localhost') || name === '::1' || /^127\./.test(name);
+}
+
+function isAllowedHost(hostHeader) {
+    if (!hostHeader) return true;
+    const name = hostName(hostHeader);
+    if (!name) return false;
+    if (net.isIP(name) || isLoopbackName(name) || !name.includes('.') || PRIVATE_NAME_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+    return MOCK_ALLOWED_HOSTS.includes(name);
+}
+
+function isDirectFromThisComputer(req) {
+    const remote = req.socket.remoteAddress?.replace(/^::ffff:/, '') ?? '';
+    const local = req.socket.localAddress?.replace(/^::ffff:/, '') ?? '';
+    const name = hostName(req.headers.host ?? '');
+    return (remote === local || isLoopbackName(remote)) && Boolean(name) && isLoopbackName(name)
+        && PROXY_HEADERS.every((header) => !req.headers[header]);
+}
+
+function isSameOrigin(origin, hostHeader) {
+    try {
+        return new URL(origin).host.toLowerCase() === (hostHeader ?? '').toLowerCase();
+    } catch {
+        return false;
+    }
+}
+
+function isBlockedCrossSite(req) {
+    const origin = req.headers.origin;
+    if (!origin || isSameOrigin(origin, req.headers.host) || isLocalhostOrigin(origin)) return req.headers['sec-fetch-site'] === 'cross-site' && !origin;
+    return true;
+}
+
+function providedKey(req, url) {
+    const header = req.headers.authorization ?? '';
+    const key = /^bearer /i.test(header) ? header.slice(7) : url.searchParams.get('key');
+    return key?.trim().toUpperCase();
+}
+
+function insideRoot(root, rel) {
+    const full = path.join(root, rel);
+    const base = path.normalize(root + path.sep);
+    return full === path.normalize(root) || full.startsWith(base) ? full : null;
+}
+
+function sendStatic(res, full) {
+    if (!full || !fs.existsSync(full) || fs.statSync(full).isDirectory()) return text(res, 404, 'Not found');
+    res.writeHead(200, { 'Content-Type': types[path.extname(full)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    fs.createReadStream(full).pipe(res);
+}
+
+function compareIgnoringCase(a, b) {
+    const left = a.toUpperCase();
+    const right = b.toUpperCase();
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function settingsJson(cam) {
+    return cam.pan ? { ...cam.settings, pan: panJson(cam.pan) } : cam.settings;
+}
+
+function applySettings(cam, changes) {
+    for (const [key, value] of Object.entries(changes)) {
+        const range = SETTING_RANGES[key];
+        cam.settings[key] = range && typeof value === 'number' ? clamp(value, range[0], range[1]) : value;
+    }
+}
+
 function listRecordings() {
     const active = new Set([...cameras.values()].filter((c) => c.recording).map((c) => c.recording.file));
     return fs.readdirSync(recordingsDir).filter((f) => /\.(mp4|webm|mkv)$/i.test(f)).map((file) => {
@@ -295,8 +420,10 @@ function gameRecording(res, cam, action, codec) {
         cam.recording = { file, startedAt: Date.now(), paused: false, codec };
         fs.writeFileSync(path.join(recordingsDir, file), Buffer.alloc(1024));
     } else if (action === 'stop' || action === 'discard') {
+        const stopped = cam.recording && { file: cam.recording.file, saved: action === 'stop', framesWritten: Math.floor((Date.now() - cam.recording.startedAt) / 33), framesDropped: 0 };
         if (cam.recording && action === 'discard') fs.rmSync(path.join(recordingsDir, cam.recording.file), { force: true });
         cam.recording = null;
+        return json(res, stopped ?? null);
     } else if (action === 'pause' && cam.recording && !cam.recording.paused) {
         Object.assign(cam.recording, { paused: true, pausedAt: Date.now() });
     } else if (action === 'resume' && cam.recording?.paused) {
@@ -324,10 +451,37 @@ function serveFile(req, res, file, type, download) {
 
 const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const p = url.pathname.replace(/\/+$/, '') || '/';
+    const pathname = url.pathname.replace(/\/+$/, '') || '/';
+    const versioned = pathname.startsWith(`${API_PREFIX}/`);
+    const p = versioned ? pathname.slice(API_PREFIX.length) : pathname;
     const parts = p.split('/').filter(Boolean);
+    const origin = req.headers.origin;
+    const cors = Boolean(origin) && isLocalhostOrigin(origin) && origin !== `http://${req.headers.host}`;
     try {
-        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.1.1', lanUrls: [`http://192.168.1.42:${PORT}/`] });
+        if (!isAllowedHost(req.headers.host)) return text(res, 403, "This name is not allowed here. Use the computer's IP address, or add the name to AllowedHosts in PluginData/settings.cfg");
+        if (cors) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Vary', 'Origin');
+        }
+        if (cors && req.method === 'OPTIONS') {
+            res.writeHead(204, {
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Allow-Private-Network': 'true',
+                'Access-Control-Max-Age': String(PREFLIGHT_MAX_AGE_S),
+            });
+            return res.end();
+        }
+        if (isWrite(req.method, p)) {
+            if (isBlockedCrossSite(req)) return text(res, 403, 'Pages from other websites cannot change anything here');
+            if (MOCK_KEY && !isDirectFromThisComputer(req) && providedKey(req, url) !== MOCK_KEY) {
+                res.setHeader('WWW-Authenticate', 'Bearer realm="JRTI"');
+                return text(res, 401, "This needs the control key shown in the game's JRTI settings");
+            }
+        }
+        if (pathname === API_PREFIX) return json(res, discovery());
+        if (versioned && p === '/openapi.json') return json(res, openApi());
+        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: MOD_VERSION, lanUrls: [`http://192.168.1.42:${PORT}/`], controlKeyRequired: Boolean(MOCK_KEY) });
         if (p === '/cameras') return json(res, cameraList());
         if (p === '/debug/stats') return json(res, sample());
         if (p === '/events') return events(req, res);
@@ -342,14 +496,14 @@ const server = http.createServer(async (req, res) => {
             }
             return text(res, 404, 'Use GET /program, /program/take/<layout> or /program/clear');
         }
-        if (p === '/streams') return stream(req, res, (url.searchParams.get('ids') ?? '').split(',').map(Number), url.searchParams.get('preview') === '1');
+        if (p === '/streams') return stream(req, res, (url.searchParams.get('ids') ?? '').split(',').map(Number), url.searchParams.get('preview') === '1', true);
         if (parts[0] === 'mock' && parts[1] === 'toggle') {
             const cam = cameras.get(Number(parts[2]));
             if (cam) cam.online = !cam.online;
             return json(res, { online: cam?.online });
         }
         if (parts[0] === 'layouts') {
-            if (parts.length === 1) return json(res, [...layouts].map(([name, v]) => ({ name, updated: v.updated })).sort((a, b) => a.name.localeCompare(b.name)));
+            if (parts.length === 1) return json(res, [...layouts].map(([name, v]) => ({ name, updated: v.updated })).sort((a, b) => compareIgnoringCase(a.name, b.name)));
             const name = decodeURIComponent(parts[1]);
             if (!/^[\p{L}\p{N} _-]{1,64}$/u.test(name)) return text(res, 400, 'Invalid layout name');
             if (req.method === 'GET') {
@@ -397,19 +551,25 @@ const server = http.createServer(async (req, res) => {
                         const { panYaw, panPitch, panYawRate, panPitchRate, track, zoomRate, ...rest } = JSON.parse(await readBody(req));
                         applyPan(cam.pan, { panYaw, panPitch, panYawRate, panPitchRate, track });
                         if (zoomRate != null) Object.assign(cam, { zoomRate: clamp(zoomRate, -1, 1), zoomUntil: Date.now() + PAN_RATE_HOLD_MS });
-                        Object.assign(cam.settings, rest);
-                        res.writeHead(200); return res.end();
+                        applySettings(cam, rest);
                     }
-                    return json(res, cam.pan ? { ...cam.settings, pan: panJson(cam.pan) } : cam.settings);
+                    return json(res, settingsJson(cam));
                 case 'recording': return gameRecording(res, cam, parts[3], url.searchParams.get('codec'));
                 default: return text(res, 404, 'Unknown action');
             }
         }
+        if (versioned) return text(res, 404, `Unknown route, see ${API_PREFIX} for the list`);
+        if (parts[0] === 'apps') {
+            const full = insideRoot(path.join(PLUGIN_DATA, 'Apps'), decodeURIComponent(parts.slice(1).join('/')));
+            if (full && fs.existsSync(full) && fs.statSync(full).isDirectory()) {
+                if (!url.pathname.endsWith('/')) { res.writeHead(302, { Location: `${url.pathname}/` }); return res.end(); }
+                return sendStatic(res, path.join(full, 'index.html'));
+            }
+            return sendStatic(res, full);
+        }
         const rel = p === '/' ? 'index.html' : decodeURIComponent(p.slice(1));
-        const full = path.join(WEB, rel);
-        if (!full.startsWith(path.normalize(WEB)) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) return text(res, 404, 'Not found');
-        res.writeHead(200, { 'Content-Type': types[path.extname(full)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
-        fs.createReadStream(full).pipe(res);
+        const custom = insideRoot(path.join(PLUGIN_DATA, 'Web'), rel);
+        sendStatic(res, custom && fs.existsSync(custom) ? custom : insideRoot(WEB, rel));
     } catch (err) {
         console.error(err);
         if (!res.headersSent) text(res, 500, String(err));

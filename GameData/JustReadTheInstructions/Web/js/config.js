@@ -34,26 +34,29 @@ export const TRACKS = Object.freeze([
     { id: 'target', label: 'Target', hint: 'Follows your target and zooms with its distance.' },
 ]);
 
+const V1 = '/api/v1';
+
 export const API = Object.freeze({
-    session: '/session',
-    cameras: '/cameras',
-    snapshot: (id) => `/camera/${id}/snapshot?t=${Date.now()}`,
-    stream: (id) => `/camera/${id}/stream`,
-    audio: (id) => `/camera/${id}/audio`,
-    streams: (ids, preview) => `/streams?ids=${ids.join(',')}${preview ? '&preview=1' : ''}`,
-    status: (id) => `/camera/${id}/status`,
-    settings: (id) => `/camera/${id}/settings`,
-    gameRecording: (id, action, codec) => `/camera/${id}/recording/${action}${codec ? `?codec=${codec}` : ''}`,
+    discovery: V1,
+    session: `${V1}/session`,
+    cameras: `${V1}/cameras`,
+    snapshot: (id) => `${V1}/camera/${id}/snapshot`,
+    obsStream: (id) => `/camera/${id}/stream`,
+    audio: (id) => `${V1}/camera/${id}/audio`,
+    streams: (ids, preview) => `${V1}/streams?ids=${ids.join(',')}${preview ? '&preview=1' : ''}`,
+    status: (id) => `${V1}/camera/${id}/status`,
+    settings: (id) => `${V1}/camera/${id}/settings`,
+    gameRecording: (id, action, codec) => `${V1}/camera/${id}/recording/${action}${codec ? `?codec=${codec}` : ''}`,
     viewer: (id) => `/viewer.html?id=${id}`,
-    debugStats: '/debug/stats',
-    events: '/events',
-    program: '/program',
-    programTake: (name) => `/program/take/${encodeURIComponent(name)}`,
-    programClear: '/program/clear',
-    layouts: '/layouts',
-    layout: (name) => `/layouts/${encodeURIComponent(name)}`,
-    recordings: '/recordings',
-    recording: (file, download) => `/recordings/${encodeURIComponent(file)}${download ? '?download=1' : ''}`,
+    debugStats: `${V1}/debug/stats`,
+    events: `${V1}/events`,
+    program: `${V1}/program`,
+    programTake: (name) => `${V1}/program/take/${encodeURIComponent(name)}`,
+    programClear: `${V1}/program/clear`,
+    layouts: `${V1}/layouts`,
+    layout: (name) => `${V1}/layouts/${encodeURIComponent(name)}`,
+    recordings: `${V1}/recordings`,
+    recording: (file, download) => `${V1}/recordings/${encodeURIComponent(file)}${download ? '?download=1' : ''}`,
 });
 
 export const VIDEO_CODECS = Object.freeze({

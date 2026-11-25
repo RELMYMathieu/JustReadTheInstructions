@@ -10,6 +10,8 @@ JRTI's page is `http://localhost:8080/` unless you changed the port. If the page
 
 JRTI usually warns you about this on screen when the game opens, and writes it to `KSP.log`. To fix it, pick another **Port** in JRTI's settings (`Ctrl` + `Alt` + `F8`), then restart the game.
 
+If the page says the name is not allowed, open it by IP address or add the name to `AllowedHosts` (see [API](api.md#opening-it-by-name)).
+
 If it works on the KSP computer but not from another device, use the network address shown at the bottom of the web UI instead of `localhost`, and check that the computer's firewall lets the game accept connections. On Windows, allow `KSP_x64.exe` through Windows Defender Firewall (Windows Security, Firewall & network protection, Allow an app through firewall, Allow another app), making sure the rule covers your network's Private profile. Or open the port from an administrator command prompt, replacing `8080` with your port:
 
 ```text

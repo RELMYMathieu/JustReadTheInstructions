@@ -111,7 +111,8 @@ function main() {
         if (recordingBusy) return;
         recordingBusy = true;
         try {
-            recording = await gameRecording(cameraId, action, action === 'start' ? selectedGameCodec() : undefined);
+            const result = await gameRecording(cameraId, action, action === 'start' ? selectedGameCodec() : undefined);
+            recording = action === 'stop' ? null : result;
             if (action === 'stop') toast('Recording saved on the KSP computer');
         } catch {
             toast(`Could not ${action} the recording`);
@@ -170,7 +171,7 @@ function main() {
 
     wireIdleChrome();
 
-    const streamUrl = location.origin + API.stream(cameraId);
+    const streamUrl = location.origin + API.obsStream(cameraId);
     document.getElementById('viewer-copy').addEventListener('click', () => copyWithToast(streamUrl, 'Stream URL'));
     const fullscreenBtn = document.getElementById('viewer-fullscreen');
     fullscreenBtn.hidden = !document.fullscreenEnabled;

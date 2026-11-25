@@ -16,17 +16,9 @@ namespace JustReadTheInstructions
 
         private static void HandleGameRecording(HttpListenerContext ctx, int cameraId, CameraStreamState state, string action)
         {
-            if (ctx.Request.HttpMethod != "POST")
-            {
-                ServeError(ctx, 405, "POST required");
-                return;
-            }
-
             switch (action)
             {
                 case "start": StartGameRecording(ctx, cameraId, state); break;
-                case "stop": StopGameRecording(ctx, state, discard: false); break;
-                case "discard": StopGameRecording(ctx, state, discard: true); break;
                 case "pause": state.Recorder?.Pause(); ServeText(ctx, RecordingJson(state), "application/json"); break;
                 case "resume": state.Recorder?.Resume(); ServeText(ctx, RecordingJson(state), "application/json"); break;
                 default: ServeError(ctx, 404, "Unknown recording action"); break;
@@ -82,14 +74,21 @@ namespace JustReadTheInstructions
         private static void StopGameRecording(HttpListenerContext ctx, CameraStreamState state, bool discard)
         {
             var recorder = state.TakeRecorder();
-            if (recorder != null)
+            if (recorder == null)
             {
-                if (discard) recorder.Discard();
-                else recorder.Stop();
-                Debug.Log($"[JRTI-Stream]: In-game recording {(discard ? "discarded" : "saved")}: {recorder.FilePath} " +
-                          $"({recorder.FramesWritten} frames, {recorder.FramesDropped} dropped)");
+                ServeText(ctx, "null", "application/json");
+                return;
             }
-            ServeText(ctx, RecordingJson(state), "application/json");
+
+            if (discard) recorder.Discard();
+            else recorder.Stop();
+            Debug.Log($"[JRTI-Stream]: In-game recording {(discard ? "discarded" : "saved")}: {recorder.FilePath} " +
+                      $"({recorder.FramesWritten} frames, {recorder.FramesDropped} dropped)");
+
+            ServeText(ctx,
+                $"{{\"file\":\"{EscapeJson(Path.GetFileName(recorder.FilePath))}\",\"saved\":{(discard ? "false" : "true")}," +
+                $"\"framesWritten\":{recorder.FramesWritten},\"framesDropped\":{recorder.FramesDropped}}}",
+                "application/json");
         }
 
         private static string UniquePath(string requested)

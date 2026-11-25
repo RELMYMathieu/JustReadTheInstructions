@@ -99,7 +99,6 @@ function restoreKnownCameras() {
                 id,
                 name,
                 streaming: false,
-                snapshotUrl: `/camera/${id}/snapshot`,
                 streamUrl: `/viewer.html?id=${id}`,
             });
             card.markDestroyed();

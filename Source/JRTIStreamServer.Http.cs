@@ -16,6 +16,11 @@ namespace JustReadTheInstructions
         private static readonly string RecordingsRoot = Path.Combine(WebRoot, "recordings");
         private static readonly string DefaultLosPath = Path.Combine(WebRoot, "images", "los.png");
         private static readonly string CustomLosPath = Path.Combine(WebRoot, "images", "customlos.png");
+        private static readonly string PluginDataRoot =
+            KSPUtil.ApplicationRootPath + "GameData/JustReadTheInstructions/PluginData/";
+        private static readonly string WebOverrideRoot = Path.Combine(PluginDataRoot, "Web");
+        private static readonly string AppsRoot = Path.Combine(PluginDataRoot, "Apps");
+        private const string AppsPrefix = "/apps/";
 
         private static readonly StringComparison PathComparison =
             Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -24,23 +29,60 @@ namespace JustReadTheInstructions
         private const int StreamIdleTimeoutMs = 30_000;
         private static readonly byte[] MjpegPartEnd = Encoding.ASCII.GetBytes("\r\n");
 
-        private void ServeStaticFile(HttpListenerContext ctx, string relativePath)
+        private static void ServeWebFile(HttpListenerContext ctx, string relativePath)
         {
-            var webRootFull = Path.GetFullPath(WebRoot);
-            if (!webRootFull.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                webRootFull += Path.DirectorySeparatorChar;
-            var candidate = Path.GetFullPath(Path.Combine(WebRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-
-            if (!candidate.StartsWith(webRootFull, PathComparison))
+            var shipped = ResolveInside(WebRoot, relativePath);
+            if (shipped == null)
             {
                 ServeError(ctx, 403, "Forbidden");
                 return;
             }
 
-            if (PathsEqual(candidate, DefaultLosPath) && File.Exists(CustomLosPath))
-                candidate = CustomLosPath;
+            var custom = ResolveInside(WebOverrideRoot, relativePath);
+            if (custom != null && File.Exists(custom)) ServeFile(ctx, custom);
+            else if (PathsEqual(shipped, DefaultLosPath) && File.Exists(CustomLosPath)) ServeFile(ctx, CustomLosPath);
+            else ServeFile(ctx, shipped);
+        }
 
-            if (!File.Exists(candidate))
+        private static bool TryServeApp(HttpListenerContext ctx, string path)
+        {
+            if (!path.StartsWith(AppsPrefix, StringComparison.Ordinal)) return false;
+
+            var file = ResolveInside(AppsRoot, path.Substring(AppsPrefix.Length));
+            if (file == null)
+            {
+                ServeError(ctx, 403, "Forbidden");
+                return true;
+            }
+
+            if (Directory.Exists(file))
+            {
+                if (!path.EndsWith("/", StringComparison.Ordinal))
+                {
+                    ctx.Response.Redirect(path + "/");
+                    ctx.Response.Close();
+                    return true;
+                }
+                file = Path.Combine(file, "index.html");
+            }
+
+            ServeFile(ctx, file);
+            return true;
+        }
+
+        private static string ResolveInside(string root, string escapedRelativePath)
+        {
+            var rootFull = Path.GetFullPath(root);
+            if (!rootFull.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                rootFull += Path.DirectorySeparatorChar;
+            var relative = Uri.UnescapeDataString(escapedRelativePath).Replace('/', Path.DirectorySeparatorChar);
+            var candidate = Path.GetFullPath(Path.Combine(rootFull, relative));
+            return candidate.StartsWith(rootFull, PathComparison) ? candidate : null;
+        }
+
+        private static void ServeFile(HttpListenerContext ctx, string fullPath)
+        {
+            if (!File.Exists(fullPath))
             {
                 ServeError(ctx, 404, "Not found");
                 return;
@@ -48,10 +90,10 @@ namespace JustReadTheInstructions
 
             try
             {
-                var bytes = File.ReadAllBytes(candidate);
-                ctx.Response.ContentType = GetContentType(candidate);
+                var bytes = File.ReadAllBytes(fullPath);
+                ctx.Response.ContentType = GetContentType(fullPath);
                 ctx.Response.ContentLength64 = bytes.Length;
-                ctx.Response.Headers.Add("Cache-Control", IsFont(candidate) ? "max-age=604800" : "no-cache");
+                ctx.Response.Headers.Add("Cache-Control", IsFont(fullPath) ? "max-age=604800" : "no-cache");
                 ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
                 ctx.Response.Close();
             }
@@ -69,7 +111,8 @@ namespace JustReadTheInstructions
                 int id = kv.Key;
                 string name = kv.Value.DisplayName ?? id.ToString();
                 sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,\"viewerCount\":{kv.Value.MjpegClientCount},")
-                  .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\",\"mic\":\"{CameraMics.Id(kv.Value.Mic)}\",")
+                  .Append($"\"snapshotUrl\":\"{ApiRouter.VersionPrefix}/camera/{id}/snapshot\",\"videoUrl\":\"{ApiRouter.VersionPrefix}/camera/{id}/stream\",")
+                  .Append($"\"previewUrl\":\"{ApiRouter.VersionPrefix}/camera/{id}/preview\",\"streamUrl\":\"/viewer.html?id={id}\",\"mic\":\"{CameraMics.Id(kv.Value.Mic)}\",")
                   .Append($"\"canPan\":{(kv.Value.Aim.CanPan ? "true" : "false")},\"track\":\"{CameraTracks.Id(kv.Value.Aim.Track)}\",")
                   .Append($"\"recording\":{RecordingJson(kv.Value)}}}");
                 first = false;
@@ -77,41 +120,6 @@ namespace JustReadTheInstructions
 
             sb.Append(']');
             ServeText(ctx, sb.ToString(), "application/json");
-        }
-
-        private void ServeCameraEndpoint(HttpListenerContext ctx, string path)
-        {
-            var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2 || !int.TryParse(parts[1], out int cameraId))
-            {
-                ServeError(ctx, 400, "Invalid camera ID");
-                return;
-            }
-
-            if (parts.Length == 2)
-            {
-                ctx.Response.Redirect($"/viewer.html?id={cameraId}");
-                ctx.Response.Close();
-                return;
-            }
-
-            if (!_states.TryGetValue(cameraId, out var state))
-            {
-                ServeError(ctx, 404, "Camera not found");
-                return;
-            }
-
-            switch (parts[2])
-            {
-                case "snapshot": ServeSnapshot(ctx, state); break;
-                case "stream": ServeMjpeg(ctx, state); break;
-                case "preview": ServePreviewMjpeg(ctx, state); break;
-                case "audio": ServeCameraAudio(ctx, cameraId, state); break;
-                case "status": ServeText(ctx, "ok", "text/plain"); break;
-                case "settings": ServeOrUpdateSettings(ctx, cameraId, state); break;
-                case "recording": HandleGameRecording(ctx, cameraId, state, parts.Length > 3 ? parts[3] : ""); break;
-                default: ServeError(ctx, 404, "Unknown action"); break;
-            }
         }
 
         private static void ServeSnapshot(HttpListenerContext ctx, CameraStreamState state)
@@ -258,37 +266,35 @@ namespace JustReadTheInstructions
             ServeText(ctx, PerfFormat.ToJson(snapshot), "application/json");
         }
 
-        private static void ServeOrUpdateSettings(HttpListenerContext ctx, int cameraId, CameraStreamState state)
+        private static void UpdateCameraSettings(HttpListenerContext ctx, CameraStreamState state)
         {
-            if (ctx.Request.HttpMethod == "POST")
-            {
-                string body;
-                using (var reader = new System.IO.StreamReader(ctx.Request.InputStream, Encoding.UTF8))
-                    body = reader.ReadToEnd();
+            string body;
+            using (var reader = new System.IO.StreamReader(ctx.Request.InputStream, Encoding.UTF8))
+                body = reader.ReadToEnd();
 
-                if (TryParseJsonFloat(body, "brightness", out var b))
-                    state.Brightness = UnityEngine.Mathf.Clamp(b, -1f, 1f);
-                if (TryParseJsonFloat(body, "contrast", out var c))
-                    state.Contrast = UnityEngine.Mathf.Clamp(c, 0f, 3f);
-                if (TryParseJsonFloat(body, "gamma", out var g))
-                    state.Gamma = UnityEngine.Mathf.Clamp(g, 0.1f, 5f);
-                if (TryParseJsonFloat(body, "fov", out var fov))
-                    state.SetPendingFov(fov);
-                if (TryParseJsonString(body, "mic", out var mic) && CameraMics.TryParse(mic, out var parsedMic))
-                    state.Mic = parsedMic;
-                if (TryParseJsonFloat(body, "soundGain", out var soundGain))
-                    state.SoundGainDb = UnityEngine.Mathf.Clamp(soundGain, -24f, 24f);
-                if (TryParseJsonBool(body, "autoGain", out var autoGain))
-                    state.AutoGain = autoGain;
-                if (TryParseJsonBool(body, "mastering", out var mastering))
-                    state.Mastering = mastering;
-                UpdateAim(body, state.Aim);
+            if (TryParseJsonFloat(body, "brightness", out var b))
+                state.Brightness = UnityEngine.Mathf.Clamp(b, -1f, 1f);
+            if (TryParseJsonFloat(body, "contrast", out var c))
+                state.Contrast = UnityEngine.Mathf.Clamp(c, 0f, 3f);
+            if (TryParseJsonFloat(body, "gamma", out var g))
+                state.Gamma = UnityEngine.Mathf.Clamp(g, 0.1f, 5f);
+            if (TryParseJsonFloat(body, "fov", out var fov))
+                state.SetPendingFov(fov);
+            if (TryParseJsonString(body, "mic", out var mic) && CameraMics.TryParse(mic, out var parsedMic))
+                state.Mic = parsedMic;
+            if (TryParseJsonFloat(body, "soundGain", out var soundGain))
+                state.SoundGainDb = UnityEngine.Mathf.Clamp(soundGain, -24f, 24f);
+            if (TryParseJsonBool(body, "autoGain", out var autoGain))
+                state.AutoGain = autoGain;
+            if (TryParseJsonBool(body, "mastering", out var mastering))
+                state.Mastering = mastering;
+            UpdateAim(body, state.Aim);
 
-                ctx.Response.StatusCode = 200;
-                ctx.Response.Close();
-                return;
-            }
+            ServeCameraSettings(ctx, state);
+        }
 
+        private static void ServeCameraSettings(HttpListenerContext ctx, CameraStreamState state)
+        {
             var ic = System.Globalization.CultureInfo.InvariantCulture;
             var sb = new StringBuilder("{");
             sb.Append($"\"brightness\":{state.Brightness.ToString("F2", ic)},");

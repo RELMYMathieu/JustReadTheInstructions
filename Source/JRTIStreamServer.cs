@@ -369,7 +369,8 @@ namespace JustReadTheInstructions
             json.Append($"\"version\":\"{JRTISettingsGUI.ModVersion}\",");
             json.Append($"\"inGameRecording\":{(InGameRecordingAvailable ? "true" : "false")},");
             json.Append($"\"codecs\":{CodecsJson()},");
-            json.Append($"\"lanUrls\":[{string.Join(",", LanUrls().Select(url => $"\"{url}\""))}]");
+            json.Append($"\"lanUrls\":[{string.Join(",", LanUrls().Select(url => $"\"{url}\""))}],");
+            json.Append($"\"controlKeyRequired\":{Bool(JRTISettings.RequireControlKey)}");
             json.Append('}');
             ServeText(ctx, json.ToString(), "application/json");
         }
@@ -400,23 +401,25 @@ namespace JustReadTheInstructions
         {
             try
             {
+                if (!ApiAccess.IsAllowedHost(ctx.Request.UserHostName, JRTISettings.AllowedHosts))
+                {
+                    ServeError(ctx, 403, "This name is not allowed here. Use the computer's IP address, or add the name to AllowedHosts in PluginData/settings.cfg");
+                    return;
+                }
+
                 var path = ctx.Request.Url.AbsolutePath;
                 var trimmed = path == "/" ? "" : path.TrimEnd('/');
 
-                if (trimmed == "" || trimmed == "/index.html") { ServeStaticFile(ctx, "index.html"); return; }
-                if (trimmed == "/cameras") { ServeCameraList(ctx); return; }
-                if (trimmed == "/streams") { ServeMultiStream(ctx); return; }
-                if (trimmed == "/session") { ServeSession(ctx); return; }
-                if (trimmed == "/debug/stats") { ServeDebugStats(ctx); return; }
-                if (trimmed == "/events") { ServeEvents(ctx); return; }
-                if (trimmed == "/program" || trimmed.StartsWith("/program/")) { HandleProgram(ctx, trimmed); return; }
-                if (trimmed == "/layouts" || trimmed.StartsWith("/layouts/")) { HandleLayouts(ctx, trimmed); return; }
-                if (trimmed == "/recordings") { ServeRecordingList(ctx); return; }
-                if (trimmed.StartsWith("/recordings/")) { ServeRecordingFile(ctx, trimmed.Substring("/recordings/".Length)); return; }
-                if (trimmed.StartsWith("/camera/")) { ServeCameraEndpoint(ctx, trimmed); return; }
+                if (ApiRouter.TryStripVersion(trimmed, out var apiPath))
+                {
+                    if (!TryServeRoute(ctx, ApiRoutes, apiPath)) ServeError(ctx, 404, $"Unknown route, see {ApiRouter.VersionPrefix} for the list");
+                    return;
+                }
+                if (TryServeRoute(ctx, PageRoutes, trimmed) || TryServeRoute(ctx, UnversionedApiRoutes, trimmed)) return;
+                if (TryServeApp(ctx, path)) return;
 
                 var relative = trimmed.TrimStart('/');
-                if (!string.IsNullOrEmpty(relative)) { ServeStaticFile(ctx, relative); return; }
+                if (!string.IsNullOrEmpty(relative)) { ServeWebFile(ctx, relative); return; }
 
                 ServeError(ctx, 404, "Not found");
             }

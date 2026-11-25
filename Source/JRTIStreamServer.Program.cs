@@ -65,28 +65,6 @@ namespace JustReadTheInstructions
             BroadcastEvent("program", ProgramJson());
         }
 
-        private void HandleProgram(HttpListenerContext ctx, string path)
-        {
-            var parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 1 && ctx.Request.HttpMethod == "GET")
-            {
-                ServeText(ctx, ProgramJson(), "application/json");
-                return;
-            }
-            if (parts.Length == 2 && parts[1] == "clear")
-            {
-                SetProgramLayout(null);
-                ServeText(ctx, ProgramJson(), "application/json");
-                return;
-            }
-            if (parts.Length == 3 && parts[1] == "take")
-            {
-                TakeProgram(ctx, Uri.UnescapeDataString(parts[2]).Trim());
-                return;
-            }
-            ServeError(ctx, 404, "Use GET /program, /program/take/<layout> or /program/clear");
-        }
-
         private void TakeProgram(HttpListenerContext ctx, string name)
         {
             if (!LayoutNamePattern.IsMatch(name) || !LayoutExists(name))
