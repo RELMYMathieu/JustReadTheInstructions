@@ -2,8 +2,13 @@ import { VIDEO_CODECS } from './config.js';
 
 const STORAGE_KEY = 'jrti.recorder.settings.v1';
 
+const HOST_NAMES = ['localhost', '127.0.0.1', '[::1]'];
+
+export const IS_HANDHELD = window.matchMedia('(pointer: coarse)').matches;
+
 const DEFAULTS = Object.freeze({
     codec: VIDEO_CODECS.H264,
+    saveToDevice: !HOST_NAMES.includes(location.hostname),
 });
 
 function isValidCodec(value) {
@@ -15,7 +20,10 @@ function load() {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return { ...DEFAULTS };
         const parsed = JSON.parse(raw);
-        return { codec: isValidCodec(parsed.codec) ? parsed.codec : DEFAULTS.codec };
+        return {
+            codec: isValidCodec(parsed.codec) ? parsed.codec : DEFAULTS.codec,
+            saveToDevice: typeof parsed.saveToDevice === 'boolean' ? parsed.saveToDevice : DEFAULTS.saveToDevice,
+        };
     } catch {
         return { ...DEFAULTS };
     }
@@ -48,6 +56,10 @@ export function getGameCodecs() {
 
 export function selectedGameCodec() {
     return gameCodecs.includes(cached.codec) ? cached.codec : DEFAULTS.codec;
+}
+
+export function savesRecordingsToDevice() {
+    return cached.saveToDevice;
 }
 
 export function isInGameRecordingAvailable() {

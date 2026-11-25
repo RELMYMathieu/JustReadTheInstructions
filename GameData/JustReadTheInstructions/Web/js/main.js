@@ -3,6 +3,7 @@ import { fetchCameras } from './api.js';
 import { CameraCard } from './camera-card.js';
 import { mountSettingsUI } from './settings-ui.js';
 import { mountRecordingsUI } from './recordings-ui.js';
+import { syncRecordingsAutoSave } from './recordings-autosave.js';
 import { enableDragOrder } from './drag-order.js';
 import { RecordingGroups } from './recording-groups.js';
 import { setInGameRecordingAvailable } from './recorder-settings.js';
@@ -185,6 +186,7 @@ function trackStatusLineHeight() {
 async function main() {
     mountSettingsUI();
     mountRecordingsUI();
+    syncRecordingsAutoSave();
     groups.mount(document.getElementById('groups-bar'));
     trackStatusLineHeight();
     await applySession();
