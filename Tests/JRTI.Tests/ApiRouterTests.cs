@@ -12,7 +12,15 @@ namespace JRTI.Tests
             Route(new ApiOperation("read", "GET", "/layouts/{layout}", "")),
             Route(new ApiOperation("save", "PUT", "/layouts/{layout}", "") { AlsoAccepts = new[] { "POST" } }),
             Route(new ApiOperation("record", "POST", "/camera/{id}/recording/{action}", "")),
+            Route(new ApiOperation("take", "POST", "/program/take/{layout}", "") { AlsoAccepts = new[] { "GET" }, Writes = true }),
         };
+
+        [Fact]
+        public void HeadNeverRunsAWrite()
+        {
+            Assert.Equal(ApiRouter.Outcome.Matched, ApiRouter.Resolve(Routes, "GET", "/program/take/Launch", out _, out _, out _));
+            Assert.Equal(ApiRouter.Outcome.WrongMethod, ApiRouter.Resolve(Routes, "HEAD", "/program/take/Launch", out _, out _, out _));
+        }
 
         private static ApiRoute Route(ApiOperation operation) => new ApiRoute(operation, (ctx, v) => { });
 

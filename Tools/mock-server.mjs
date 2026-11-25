@@ -1,6 +1,5 @@
 import http from 'node:http';
 import fs from 'node:fs';
-import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -24,7 +23,7 @@ const MOCK_KEY = process.env.MOCK_KEY?.trim().toUpperCase();
 const PREFLIGHT_MAX_AGE_S = 600;
 const MOCK_ALLOWED_HOSTS = (process.env.MOCK_ALLOWED_HOSTS ?? '').split(/[, ]+/).filter(Boolean).map((h) => h.toLowerCase());
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
-const TAILSCALE_SUFFIX = '.ts.net';
+const PRIVATE_NAME_SUFFIXES = ['.ts.net', '.local', '.lan', '.home', '.home.arpa', '.internal', '.localdomain'];
 const MOD_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'GameData', 'JustReadTheInstructions', 'JustReadTheInstructions.version'), 'utf8')).VERSION;
 const SETTING_RANGES = { brightness: [-1, 1], contrast: [0, 3], gamma: [0.1, 5], soundGain: [-24, 24] };
 
@@ -345,9 +344,8 @@ function isAllowedHost(hostHeader) {
     if (!hostHeader) return true;
     const name = hostName(hostHeader);
     if (!name) return false;
-    if (net.isIP(name) || isLoopbackName(name) || name.endsWith(TAILSCALE_SUFFIX)) return true;
-    const machine = os.hostname().toLowerCase();
-    return [...MOCK_ALLOWED_HOSTS, machine, `${machine}.local`].includes(name);
+    if (net.isIP(name) || isLoopbackName(name) || !name.includes('.') || PRIVATE_NAME_SUFFIXES.some((suffix) => name.endsWith(suffix))) return true;
+    return MOCK_ALLOWED_HOSTS.includes(name);
 }
 
 function isDirectFromThisComputer(req) {
@@ -380,7 +378,8 @@ function providedKey(req, url) {
 
 function insideRoot(root, rel) {
     const full = path.join(root, rel);
-    return full.startsWith(path.normalize(root)) ? full : null;
+    const base = path.normalize(root + path.sep);
+    return full === path.normalize(root) || full.startsWith(base) ? full : null;
 }
 
 function sendStatic(res, full) {

@@ -401,7 +401,7 @@ namespace JustReadTheInstructions
         {
             try
             {
-                if (!ApiAccess.IsAllowedHost(ctx.Request.UserHostName, Environment.MachineName, JRTISettings.AllowedHosts))
+                if (!ApiAccess.IsAllowedHost(ctx.Request.UserHostName, JRTISettings.AllowedHosts))
                 {
                     ServeError(ctx, 403, "This name is not allowed here. Use the computer's IP address, or add the name to AllowedHosts in PluginData/settings.cfg");
                     return;

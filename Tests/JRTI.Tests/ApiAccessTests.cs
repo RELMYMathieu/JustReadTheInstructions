@@ -41,6 +41,13 @@ namespace JRTI.Tests
             => Assert.Equal(matches, ApiAccess.KeyMatches(provided, "ABCDEFGHJ2"));
 
         [Theory]
+        [InlineData("", "")]
+        [InlineData("", null)]
+        [InlineData("anything", "")]
+        public void NothingMatchesAMissingKey(string provided, string expected)
+            => Assert.False(ApiAccess.KeyMatches(provided, expected));
+
+        [Theory]
         [InlineData("http://localhost:5173", true)]
         [InlineData("http://127.0.0.1:3000", true)]
         [InlineData("http://[::1]:3000", true)]
@@ -61,8 +68,14 @@ namespace JRTI.Tests
         [InlineData("gamepc:8080", true)]
         [InlineData("GamePC.local:8080", true)]
         [InlineData("gamepc.tail1234.ts.net", true)]
+        [InlineData("my-gaming-desktop-2024:8080", true)]
+        [InlineData("gamepc.lan:8080", true)]
+        [InlineData("gamepc.home.arpa", true)]
+        [InlineData("nas.internal", true)]
+        [InlineData("gamepc.localdomain", true)]
         [InlineData("cams.example.org:8080", true)]
-        [InlineData("other.lan", true)]
+        [InlineData("gamepc.fritz.box", false)]
+        [InlineData("evil.lan.example", false)]
         [InlineData("ts.net.evil.example", false)]
         [InlineData("evil.example:8080", false)]
         [InlineData("gamepc.evil.example:8080", false)]
@@ -70,7 +83,7 @@ namespace JRTI.Tests
         [InlineData("evil.example/@127.0.0.1", false)]
         [InlineData("user@127.0.0.1", false)]
         public void AllowsOnlyKnownHostNames(string host, bool allowed)
-            => Assert.Equal(allowed, ApiAccess.IsAllowedHost(host, "GAMEPC", "cams.example.org, other.lan"));
+            => Assert.Equal(allowed, ApiAccess.IsAllowedHost(host, "cams.example.org"));
 
         [Theory]
         [InlineData(true, "localhost:8080", null, true)]

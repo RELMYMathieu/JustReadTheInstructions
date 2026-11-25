@@ -31,7 +31,7 @@ namespace JustReadTheInstructions
         }
 
         public bool Allows(string method)
-            => Methods.Contains(method) || (method == "HEAD" && Methods.Contains("GET"));
+            => Methods.Contains(method) || (method == "HEAD" && Methods.Contains("GET") && !Operation.Writes);
 
         public RouteValues Match(string[] path)
         {

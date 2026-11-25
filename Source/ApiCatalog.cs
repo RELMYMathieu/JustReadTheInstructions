@@ -277,8 +277,6 @@ namespace JustReadTheInstructions
                 Response = ApiResponse.Json(Nullable(Ref("Recording")), "The recording, or null when none is running"),
             },
         };
-
-        public static ApiOperation Find(string id) => Operations.First(op => op.Id == id);
     }
 
     public static class OpenApiDocument
@@ -342,7 +340,7 @@ namespace JustReadTheInstructions
         }
     }
 
-        public static class Json
+    public static class Json
     {
         public static string Pretty(string json)
         {

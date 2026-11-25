@@ -9,7 +9,7 @@ namespace JustReadTheInstructions
         private const string KeyAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
         public const int KeyLength = 10;
         public const string BearerPrefix = "Bearer ";
-        private const string TailscaleSuffix = ".ts.net";
+        private static readonly string[] PrivateNameSuffixes = { ".ts.net", ".local", ".lan", ".home", ".home.arpa", ".internal", ".localdomain" };
         private static readonly char[] HostListSeparators = { ',', ' ' };
         private static readonly string[] ProxyHeaders = { "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP", "Forwarded" };
 
@@ -41,7 +41,7 @@ namespace JustReadTheInstructions
 
         public static bool KeyMatches(string provided, string expected)
         {
-            if (provided == null || expected == null) return false;
+            if (provided == null || !IsValidKey(expected)) return false;
             provided = provided.ToUpperInvariant();
             int difference = provided.Length ^ expected.Length;
             for (int i = 0; i < expected.Length; i++)
@@ -55,17 +55,18 @@ namespace JustReadTheInstructions
         public static bool IsLoopbackHost(string hostHeader)
             => TryParseHost(hostHeader, out var uri) && IsLoopback(uri);
 
-        public static bool IsAllowedHost(string hostHeader, string machineName, string allowedHosts)
+        public static bool IsAllowedHost(string hostHeader, string allowedHosts)
         {
             if (string.IsNullOrEmpty(hostHeader)) return true;
             if (!TryParseHost(hostHeader, out var uri)) return false;
-            if (uri.HostNameType != UriHostNameType.Dns || IsLoopback(uri)) return true;
-            if (uri.Host.EndsWith(TailscaleSuffix, StringComparison.OrdinalIgnoreCase)) return true;
+            if (uri.HostNameType != UriHostNameType.Dns || IsLoopback(uri) || IsPrivateName(uri.Host)) return true;
 
-            var names = (allowedHosts ?? "").Split(HostListSeparators, StringSplitOptions.RemoveEmptyEntries)
-                .Concat(new[] { machineName, machineName + ".local" });
-            return names.Any(name => string.Equals(name, uri.Host, StringComparison.OrdinalIgnoreCase));
+            return (allowedHosts ?? "").Split(HostListSeparators, StringSplitOptions.RemoveEmptyEntries)
+                .Any(name => string.Equals(name, uri.Host, StringComparison.OrdinalIgnoreCase));
         }
+
+        private static bool IsPrivateName(string host)
+            => host.IndexOf('.') < 0 || PrivateNameSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
 
         public static bool IsDirectFromThisComputer(bool connectionIsLocal, string hostHeader, Func<string, string> header)
             => connectionIsLocal && IsLoopbackHost(hostHeader) && ProxyHeaders.All(name => header(name) == null);

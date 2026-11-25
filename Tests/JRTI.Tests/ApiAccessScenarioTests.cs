@@ -9,7 +9,6 @@ namespace JRTI.Tests
     public class ApiAccessScenarioTests
     {
         private const string Key = "ABCDEFGHJ2";
-        private const string MachineName = "GAMEPC";
 
         private sealed class Request
         {
@@ -32,7 +31,7 @@ namespace JRTI.Tests
 
             public WriteVerdict Check(bool requireKey)
             {
-                Assert.True(IsAllowedHost(Host, MachineName, ""), $"{Host} should be an allowed name");
+                Assert.True(IsAllowedHost(Host, ""), $"{Host} should be an allowed name");
                 return CheckWrite(requireKey, Key, ConnectionIsLocal, Host, KeyQuery, name => Headers.TryGetValue(name, out var v) ? v : null);
             }
         }

@@ -478,8 +478,8 @@ namespace JustReadTheInstructions
 
             GUILayout.BeginHorizontal();
             GUILayout.Label($"Key: {JRTISettings.ControlKey}", _labelStyle);
-            var link = JRTIStreamServer.Instance?.LinkWithControlKey();
-            if (link != null && GUILayout.Button("Copy link", _buttonStyle)) GUIUtility.systemCopyBuffer = link;
+            if (GUILayout.Button("Copy link", _buttonStyle))
+                GUIUtility.systemCopyBuffer = JRTIStreamServer.Instance?.LinkWithControlKey() ?? GUIUtility.systemCopyBuffer;
             if (GUILayout.Button("New key", _buttonStyle))
             {
                 JRTISettings.ControlKey = ApiAccess.NewKey();

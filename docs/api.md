@@ -67,7 +67,7 @@ The API listens on your network like the web UI, with nothing to set up. To chec
 
 ### Control key
 
-Watching is always open. To stop other devices from changing anything, tick **Require a key to control from other devices** in the settings window (see [Settings](settings.md#stream-capture)). From then on, changing camera settings, recording, saving or deleting layouts and switching what is on air need the key, except on the KSP computer itself when the page is opened as `localhost` or `127.0.0.1`. Through its network address, or through a proxy such as `tailscale serve`, the KSP computer needs the key like any other device.
+Watching is always open. To stop other devices from changing anything, tick **Require a key to control from other devices** in the settings window (see [Settings](settings.md#stream-capture)). From then on, changing camera settings, recording, saving or deleting layouts and switching what is on air need the key, except on the KSP computer itself when the page is opened as `localhost`, `127.0.0.1` or `[::1]`. Through its network address, or through a proxy such as `tailscale serve`, the KSP computer needs the key like any other device.
 
 * In the web UI, open the link from **Copy link** once on each device, or type the key when the page asks. The browser remembers it.
 * In your own app, send it as `Authorization: Bearer <key>`, or add `?key=<key>` to the address (handy for Stream Deck buttons).
@@ -89,9 +89,9 @@ Without the key, one more thing is possible: in an old browser, a page from anot
 
 ### Opening it by name
 
-The game answers to `localhost`, to any IP address, to the computer's own name (`my-pc` or `my-pc.local`) and to Tailscale names (ending in `.ts.net`). Any other name gets `403`, so a website cannot point its own name at your computer to reach the feeds.
+The game answers to `localhost`, to any IP address, to names without a dot (such as the computer's own name, `my-pc`) and to names that only exist on a private network: ending in `.local`, `.lan`, `.home`, `.home.arpa`, `.internal`, `.localdomain` or Tailscale's `.ts.net`. Any other name gets `403`, so a website cannot point its own name at your computer to reach the feeds.
 
-To use another name, add it to `AllowedHosts` in `GameData/JustReadTheInstructions/PluginData/settings.cfg` and restart the game. Separate several names with commas:
+To use another name, for example one your router gives out such as `my-pc.fritz.box`, add it to `AllowedHosts` in `GameData/JustReadTheInstructions/PluginData/settings.cfg` and restart the game. Separate several names with commas:
 
 ```text
 AllowedHosts = cams.example.org

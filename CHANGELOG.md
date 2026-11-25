@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Web API (`/api/v1`) - This allows you to make your own apps, pages and overlays on the same JRTI feeds as the default proposed interface, with an optional control key for other devices if need be. Pages from other websites can no longer change anything, as a security measure. See the API page of the docs for more information
-- Your can now make your own pages and styles (`PluginData/Apps/`, `PluginData/Web/`)
+- Your own pages and styles (`PluginData/Apps/`, `PluginData/Web/`) - you can now make your own pages and styles, kept across updates
 
 ## v3.3.0 - 2026-11-11
 
