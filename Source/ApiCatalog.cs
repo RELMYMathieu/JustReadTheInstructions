@@ -45,6 +45,7 @@ namespace JustReadTheInstructions
         public string Method { get; }
         public string Template { get; }
         public string Summary { get; }
+        public string Description { get; set; }
         public string[] AlsoAccepts { get; set; } = new string[0];
         public bool Writes { get; set; }
         public bool VersionedOnly { get; set; }
@@ -108,8 +109,10 @@ namespace JustReadTheInstructions
                 new ApiField("name", String),
                 new ApiField("streaming", Boolean),
                 new ApiField("viewerCount", Integer),
-                new ApiField("snapshotUrl", String),
-                new ApiField("streamUrl", String),
+                new ApiField("snapshotUrl", String, description: "Latest JPEG frame"),
+                new ApiField("videoUrl", String, description: "MJPEG stream at render size"),
+                new ApiField("previewUrl", String, description: "MJPEG stream at preview size"),
+                new ApiField("streamUrl", String, description: "The viewer page for people, not the video: use videoUrl for the stream"),
                 new ApiField("mic", Mic),
                 new ApiField("canPan", Boolean),
                 new ApiField("track", Track),
@@ -162,6 +165,13 @@ namespace JustReadTheInstructions
             ["Program"] = Object(
                 new ApiField("layout", Nullable(String)),
                 new ApiField("version", Integer)),
+            ["StoppedRecording"] = Object(
+                new ApiField("file", String),
+                new ApiField("saved", Boolean, description: "False when discarded"),
+                new ApiField("framesWritten", Integer),
+                new ApiField("framesDropped", Integer)),
+            ["LayoutEvent"] = Object(
+                new ApiField("name", String, description: "The layout that was saved or deleted")),
             ["LayoutEntry"] = Object(
                 new ApiField("name", String),
                 new ApiField("updated", DateTime)),
@@ -192,7 +202,12 @@ namespace JustReadTheInstructions
                 Response = ApiResponse.Binary("multipart/x-mixed-replace", "JPEG frames"),
             },
             new ApiOperation("getEvents", "GET", "/events", "Server-Sent Events: program (the layout on air) and layout (a saved layout changed)")
-                { Response = ApiResponse.Binary("text/event-stream", "Events, with a ping comment every 15 seconds") },
+            {
+                Description = "Each message is either event: program, whose data is a Program, sent once on connect and on every change, " +
+                              "or event: layout, whose data is a LayoutEvent, sent when a saved layout is saved or deleted. " +
+                              "A comment line keeps the connection open every 15 seconds.",
+                Response = ApiResponse.Binary("text/event-stream", "Events"),
+            },
             new ApiOperation("getDebugStats", "GET", "/debug/stats", "Latest performance sample")
                 { Response = ApiResponse.Json(AnyObject) },
             new ApiOperation("getProgram", "GET", "/program", "The layout on air")
@@ -202,7 +217,11 @@ namespace JustReadTheInstructions
             new ApiOperation("clearProgram", "POST", "/program/clear", "Takes the program off air. Also answers GET, for links")
                 { AlsoAccepts = new[] { "GET" }, Writes = true, Response = ApiResponse.Json(Ref("Program")) },
             new ApiOperation("listLayouts", "GET", "/layouts", "Saved layouts")
-                { Response = ApiResponse.Json(ArrayOf(Ref("LayoutEntry"))) },
+            {
+                Description = "Sorted by name, ignoring case and comparing character codes, so the order is the same everywhere. " +
+                              "The web UI's Shift+1 to 9 take the layouts in this order.",
+                Response = ApiResponse.Json(ArrayOf(Ref("LayoutEntry"))),
+            },
             new ApiOperation("getLayout", "GET", "/layouts/{layout}", "One saved layout, as saved by the layout page")
                 { Path = new[] { LayoutName }, Response = ApiResponse.Json(AnyObject) },
             new ApiOperation("saveLayout", "PUT", "/layouts/{layout}", "Saves a layout: a JSON object of 64 KB at most. Also answers POST")
@@ -230,13 +249,32 @@ namespace JustReadTheInstructions
             new ApiOperation("getCameraSettings", "GET", "/camera/{id}/settings", "Image, sound, field of view and pan settings")
                 { Path = new[] { CameraId }, Response = ApiResponse.Json(Ref("CameraSettings")) },
             new ApiOperation("changeCameraSettings", "POST", "/camera/{id}/settings", "Changes any of the listed fields and leaves the others alone")
-                { Writes = true, Path = new[] { CameraId }, Body = Ref("CameraSettingsChange"), Response = ApiResponse.Empty(200, "Changed") },
-            new ApiOperation("controlRecording", "POST", "/camera/{id}/recording/{action}", "Starts, stops, discards, pauses or resumes the in-game recording")
             {
                 Writes = true,
-                Path = new[] { CameraId, new ApiParameter("action", Enum("start", "stop", "discard", "pause", "resume"), "What to do") },
+                Path = new[] { CameraId },
+                Body = Ref("CameraSettingsChange"),
+                Description = "Values out of range are clamped and unknown fields are ignored. A field of view change shows in the answer from the next frame on.",
+                Response = ApiResponse.Json(Ref("CameraSettings"), "The settings after the change"),
+            },
+            new ApiOperation("stopRecording", "POST", "/camera/{id}/recording/stop", "Stops and saves the in-game recording")
+            {
+                Writes = true,
+                Path = new[] { CameraId },
+                Description = "The file is finished a moment later and then appears in /recordings with its size.",
+                Response = ApiResponse.Json(Nullable(Ref("StoppedRecording")), "The stopped recording, or null when nothing was recording"),
+            },
+            new ApiOperation("discardRecording", "POST", "/camera/{id}/recording/discard", "Stops the in-game recording and deletes the file")
+            {
+                Writes = true,
+                Path = new[] { CameraId },
+                Response = ApiResponse.Json(Nullable(Ref("StoppedRecording")), "The discarded recording, or null when nothing was recording"),
+            },
+            new ApiOperation("controlRecording", "POST", "/camera/{id}/recording/{action}", "Starts, pauses or resumes the in-game recording")
+            {
+                Writes = true,
+                Path = new[] { CameraId, new ApiParameter("action", Enum("start", "pause", "resume"), "What to do") },
                 Query = new[] { new ApiParameter("codec", Codec, "Codec for start, h264 by default") },
-                Response = ApiResponse.Json(Nullable(Ref("Recording")), "The recording, or null once stopped"),
+                Response = ApiResponse.Json(Nullable(Ref("Recording")), "The recording, or null when none is running"),
             },
         };
 
@@ -265,6 +303,9 @@ namespace JustReadTheInstructions
             return Json.Pretty(json.ToString());
         }
 
+        private const string ReadForbidden = "The address used a name the game does not answer to (see AllowedHosts)";
+        private const string WriteForbidden = ReadForbidden + ", or the request came from a web page on another website";
+
         private static string OperationJson(ApiOperation op)
         {
             var parameters = op.Path.Select(p => ParameterJson(p, "path", true))
@@ -273,11 +314,12 @@ namespace JustReadTheInstructions
 
             var json = new StringBuilder($"{Quote(op.Method.ToLowerInvariant())}:{{");
             json.Append($"\"operationId\":{Quote(op.Id)},\"summary\":{Quote(op.Summary)}");
+            if (op.Description != null) json.Append($",\"description\":{Quote(op.Description)}");
             if (parameters.Count > 0) json.Append($",\"parameters\":[{string.Join(",", parameters)}]");
             if (op.Body != null) json.Append($",\"requestBody\":{{\"required\":true,\"content\":{{\"application/json\":{{\"schema\":{op.Body}}}}}}}");
             json.Append($",\"responses\":{{{ResponseJson(op.Response)}");
-            if (op.Writes)
-                json.Append(",\"401\":{\"description\":\"The control key is required and missing or wrong\"},\"403\":{\"description\":\"Sent by a web page from another site\"}");
+            if (op.Writes) json.Append(",\"401\":{\"description\":\"The control key is required and missing or wrong\"}");
+            json.Append($",\"403\":{{\"description\":{Quote(op.Writes ? WriteForbidden : ReadForbidden)}}}");
             json.Append('}');
             if (op.Writes) json.Append(",\"security\":[{},{\"controlKey\":[]}]");
             return json.Append('}').ToString();

@@ -111,7 +111,8 @@ namespace JustReadTheInstructions
                 int id = kv.Key;
                 string name = kv.Value.DisplayName ?? id.ToString();
                 sb.Append($"{{\"id\":{id},\"name\":\"{EscapeJson(name)}\",\"streaming\":true,\"viewerCount\":{kv.Value.MjpegClientCount},")
-                  .Append($"\"snapshotUrl\":\"/camera/{id}/snapshot\",\"streamUrl\":\"/viewer.html?id={id}\",\"mic\":\"{CameraMics.Id(kv.Value.Mic)}\",")
+                  .Append($"\"snapshotUrl\":\"{ApiRouter.VersionPrefix}/camera/{id}/snapshot\",\"videoUrl\":\"{ApiRouter.VersionPrefix}/camera/{id}/stream\",")
+                  .Append($"\"previewUrl\":\"{ApiRouter.VersionPrefix}/camera/{id}/preview\",\"streamUrl\":\"/viewer.html?id={id}\",\"mic\":\"{CameraMics.Id(kv.Value.Mic)}\",")
                   .Append($"\"canPan\":{(kv.Value.Aim.CanPan ? "true" : "false")},\"track\":\"{CameraTracks.Id(kv.Value.Aim.Track)}\",")
                   .Append($"\"recording\":{RecordingJson(kv.Value)}}}");
                 first = false;
@@ -289,8 +290,7 @@ namespace JustReadTheInstructions
                 state.Mastering = mastering;
             UpdateAim(body, state.Aim);
 
-            ctx.Response.StatusCode = 200;
-            ctx.Response.Close();
+            ServeCameraSettings(ctx, state);
         }
 
         private static void ServeCameraSettings(HttpListenerContext ctx, CameraStreamState state)

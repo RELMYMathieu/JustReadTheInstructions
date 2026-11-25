@@ -46,6 +46,8 @@ namespace JustReadTheInstructions
             ["getCameraStatus"] = ForCamera((ctx, id, state, _) => ServeText(ctx, "ok", "text/plain")),
             ["getCameraSettings"] = ForCamera((ctx, id, state, _) => ServeCameraSettings(ctx, state)),
             ["changeCameraSettings"] = ForCamera((ctx, id, state, _) => UpdateCameraSettings(ctx, state)),
+            ["stopRecording"] = ForCamera((ctx, id, state, _) => StopGameRecording(ctx, state, discard: false)),
+            ["discardRecording"] = ForCamera((ctx, id, state, _) => StopGameRecording(ctx, state, discard: true)),
             ["controlRecording"] = ForCamera((ctx, id, state, v) => HandleGameRecording(ctx, id, state, v["action"])),
         };
 

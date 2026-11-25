@@ -11,7 +11,7 @@ const START_TIMEOUT_MS = 60000;
 const REQUEST_TIMEOUT_MS = 5000;
 const UNKNOWN_ROUTE = 'Unknown route';
 
-const SAMPLES = { id: '10', layout: 'RouteCheck', file: 'route-check.mp4', action: 'stop' };
+const SAMPLES = { id: '10', layout: 'RouteCheck', file: 'route-check.mp4', action: 'pause' };
 const BODIES = { saveLayout: '{}', changeCameraSettings: '{}' };
 
 function startMock() {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -34,8 +35,8 @@ namespace JustReadTheInstructions
             {
                 if (Directory.Exists(LayoutsRoot))
                 {
-                    var files = Directory.GetFiles(LayoutsRoot, "*.json");
-                    Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                    var files = Directory.GetFiles(LayoutsRoot, "*.json")
+                        .OrderBy(Path.GetFileNameWithoutExtension, StringComparer.OrdinalIgnoreCase);
                     foreach (var file in files)
                     {
                         var updated = File.GetLastWriteTimeUtc(file).ToString("o", CultureInfo.InvariantCulture);

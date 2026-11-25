@@ -10,10 +10,10 @@ namespace JustReadTheInstructions
         public ApiSchema Schema { get; }
         public bool Required { get; }
 
-        public ApiField(string name, ApiSchema schema, bool required = true)
+        public ApiField(string name, ApiSchema schema, bool required = true, string description = null)
         {
             Name = name;
-            Schema = schema;
+            Schema = description == null ? schema : schema.WithDescription(description);
             Required = required;
         }
     }
@@ -30,6 +30,9 @@ namespace JustReadTheInstructions
         public static readonly ApiSchema Boolean = new ApiSchema("{\"type\":\"boolean\"}");
         public static readonly ApiSchema DateTime = new ApiSchema("{\"type\":\"string\",\"format\":\"date-time\"}");
         public static readonly ApiSchema AnyObject = new ApiSchema("{\"type\":\"object\",\"additionalProperties\":true}");
+
+        public ApiSchema WithDescription(string description)
+            => new ApiSchema($"{{\"description\":{Quote(description)},{_json.Substring(1)}");
 
         public static ApiSchema Ref(string component) => new ApiSchema($"{{\"$ref\":\"#/components/schemas/{component}\"}}");
 

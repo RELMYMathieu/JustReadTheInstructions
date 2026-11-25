@@ -32,7 +32,25 @@ The full description, with every request and response field, is an [OpenAPI 3.1 
 | Several feeds at once | One multipart stream | `GET /api/v1/streams?ids=10,11`, each part tagged with an `X-Camera-Id` header |
 | Sound | WAV stream | `GET /api/v1/camera/<id>/audio` |
 
-Errors come back with a standard HTTP status and a short plain-text message. A route called with the wrong method answers `405` with an `Allow` header listing the right ones.
+Each camera in `/cameras` carries its own addresses: `videoUrl` (the MJPEG stream), `previewUrl` (the same, smaller) and `snapshotUrl` (one JPEG). `streamUrl` is the viewer page meant for people, not the video.
+
+### Good to know
+
+* **Changing settings** answers with all the settings after the change. Values out of range are clamped (a brightness of 5 comes back as 1) and unknown fields are ignored, so read the answer to see what was applied. A field of view change shows from the next frame on.
+* **Stopping a recording** (`POST /api/v1/camera/<id>/recording/stop`, or `/discard` to delete it) answers with the file name and frame counts, or `null` when nothing was recording. The file is finished a moment later and then shows in `/recordings` with its size.
+* **Saved layouts** in `/layouts` are sorted by name, ignoring case. The web UI's `Shift` + `1` to `9` use this order, so a new layout can shift the numbers of the ones after it.
+* **Events** from `/events` come in two kinds: `program`, with what is on air (sent once when you connect and on every change), and `layout`, with the `name` of a layout that was saved or deleted. A comment line every 15 seconds keeps the connection open.
+
+### Errors
+
+Errors come back with a standard HTTP status and a short plain-text message:
+
+| Status | Means |
+| --- | --- |
+| `401` | A change needs the [control key](#control-key) and it is missing or wrong |
+| `403` | The address uses a name the game does not answer to (see [Opening it by name](#opening-it-by-name)), on any route. On changes, it can also mean the request came from a web page on another website |
+| `404` | Unknown route, camera or layout |
+| `405` | Wrong method: the `Allow` header lists the right ones |
 
 ## Versions
 

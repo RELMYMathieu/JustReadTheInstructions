@@ -46,6 +46,17 @@ namespace JRTI.Tests
             Assert.All(references, name => Assert.True(ApiCatalog.Components.ContainsKey(name), name));
         }
 
+        [Theory]
+        [InlineData("/camera/10/recording/stop", "stopRecording")]
+        [InlineData("/camera/10/recording/discard", "discardRecording")]
+        [InlineData("/camera/10/recording/start", "controlRecording")]
+        public void RecordingActionsReachTheirOwnRoute(string path, string expected)
+        {
+            var routes = ApiCatalog.Operations.Select(op => new ApiRoute(op, (ctx, v) => { }));
+            ApiRouter.Resolve(routes, "POST", path, out var route, out _, out _);
+            Assert.Equal(expected, route.Operation.Id);
+        }
+
         [Fact]
         public void PublishedOpenApiDocumentIsCurrent()
         {

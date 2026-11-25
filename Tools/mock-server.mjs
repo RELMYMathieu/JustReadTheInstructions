@@ -25,6 +25,8 @@ const PREFLIGHT_MAX_AGE_S = 600;
 const MOCK_ALLOWED_HOSTS = (process.env.MOCK_ALLOWED_HOSTS ?? '').split(/[, ]+/).filter(Boolean).map((h) => h.toLowerCase());
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded'];
 const TAILSCALE_SUFFIX = '.ts.net';
+const MOD_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'GameData', 'JustReadTheInstructions', 'JustReadTheInstructions.version'), 'utf8')).VERSION;
+const SETTING_RANGES = { brightness: [-1, 1], contrast: [0, 3], gamma: [0.1, 5], soundGain: [-24, 24] };
 
 const FEEDS = [
     [10, 'screenshot-3.png', 'crop=2320:1305:160:100'],
@@ -188,7 +190,7 @@ function recordingInfo(cam) {
 function cameraList() {
     return [...cameras.values()].filter((c) => c.online).map((c) => ({
         id: c.id, name: c.name, streaming: true, viewerCount: c.streamClients,
-        snapshotUrl: `/camera/${c.id}/snapshot`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, canPan: Boolean(c.pan), track: c.pan?.track ?? 'off', recording: recordingInfo(c),
+        snapshotUrl: `${API_PREFIX}/camera/${c.id}/snapshot`, videoUrl: `${API_PREFIX}/camera/${c.id}/stream`, previewUrl: `${API_PREFIX}/camera/${c.id}/preview`, streamUrl: `/viewer.html?id=${c.id}`, mic: c.settings.mic, canPan: Boolean(c.pan), track: c.pan?.track ?? 'off', recording: recordingInfo(c),
     }));
 }
 
@@ -315,7 +317,7 @@ function discovery() {
     const routes = operations().map(({ id, method, template, summary, writes }) => ({
         id, methods: [method], path: API_PREFIX + (template === '/' ? '' : template), summary, writes,
     }));
-    return { name: 'Just Read The Instructions', version: '2.5.1.1', api: 1, launchId, features: { inGameRecording: true, codecs: ['h264', 'av1'], controlKeyRequired: Boolean(MOCK_KEY) }, routes };
+    return { name: 'Just Read The Instructions', version: MOD_VERSION, api: 1, launchId, features: { inGameRecording: true, codecs: ['h264', 'av1'], controlKeyRequired: Boolean(MOCK_KEY) }, routes };
 }
 
 function isLocalhostOrigin(origin) {
@@ -387,6 +389,23 @@ function sendStatic(res, full) {
     fs.createReadStream(full).pipe(res);
 }
 
+function compareIgnoringCase(a, b) {
+    const left = a.toUpperCase();
+    const right = b.toUpperCase();
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function settingsJson(cam) {
+    return cam.pan ? { ...cam.settings, pan: panJson(cam.pan) } : cam.settings;
+}
+
+function applySettings(cam, changes) {
+    for (const [key, value] of Object.entries(changes)) {
+        const range = SETTING_RANGES[key];
+        cam.settings[key] = range && typeof value === 'number' ? clamp(value, range[0], range[1]) : value;
+    }
+}
+
 function listRecordings() {
     const active = new Set([...cameras.values()].filter((c) => c.recording).map((c) => c.recording.file));
     return fs.readdirSync(recordingsDir).filter((f) => /\.(mp4|webm|mkv)$/i.test(f)).map((file) => {
@@ -402,8 +421,10 @@ function gameRecording(res, cam, action, codec) {
         cam.recording = { file, startedAt: Date.now(), paused: false, codec };
         fs.writeFileSync(path.join(recordingsDir, file), Buffer.alloc(1024));
     } else if (action === 'stop' || action === 'discard') {
+        const stopped = cam.recording && { file: cam.recording.file, saved: action === 'stop', framesWritten: Math.floor((Date.now() - cam.recording.startedAt) / 33), framesDropped: 0 };
         if (cam.recording && action === 'discard') fs.rmSync(path.join(recordingsDir, cam.recording.file), { force: true });
         cam.recording = null;
+        return json(res, stopped ?? null);
     } else if (action === 'pause' && cam.recording && !cam.recording.paused) {
         Object.assign(cam.recording, { paused: true, pausedAt: Date.now() });
     } else if (action === 'resume' && cam.recording?.paused) {
@@ -461,7 +482,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (pathname === API_PREFIX) return json(res, discovery());
         if (versioned && p === '/openapi.json') return json(res, openApi());
-        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: '2.5.1.1', lanUrls: [`http://192.168.1.42:${PORT}/`], controlKeyRequired: Boolean(MOCK_KEY) });
+        if (p === '/session') return json(res, { launchId, inGameRecording: true, codecs: ['h264', 'av1'], version: MOD_VERSION, lanUrls: [`http://192.168.1.42:${PORT}/`], controlKeyRequired: Boolean(MOCK_KEY) });
         if (p === '/cameras') return json(res, cameraList());
         if (p === '/debug/stats') return json(res, sample());
         if (p === '/events') return events(req, res);
@@ -483,7 +504,7 @@ const server = http.createServer(async (req, res) => {
             return json(res, { online: cam?.online });
         }
         if (parts[0] === 'layouts') {
-            if (parts.length === 1) return json(res, [...layouts].map(([name, v]) => ({ name, updated: v.updated })).sort((a, b) => a.name.localeCompare(b.name)));
+            if (parts.length === 1) return json(res, [...layouts].map(([name, v]) => ({ name, updated: v.updated })).sort((a, b) => compareIgnoringCase(a.name, b.name)));
             const name = decodeURIComponent(parts[1]);
             if (!/^[\p{L}\p{N} _-]{1,64}$/u.test(name)) return text(res, 400, 'Invalid layout name');
             if (req.method === 'GET') {
@@ -531,10 +552,9 @@ const server = http.createServer(async (req, res) => {
                         const { panYaw, panPitch, panYawRate, panPitchRate, track, zoomRate, ...rest } = JSON.parse(await readBody(req));
                         applyPan(cam.pan, { panYaw, panPitch, panYawRate, panPitchRate, track });
                         if (zoomRate != null) Object.assign(cam, { zoomRate: clamp(zoomRate, -1, 1), zoomUntil: Date.now() + PAN_RATE_HOLD_MS });
-                        Object.assign(cam.settings, rest);
-                        res.writeHead(200); return res.end();
+                        applySettings(cam, rest);
                     }
-                    return json(res, cam.pan ? { ...cam.settings, pan: panJson(cam.pan) } : cam.settings);
+                    return json(res, settingsJson(cam));
                 case 'recording': return gameRecording(res, cam, parts[3], url.searchParams.get('codec'));
                 default: return text(res, 404, 'Unknown action');
             }

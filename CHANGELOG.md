@@ -11,17 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Web API (`/api/v1`) - every web UI route is also served under `/api/v1`, and `/api/v1` lists them all with the mod version and features, so other apps and pages can build on the same feeds. The old addresses keep working
-- OpenAPI document (`/api/v1/openapi.json`, docs site) - every route with its request and response fields, to generate clients in any language
-- Control key (Settings, Stream / Capture) - optional: other devices can still watch, but need the key to change settings, record or switch layouts. Copy link opens the web UI on another device with the key remembered
-- Your own pages (`PluginData/Apps/`) - a folder there opens at `/apps/<name>/`, served by the game and kept across updates
-- Web UI changes that survive updates (`PluginData/Web/`) - a file there replaces the shipped one of the same path
-
-### Changed
-
-- Web pages from other websites can no longer change camera settings, recordings or layouts. Pages served from localhost (development servers) can use the API from the browser
-- Allowed names (`AllowedHosts` in `PluginData/settings.cfg`) - the web UI only answers to localhost, IP addresses, the computer's name, Tailscale names and the names listed there, so a website cannot reach it under its own name
-- Control key - the KSP computer skips the key only when opened as localhost, not through its network address or a local proxy
+- Web API (`/api/v1`) - This allows you to make your own apps, pages and overlays on the same JRTI feeds as the default proposed interface, with an optional control key for other devices if need be. Pages from other websites can no longer change anything, as a security measure. See the API page of the docs for more information
+- Your can now make your own pages and styles (`PluginData/Apps/`, `PluginData/Web/`)
 
 ## v3.3.0 - 2026-11-11
 
