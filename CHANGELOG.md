@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
-## Unreleased
+## v3.3.0.1 - 2026-11-26
 
 ### Added
 
@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Atmosphere seen from orbit (Scatterer) - feeds no longer cut the atmosphere off along a line that follows where the main view looks, at least from what my testing has shown... Answers issue [#39](https://github.com/RELMYMathieu/JustReadTheInstructions/issues/39)
+
 
 ## v3.3.0 - 2026-11-11
 
