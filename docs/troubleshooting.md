@@ -29,6 +29,14 @@ JRTI found no working video encoder. Open its settings window in the game (`Ctrl
 * Lower Max FPS or the render size in the [settings window](settings.md#stream-capture). Each camera render costs about as much as the game's own view.
 * Keep **Spread camera renders across frames** on, so cameras take turns instead of rendering together.
 
+## Re-entry plasma turns huge with Firefly
+
+With Firefly and Deferred installed, re-entry plasma could suddenly turn into a huge trail across the sky and drop the game below 1 FPS, usually around 64 km, when camera feeds were open on parts with built-in cameras, like SEP's onboards. Deferred puts a small invisible helper object under each camera, and when that camera sits inside a part, Firefly counted it as part of your vessel and thought the vessel was absurdly large.
+
+JRTI now works around this for its own feeds. To note, this is temporary until Firefly merges my fix ([issue](https://github.com/M1rageDev/Firefly/issues/57), [pull request](https://github.com/M1rageDev/Firefly/pull/58)).
+
+The issue can still happen without JRTI's feeds, if you switch your main view to one of those built-in cameras (like SEP's onboards) while re-entering, since that is the game's own camera and not JRTI's. If it happens, quicksave and reload. It goes away until something makes Firefly rebuild its effects, like staging.
+
 ## Known issues
 
 * **macOS is not fully supported.** A GPU async API used internally by this Unity version is unavailable on macOS, a legacy quirk inherited from KSP's Unity build. Streaming works through a synchronous readback that may stutter at higher framerates.
