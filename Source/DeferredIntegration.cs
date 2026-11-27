@@ -11,6 +11,7 @@ namespace JustReadTheInstructions
         private static bool? _isAvailable;
         private static Type _forwardRenderingCompatibilityType;
         private static MethodInfo _initMethod;
+        private static FieldInfo _dummyObjectField;
 
         public static bool IsAvailable
         {
@@ -50,6 +51,9 @@ namespace JustReadTheInstructions
                         return false;
                     }
 
+                    _dummyObjectField = _forwardRenderingCompatibilityType.GetField("go",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+
                     _isAvailable = true;
                     Debug.Log("[JRTI-Deferred]: Integration enabled");
                     return true;
@@ -84,6 +88,7 @@ namespace JustReadTheInstructions
                 if (component != null && _initMethod != null)
                 {
                     _initMethod.Invoke(component, new object[] { renderQueue });
+                    DetachDummyObject(component, camera);
                     Debug.Log($"[JRTI-Deferred]: Applied deferred rendering to {camera.name} (queue: {renderQueue})");
                 }
             }
@@ -100,6 +105,16 @@ namespace JustReadTheInstructions
                 }
                 catch { }
             }
+        }
+
+        // TEMP: until Firefly merges https://github.com/M1rageDev/Firefly/pull/58
+        private static void DetachDummyObject(Component component, Camera camera)
+        {
+            if (!(_dummyObjectField?.GetValue(component) is GameObject dummy))
+                return;
+
+            dummy.transform.SetParent(null, true);
+            dummy.AddComponent<CameraFollower>().Follow(camera);
         }
 
         public static void RemoveFromCamera(Camera camera)
@@ -144,6 +159,28 @@ namespace JustReadTheInstructions
             }
 
             return info;
+        }
+    }
+
+    internal sealed class CameraFollower : MonoBehaviour
+    {
+        private Camera _camera;
+
+        public void Follow(Camera camera)
+        {
+            _camera = camera;
+            Camera.onPreCull += MoveToCamera;
+        }
+
+        private void MoveToCamera(Camera camera)
+        {
+            if (camera == _camera)
+                transform.position = camera.transform.position;
+        }
+
+        private void OnDestroy()
+        {
+            Camera.onPreCull -= MoveToCamera;
         }
     }
 }

@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web API (`/api/v1`) - This allows you to make your own apps, pages and overlays on the same JRTI feeds as the default proposed interface, with an optional control key for other devices if need be. Pages from other websites can no longer change anything, as a security measure. See the API page of the docs for more information
 - Your own pages and styles (`PluginData/Apps/`, `PluginData/Web/`) - you can now make your own pages and styles, kept across updates
 
+### Fixed
+
+- Firefly re-entry (Visual Mod Integrations) - with Deferred installed, re-entry plasma no longer turns huge and drops the game below 1 FPS when feeds are open on parts with built-in cameras, like SEP's onboards. This is a workaround until Firefly merges my proper fix (https://github.com/M1rageDev/Firefly/pull/58), see Troubleshooting
+
 ## v3.3.0 - 2026-11-11
 
 ### Added
