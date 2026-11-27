@@ -23,9 +23,13 @@ namespace JustReadTheInstructions
             "mainScaledCamera",
         };
 
+        internal static Camera MainScaledCamera => _initialized ? _mainScaledCamera : null;
+        internal static Assembly ScattererAssembly => _scattererAssembly;
+
         void Awake()
         {
             _camera = GetComponent<Camera>();
+            gameObject.AddComponent<ScattererAtmosphereBinding>();
         }
 
         void OnEnable()
@@ -124,12 +128,8 @@ namespace JustReadTheInstructions
 
             _scaledCameraField.SetValue(_scattererInstance, _camera);
             _camera.depthTextureMode |= _mainScaledCamera.depthTextureMode & DepthTextureMode.Depth;
-        }
-
-        void OnPreRender()
-        {
-            if (_initialized)
-                ScattererScaledAtmosphere.Bind(_camera, _mainScaledCamera, _scattererAssembly);
+            ScattererScaledAtmosphere.EnableScreenCopy(_camera);
+            ScattererScaledAtmosphere.AttachToReflectionProbe();
         }
 
         void OnPostRender()
@@ -137,11 +137,8 @@ namespace JustReadTheInstructions
             if (!_initialized || !IsAlive(_scattererInstance) || _scaledCameraField == null)
                 return;
 
-            if (_mainScaledCamera == null)
-                return;
-
-            _scaledCameraField.SetValue(_scattererInstance, _mainScaledCamera);
-            ScattererScaledAtmosphere.Bind(_mainScaledCamera, _mainScaledCamera, _scattererAssembly);
+            if (_mainScaledCamera != null)
+                _scaledCameraField.SetValue(_scattererInstance, _mainScaledCamera);
         }
     }
 }

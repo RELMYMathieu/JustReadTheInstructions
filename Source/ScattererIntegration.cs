@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace JustReadTheInstructions
 {
@@ -167,7 +168,19 @@ namespace JustReadTheInstructions
                 return "Scatterer not available\n";
 
             return $"Scatterer for {camera.name}:\n" +
-                   $"- allowMSAA: {camera.allowMSAA}\n";
+                   $"- allowMSAA: {camera.allowMSAA}, allowHDR: {camera.allowHDR}\n" +
+                   $"- depthTextureMode: {camera.depthTextureMode}, path: {camera.actualRenderingPath}, clear: {camera.clearFlags}, mask: {camera.cullingMask}\n" +
+                   $"- command buffers: {DescribeCommandBuffers(camera)}\n" +
+                   $"- components: {string.Join(", ", camera.GetComponents<Component>().Select(c => c.GetType().Name))}\n" +
+                   ScattererScaledAtmosphere.DescribeQuadVisibility(camera);
+        }
+
+        private static string DescribeCommandBuffers(Camera camera)
+        {
+            var buffers = ((CameraEvent[])Enum.GetValues(typeof(CameraEvent)))
+                .SelectMany(e => camera.GetCommandBuffers(e).Select(b => $"{e}:{b.name}"))
+                .ToArray();
+            return buffers.Length == 0 ? "none" : string.Join(", ", buffers);
         }
     }
 }

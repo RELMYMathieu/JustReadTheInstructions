@@ -1,5 +1,6 @@
 using KSP.UI.Screens;
 using System.Globalization;
+using System.Linq;
 using UnityEngine;
 
 namespace JustReadTheInstructions
@@ -572,6 +573,19 @@ namespace JustReadTheInstructions
             if (ParallaxIntegration.IsAvailable)
                 Debug.Log($"[JRTI-Diag]: Parallax scatters active: {ParallaxIntegration.HasActiveScatters()}");
             Debug.Log($"[JRTI-Diag]: Open cameras: {HullCameraManager.Instance?.GetOpenCameraCount() ?? 0}");
+            Debug.Log($"[JRTI-Diag]: {EVEIntegration.GetLightDiagnosticInfo()}");
+            var mainNear = CameraLookup.FindActive("Camera 00");
+            if (mainNear != null)
+                Debug.Log($"[JRTI-Diag]: Main near camera\n{EVEIntegration.GetDiagnosticInfo(mainNear)}\n{ScattererIntegration.GetDiagnosticInfo(mainNear)}");
+            if (ScattererIntegration.IsAvailable)
+            {
+                var mainScaled = ScattererScaledCameraSwap.MainScaledCamera;
+                if (mainScaled != null)
+                    Debug.Log($"[JRTI-Diag]: Main scaled camera\n{ScattererIntegration.GetDiagnosticInfo(mainScaled)}");
+                Debug.Log($"[JRTI-Diag]: {ScattererScaledAtmosphere.GetDiagnosticInfo()}");
+            }
+            foreach (var info in HullCameraManager.Instance?.GetCameraDiagnostics() ?? Enumerable.Empty<string>())
+                Debug.Log($"[JRTI-Diag]: {info}");
             Debug.Log("[JRTI-Diag]: =======================");
         }
 
