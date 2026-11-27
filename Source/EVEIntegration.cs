@@ -304,20 +304,6 @@ namespace JustReadTheInstructions
                 UnityEngine.Object.Destroy(component);
         }
 
-        public static string GetLightDiagnosticInfo()
-        {
-            var info = "Light command buffers:\n";
-            foreach (var light in UnityEngine.Object.FindObjectsOfType<Light>())
-            {
-                var buffers = ((LightEvent[])Enum.GetValues(typeof(LightEvent)))
-                    .SelectMany(e => light.GetCommandBuffers(e).Select(b => $"{e}:{b.name}"))
-                    .ToArray();
-                if (buffers.Length > 0)
-                    info += $"- {light.name}: {string.Join(", ", buffers)}\n";
-            }
-            return info;
-        }
-
         public static string GetDiagnosticInfo(Camera camera)
         {
             if (!IsAvailable || camera == null)

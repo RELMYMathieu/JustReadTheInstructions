@@ -424,8 +424,6 @@ namespace JustReadTheInstructions
 
         public int GetOpenCameraCount() => _renderers.Count;
 
-        public IEnumerable<string> GetCameraDiagnostics() => _renderers.Values.Select(r => r.GetDiagnosticInfo());
-
         public bool HasWindow(int stableId) => _windows.ContainsKey(stableId);
 
         public bool TryGetListener(int stableId, out Transform view, out Vessel vessel)

@@ -127,7 +127,6 @@ namespace JustReadTheInstructions
                 return;
 
             _scaledCameraField.SetValue(_scattererInstance, _camera);
-            _camera.depthTextureMode |= _mainScaledCamera.depthTextureMode & DepthTextureMode.Depth;
             ScattererScaledAtmosphere.EnableScreenCopy(_camera);
             ScattererScaledAtmosphere.AttachToReflectionProbe();
         }

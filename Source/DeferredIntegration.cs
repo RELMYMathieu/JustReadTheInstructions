@@ -8,8 +8,11 @@ namespace JustReadTheInstructions
 {
     public static class DeferredIntegration
     {
+        private const int LocalCameraQueue = 15;
+
         private static bool? _isAvailable;
         private static Type _forwardRenderingCompatibilityType;
+        private static Type _pqsFadeType;
         private static MethodInfo _initMethod;
 
         public static bool IsAvailable
@@ -32,6 +35,7 @@ namespace JustReadTheInstructions
                     }
 
                     _forwardRenderingCompatibilityType = deferredAssembly.GetType("Deferred.ForwardRenderingCompatibility");
+                    _pqsFadeType = deferredAssembly.GetType("Deferred.DeferredPQSFade");
 
                     if (_forwardRenderingCompatibilityType == null)
                     {
@@ -63,7 +67,7 @@ namespace JustReadTheInstructions
             }
         }
 
-        public static void ApplyToCamera(Camera camera, int renderQueue = 15)
+        public static void ApplyToCamera(Camera camera, int renderQueue = LocalCameraQueue)
         {
             if (!IsAvailable || camera == null)
                 return;
@@ -71,6 +75,9 @@ namespace JustReadTheInstructions
             try
             {
                 camera.renderingPath = RenderingPath.DeferredShading;
+
+                if (renderQueue == LocalCameraQueue)
+                    AddPQSFade(camera);
 
                 var existingComponent = camera.gameObject.GetComponent(_forwardRenderingCompatibilityType);
                 if (existingComponent != null)
@@ -102,6 +109,15 @@ namespace JustReadTheInstructions
             }
         }
 
+        private static void AddPQSFade(Camera camera)
+        {
+            if (_pqsFadeType == null || camera.gameObject.GetComponent(_pqsFadeType) != null)
+                return;
+
+            camera.gameObject.AddComponent(_pqsFadeType);
+            Debug.Log($"[JRTI-Deferred]: Added PQS fade to {camera.name}");
+        }
+
         public static void RemoveFromCamera(Camera camera)
         {
             if (camera == null)
@@ -110,6 +126,13 @@ namespace JustReadTheInstructions
             try
             {
                 camera.renderingPath = RenderingPath.Forward;
+
+                if (_pqsFadeType != null)
+                {
+                    var fade = camera.gameObject.GetComponent(_pqsFadeType);
+                    if (fade != null)
+                        UnityEngine.Object.Destroy(fade);
+                }
 
                 if (_forwardRenderingCompatibilityType != null)
                 {
@@ -142,6 +165,9 @@ namespace JustReadTheInstructions
                     ? "- ForwardRenderingCompatibility: Present\n"
                     : "- ForwardRenderingCompatibility: Missing\n";
             }
+
+            if (_pqsFadeType != null)
+                info += $"- DeferredPQSFade: {(camera.GetComponent(_pqsFadeType) != null ? "Present" : "Missing")}\n";
 
             return info;
         }
