@@ -7,11 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
-## Unreleased
+## v3.3.0.2 - 2026-11-27
 
 ### Fixed
 
 - Fix the timing at which the JRTI cameras copy depth buffer to avoid lighting artifacts.
+
 
 ## v3.3.0.1 - 2026-11-26
 
