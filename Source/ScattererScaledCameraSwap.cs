@@ -123,6 +123,7 @@ namespace JustReadTheInstructions
                 return;
 
             _scaledCameraField.SetValue(_scattererInstance, _camera);
+            _camera.depthTextureMode |= _mainScaledCamera.depthTextureMode & DepthTextureMode.Depth;
         }
 
         void OnPreRender()
@@ -136,8 +137,11 @@ namespace JustReadTheInstructions
             if (!_initialized || !IsAlive(_scattererInstance) || _scaledCameraField == null)
                 return;
 
-            if (_mainScaledCamera != null)
-                _scaledCameraField.SetValue(_scattererInstance, _mainScaledCamera);
+            if (_mainScaledCamera == null)
+                return;
+
+            _scaledCameraField.SetValue(_scattererInstance, _mainScaledCamera);
+            ScattererScaledAtmosphere.Bind(_mainScaledCamera, _mainScaledCamera, _scattererAssembly);
         }
     }
 }

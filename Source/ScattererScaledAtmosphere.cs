@@ -18,15 +18,15 @@ namespace JustReadTheInstructions
         private static readonly int CurrentVpId = Shader.PropertyToID("currentVP");
         private static readonly object[] BoundsArgs = new object[5];
 
-        public static void Bind(Camera feedCamera, Camera mainScaledCamera, Assembly scatterer)
+        public static void Bind(Camera viewer, Camera mainScaledCamera, Assembly scatterer)
         {
-            if (feedCamera == null || mainScaledCamera == null || !Resolve(scatterer))
+            if (viewer == null || mainScaledCamera == null || !Resolve(scatterer))
                 return;
 
             try
             {
                 foreach (var skyNode in mainScaledCamera.GetComponents(_skyNodeType))
-                    BindSkyNode(skyNode, feedCamera);
+                    BindSkyNode(skyNode, viewer);
             }
             catch (Exception ex)
             {
