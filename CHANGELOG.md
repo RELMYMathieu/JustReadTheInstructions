@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
-## Unreleased
+## v3.4.0 - 2026-11-27
 
 ### Added
 
@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Firefly re-entry (Visual Mod Integrations) - with Deferred installed, re-entry plasma no longer turns huge and drops the game below 1 FPS when feeds are open on parts with built-in cameras, like SEP's onboards. This is a workaround until Firefly merges my proper fix (https://github.com/M1rageDev/Firefly/pull/58), see Troubleshooting
 - Planet from orbit (Scatterer, Deferred) - camera feeds keep the atmosphere over the planet after loading a save in orbit, instead of showing improperly drawn atmosphere
 - Hull lighting in orbit (Scatterer) - shiny hulls on camera feeds are no longer lit from where the main camera is looking
+
 
 ## v3.3.0.2 - 2026-11-27
 
