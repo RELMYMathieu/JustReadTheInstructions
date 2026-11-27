@@ -16,6 +16,22 @@ Example: `Booster_Cam__cam10__2026-09-25_210455.mp4` is the camera named "Booste
 
 The **Recordings** button at the top of the page lists every recording, newest first. **Play** opens one in a new tab and **Download** saves a copy to the device you are using, so you can open the web UI from another machine and copy a recording to it.
 
+## Saving recordings on another computer
+
+When you open the web UI on another computer, for example the one you stream or edit on, each recording is downloaded to that computer's Downloads folder when it stops. The recording stays on the KSP computer too.
+
+This is on by default on every device except the KSP computer itself (the web UI opened as `localhost`). To turn it off on a device, open **Settings** there and set **Finished recordings** to **Keep on the KSP computer only**. The choice is remembered per browser.
+
+* Keep the page open: only recordings that finish while it is open are downloaded.
+* The first time, the browser may ask to allow the page to download several files. Allow it.
+* With several tabs open in the same browser, only one of them downloads each recording.
+
+!!! warning "On a phone or tablet"
+    This is on there too, and each recording can be several GB, downloaded over your Wi-Fi or mobile data. Each download shows a message with **Turn off**, and **Settings** warns about it while it is on.
+
+!!! note
+    Recording on another computer does not make the game faster. To record or stream a camera, KSP has to draw it, and drawing it is what costs performance. Encoding the video is a small part of it. Fewer cameras, a lower resolution or a lower Max FPS help more.
+
 ## What a recording is
 
 Every recording is an MP4 at the camera's render resolution, at a constant frame rate (Max FPS), with a keyframe every 2 seconds and a bitrate of 0.2 bits per pixel per frame (about 12 Mbps at 1080p 30 FPS).

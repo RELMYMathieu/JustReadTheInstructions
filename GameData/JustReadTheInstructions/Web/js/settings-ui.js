@@ -1,10 +1,16 @@
 import { VIDEO_CODECS } from './config.js';
-import { updateSettings, isInGameRecordingAvailable, getGameCodecs, selectedGameCodec } from './recorder-settings.js';
+import { IS_HANDHELD, updateSettings, isInGameRecordingAvailable, getGameCodecs, selectedGameCodec, savesRecordingsToDevice } from './recorder-settings.js';
+import { syncRecordingsAutoSave } from './recordings-autosave.js';
 import { Sheet } from './ui.js';
 
 const CODEC_LABELS = {
     [VIDEO_CODECS.H264]: 'H.264 (default, plays everywhere)',
     [VIDEO_CODECS.AV1]: 'AV1 (advanced, limited support)',
+};
+
+const SAVE_LABELS = {
+    keep: 'Keep on the KSP computer only',
+    device: 'Also save them to this device',
 };
 
 const CODEC_WARNING =
@@ -29,6 +35,8 @@ function availableCodecLabels() {
 function render(controls) {
     const codec = selectedGameCodec();
     renderOptions(controls.codec, availableCodecLabels(), codec);
+    renderOptions(controls.save, SAVE_LABELS, savesRecordingsToDevice() ? 'device' : 'keep');
+    document.getElementById('settings-save-warning').hidden = !(IS_HANDHELD && savesRecordingsToDevice());
     document.getElementById('settings-codec-row').hidden = !isInGameRecordingAvailable();
     document.getElementById('settings-unavailable').hidden = isInGameRecordingAvailable();
     document.getElementById('settings-codec-warning').hidden = codec === VIDEO_CODECS.H264;
@@ -39,6 +47,7 @@ export function mountSettingsUI() {
     const sheetEl = document.getElementById('settings-sheet');
     const controls = {
         codec: document.getElementById('settings-codec'),
+        save: document.getElementById('settings-save'),
     };
 
     if (!openBtn || !sheetEl || Object.values(controls).some((el) => !el)) return;
@@ -55,6 +64,12 @@ export function mountSettingsUI() {
             return;
         }
         updateSettings({ codec });
+        render(controls);
+    });
+
+    controls.save.addEventListener('change', () => {
+        updateSettings({ saveToDevice: controls.save.value === 'device' });
+        syncRecordingsAutoSave();
         render(controls);
     });
 }
