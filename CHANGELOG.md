@@ -11,13 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Web API (`/api/v1`) - This allows you to make your own apps, pages and overlays on the same JRTI feeds as the default proposed interface, with an optional control key for other devices if need be. Pages from other websites can no longer change anything, as a security measure. See the API page of the docs for more information
-- Your own pages and styles (`PluginData/Apps/`, `PluginData/Web/`) - you can now make your own pages and styles, kept across updates
 - Save recordings to this device (Settings, Finished recordings) - the web UI downloads each recording when it stops, so recordings land on the computer watching the feeds as well as the KSP one. On by default on every device except the KSP computer
 
 ### Fixed
 
 - Firefly re-entry (Visual Mod Integrations) - with Deferred installed, re-entry plasma no longer turns huge and drops the game below 1 FPS when feeds are open on parts with built-in cameras, like SEP's onboards. This is a workaround until Firefly merges my proper fix (https://github.com/M1rageDev/Firefly/pull/58), see Troubleshooting
+- Planet from orbit (Scatterer, Deferred) - camera feeds keep the atmosphere over the planet after loading a save in orbit, instead of showing improperly drawn atmosphere
+- Hull lighting in orbit (Scatterer) - shiny hulls on camera feeds are no longer lit from where the main camera is looking
+
+## v3.3.0.2 - 2026-11-27
+
+### Fixed
+
+- Fix the timing at which the JRTI cameras copy depth buffer to avoid lighting artifacts.
+
+
+## v3.3.0.1 - 2026-11-26
+
+### Added
+
+- Web API (`/api/v1`) - This allows you to make your own apps, pages and overlays on the same JRTI feeds as the default proposed interface, with an optional control key for other devices if need be. Pages from other websites can no longer change anything, as a security measure. See the API page of the docs for more information
+- Your own pages and styles (`PluginData/Apps/`, `PluginData/Web/`) - you can now make your own pages and styles, kept across updates
+
+### Fixed
+
+- Atmosphere seen from orbit (Scatterer) - feeds no longer cut the atmosphere off along a line that follows where the main view looks, at least from what my testing has shown... Answers issue [#39](https://github.com/RELMYMathieu/JustReadTheInstructions/issues/39)
+
 
 ## v3.3.0 - 2026-11-11
 

@@ -13,6 +13,7 @@ namespace JustReadTheInstructions
         private static object _scattererInstance;
         private static FieldInfo _scaledCameraField;
         private static Camera _mainScaledCamera;
+        private static Assembly _scattererAssembly;
 
         private static readonly string[] _candidateFieldNames =
         {
@@ -22,9 +23,13 @@ namespace JustReadTheInstructions
             "mainScaledCamera",
         };
 
+        internal static Camera MainScaledCamera => _initialized ? _mainScaledCamera : null;
+        internal static Assembly ScattererAssembly => _scattererAssembly;
+
         void Awake()
         {
             _camera = GetComponent<Camera>();
+            gameObject.AddComponent<ScattererAtmosphereBinding>();
         }
 
         void OnEnable()
@@ -51,6 +56,7 @@ namespace JustReadTheInstructions
                 if (assembly == null)
                     return false;
 
+                _scattererAssembly = assembly;
                 var scattererType = assembly.GetType("Scatterer.Scatterer");
                 if (scattererType == null)
                 {
@@ -121,6 +127,8 @@ namespace JustReadTheInstructions
                 return;
 
             _scaledCameraField.SetValue(_scattererInstance, _camera);
+            ScattererScaledAtmosphere.EnableScreenCopy(_camera);
+            ScattererScaledAtmosphere.AttachToReflectionProbe();
         }
 
         void OnPostRender()
