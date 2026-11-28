@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Versioning note:** versions use the four-part `MAJOR.MINOR.PATCH.BUILD` form that KSP/Unity DLLs expect. The first three parts follow SemVer; the fourth part (`BUILD`) is repurposed here to mark pre-release / beta iterations of an upcoming version.
 
+## Unreleased
+
+### Fixed
+
+- Sunflare (Scatterer) - camera feeds show the sun flare again after loading into flight, and it no longer disappears when the main camera looks away from the sun
+
+
 ## v3.4.0 - 2026-11-27
 
 ### Added

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -7,8 +8,13 @@ namespace JustReadTheInstructions
 {
     public static class ScattererIntegration
     {
+        private const string MainDepthFlagField = "useDbufferOnCamera";
+
         private static bool? _isAvailable;
-        private static Type[] _scattererMonoBehaviourTypes;
+        private static Type[] _hookTypes;
+        private static readonly Dictionary<int, int> _hookSources = new Dictionary<int, int>();
+        private static readonly List<Component> _sourceHooks = new List<Component>();
+        private static readonly List<Component> _targetHooks = new List<Component>();
 
         private static readonly string[] _hookTypeNames =
         {
@@ -43,8 +49,8 @@ namespace JustReadTheInstructions
                         return false;
                     }
 
-                    _scattererMonoBehaviourTypes = loaded.assembly.GetTypes()
-                        .Where(t => !t.IsAbstract && typeof(MonoBehaviour).IsAssignableFrom(t))
+                    _hookTypes = loaded.assembly.GetTypes()
+                        .Where(t => !t.IsAbstract && typeof(MonoBehaviour).IsAssignableFrom(t) && IsClonableHook(t))
                         .ToArray();
 
                     _isAvailable = true;
@@ -73,7 +79,7 @@ namespace JustReadTheInstructions
                 return;
             }
 
-            CopyCameraRenderingHooks(mainCam, camera);
+            SyncHooks(mainCam, camera);
         }
 
         public static void ApplyToScaledCamera(Camera camera)
@@ -87,55 +93,74 @@ namespace JustReadTheInstructions
                 return;
             }
 
-            CopyCameraRenderingHooks(scaledCam, camera);
+            SyncHooks(scaledCam, camera);
         }
 
         public static void RemoveFromCamera(Camera camera)
         {
-            if (!IsAvailable || camera == null || _scattererMonoBehaviourTypes == null)
+            if (!IsAvailable || camera == null || _hookTypes == null)
                 return;
 
-            foreach (var hookType in _scattererMonoBehaviourTypes)
+            foreach (var hookType in _hookTypes)
             {
-                if (!IsClonableHook(hookType))
-                    continue;
-
-                var hook = camera.gameObject.GetComponent(hookType);
-                if (hook != null)
+                camera.GetComponents(hookType, _targetHooks);
+                foreach (var hook in _targetHooks)
+                {
+                    _hookSources.Remove(hook.GetInstanceID());
                     UnityEngine.Object.Destroy(hook);
+                }
             }
         }
 
-        private static void CopyCameraRenderingHooks(Camera source, Camera target)
+        public static void SyncHooks(Camera source, Camera target)
         {
-            if (_scattererMonoBehaviourTypes == null)
+            if (!JRTISettings.EnableScatterer || _hookTypes == null || source == null || target == null)
                 return;
 
-            foreach (var hookType in _scattererMonoBehaviourTypes)
+            foreach (var hookType in _hookTypes)
             {
-                if (!IsClonableHook(hookType))
-                    continue;
+                source.GetComponents(hookType, _sourceHooks);
+                target.GetComponents(hookType, _targetHooks);
 
-                if (target.gameObject.GetComponent(hookType) != null)
-                    continue;
-
-                var sourceHook = source.gameObject.GetComponent(hookType);
-                if (sourceHook == null)
-                    continue;
-
-                try
+                for (int i = 0; i < _sourceHooks.Count; i++)
                 {
-                    var newHook = target.gameObject.AddComponent(hookType);
-                    if (newHook != null)
-                    {
-                        CopyComponentFields(sourceHook, newHook);
-                        Debug.Log($"[JRTI-Scatterer]: Added {hookType.Name} to {target.name}");
-                    }
+                    var sourceHook = (Behaviour)_sourceHooks[i];
+                    var targetHook = i < _targetHooks.Count ? (Behaviour)_targetHooks[i] : AddHook(target, hookType);
+                    if (targetHook != null)
+                        Mirror(sourceHook, targetHook);
                 }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[JRTI-Scatterer]: Failed to add {hookType.Name}: {ex.Message}");
-                }
+
+                for (int i = _sourceHooks.Count; i < _targetHooks.Count; i++)
+                    ((Behaviour)_targetHooks[i]).enabled = false;
+            }
+        }
+
+        private static void Mirror(Behaviour sourceHook, Behaviour targetHook)
+        {
+            int targetId = targetHook.GetInstanceID();
+            int sourceId = sourceHook.GetInstanceID();
+            if (!_hookSources.TryGetValue(targetId, out var copiedFrom) || copiedFrom != sourceId)
+            {
+                CopyComponentFields(sourceHook, targetHook);
+                targetHook.GetType().GetField(MainDepthFlagField)?.SetValue(targetHook, 0f);
+                _hookSources[targetId] = sourceId;
+            }
+
+            targetHook.enabled = sourceHook.enabled;
+        }
+
+        private static Behaviour AddHook(Camera target, Type hookType)
+        {
+            try
+            {
+                var hook = target.gameObject.AddComponent(hookType) as Behaviour;
+                Debug.Log($"[JRTI-Scatterer]: Added {hookType.Name} to {target.name}");
+                return hook;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[JRTI-Scatterer]: Failed to add {hookType.Name}: {ex.Message}");
+                return null;
             }
         }
 

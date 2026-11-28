@@ -140,6 +140,14 @@ namespace JustReadTheInstructions
             SetupFarPqsCamera();
             SetupScaledCamera();
             SetupGalaxyCamera();
+            LinkScattererScaledCamera();
+        }
+
+        private void LinkScattererScaledCamera()
+        {
+            var swap = _cameras[NearCameraIndex]?.GetComponent<ScattererCameraSwap>();
+            if (swap != null)
+                swap.ScaledCamera = _cameras[ScaledCameraIndex];
         }
 
         public void RebuildCameras()

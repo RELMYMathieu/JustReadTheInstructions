@@ -9,6 +9,8 @@ namespace JustReadTheInstructions
     {
         private Camera _camera;
 
+        public Camera ScaledCamera { get; set; }
+
         private static bool _initialized;
         private static object _scattererInstance;
         private static FieldInfo _nearCameraField;
@@ -103,10 +105,14 @@ namespace JustReadTheInstructions
                 return;
 
             _nearCameraField.SetValue(_scattererInstance, _camera);
+            ScattererScaledCameraSwap.PointScattererAt(ScaledCamera);
+            ScattererIntegration.SyncHooks(_mainCamera, _camera);
         }
 
         void OnPostRender()
         {
+            ScattererScaledCameraSwap.RestoreMainCamera();
+
             if (!_initialized || !IsAlive(_scattererInstance) || _nearCameraField == null)
                 return;
 
