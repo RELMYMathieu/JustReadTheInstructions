@@ -69,6 +69,8 @@ Visual mods are applied to camera feeds as in the main view, and can be turned o
 
 Mods that only change how parts look, such as Losket's scorch and dust marks, show on feeds with no setting.
 
+With Distant Object Enhancement's **Dynamic Sky Dimming** on, each camera dims its own stars from what it sees, so a camera pointed at dark space keeps its stars while the main view looks at the sun or a bright planet.
+
 ### Trajectories
 
 The Trajectories prediction line is hidden on camera feeds and recordings, so for example, you can land a rocket with it in the main view and keep your footage clean. Tick **Trajectories (Show on Feeds)** under **Visual Mod Integrations** to show it on feeds too. The impact and target markers are only ever drawn in the main view.

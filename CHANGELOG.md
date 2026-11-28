@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Sunflare (Scatterer) - camera feeds show the sun flare again after loading into flight, and it no longer disappears when the main camera looks away from the sun
+- Star brightness (Distant Object Enhancement) - camera feeds dim their stars from their own view, instead of brightening and dimming as the main camera moves
 
 
 ## v3.4.0 - 2026-11-27

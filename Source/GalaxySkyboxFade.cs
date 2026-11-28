@@ -32,7 +32,7 @@ namespace JustReadTheInstructions
             }
 
             renderers[0].GetPropertyBlock(GameBlock);
-            FeedBlock.SetColor(PropertyIDs._Color, Color.Lerp(cube.maxGalaxyColor, cube.minGalaxyColor, FadeFor(cube, viewCamera)));
+            FeedBlock.SetColor(PropertyIDs._Color, Color.Lerp(DistantObjectSkyDimming.MaxGalaxyColorFor(cube, viewCamera), cube.minGalaxyColor, FadeFor(cube, viewCamera)));
             SetBlock(renderers, FeedBlock);
             galaxyCamera.Render();
             SetBlock(renderers, GameBlock);
