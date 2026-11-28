@@ -121,23 +121,37 @@ namespace JustReadTheInstructions
                 : unityObject != null;
         }
 
-        void OnPreCull()
+        internal static bool PointScattererAt(Camera camera)
         {
-            if (!EnsureInitialized() || _scaledCameraField == null)
-                return;
+            if (camera == null || !EnsureInitialized() || _scaledCameraField == null)
+                return false;
 
-            _scaledCameraField.SetValue(_scattererInstance, _camera);
-            ScattererScaledAtmosphere.EnableScreenCopy(_camera);
-            ScattererScaledAtmosphere.AttachToReflectionProbe();
+            _scaledCameraField.SetValue(_scattererInstance, camera);
+            return true;
         }
 
-        void OnPostRender()
+        internal static void RestoreMainCamera()
         {
             if (!_initialized || !IsAlive(_scattererInstance) || _scaledCameraField == null)
                 return;
 
             if (_mainScaledCamera != null)
                 _scaledCameraField.SetValue(_scattererInstance, _mainScaledCamera);
+        }
+
+        void OnPreCull()
+        {
+            if (!PointScattererAt(_camera))
+                return;
+
+            ScattererIntegration.SyncHooks(_mainScaledCamera, _camera);
+            ScattererScaledAtmosphere.EnableScreenCopy(_camera);
+            ScattererScaledAtmosphere.AttachToReflectionProbe();
+        }
+
+        void OnPostRender()
+        {
+            RestoreMainCamera();
         }
     }
 }
